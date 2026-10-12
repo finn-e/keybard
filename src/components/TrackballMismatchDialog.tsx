@@ -13,8 +13,9 @@ import { FirmwareLink } from "@/components/FirmwareUpdate";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import {
     findPointingProblems,
-    SENSOR_NAMES,
+    MODULE_NAMES,
     type PointingHalfReport,
+    type PointingModule,
     type PointingProblem,
 } from "@/utils/pointing-hardware";
 
@@ -22,30 +23,33 @@ const File = ({ name }: { name: string }) => <span className="break-all font-mon
 
 const halfName = (half: PointingHalfReport) => `The ${half.side} half`;
 
+/** A module's name with "a" or "an" in front. */
+const aModule = (module: PointingModule) => `${/^[AEIOU]/.test(MODULE_NAMES[module]) ? "an" : "a"} ${MODULE_NAMES[module]}`;
+
 const hex = (n: number) => `0x${n.toString(16).padStart(2, "0").toUpperCase()}`;
 
 function describe(problem: PointingProblem): ReactNode {
     switch (problem.kind) {
-        case "wrong-sensor":
+        case "wrong-module":
             return (
                 <>
-                    {halfName(problem.half)}'s firmware is for a {SENSOR_NAMES[problem.builtFor]} trackball sensor, but its
-                    sensor is a {SENSOR_NAMES[problem.actual]}, so that trackball won't work. Flash it with{" "}
-                    <File name={problem.file} />.
+                    {problem.builtFor === "none"
+                        ? <>{halfName(problem.half)}'s firmware has no pointing-device support, but {aModule(problem.actual)} is attached, so it won't work.</>
+                        : <>{halfName(problem.half)}'s firmware is for {aModule(problem.builtFor)}, but {aModule(problem.actual)} is attached, so it won't work.</>}{" "}
+                    Flash it with <File name={problem.file} />.
                 </>
             );
-        case "no-sensor":
+        case "no-module":
             return (
                 <>
-                    {halfName(problem.half)}'s firmware is for a {SENSOR_NAMES[problem.builtFor]} trackball, but no trackball
-                    sensor answered. If this half has a trackball, check its cable. If it has a trackpoint or no pointing
-                    device, flash the {problem.half.side}-half .uf2 made for that instead.
+                    {halfName(problem.half)}'s firmware is for {aModule(problem.builtFor)}, but no pointing device
+                    answered. If this half has one, check its cable. If it has none, flash <File name={problem.file} />.
                 </>
             );
         case "unknown-sensor":
             return (
                 <>
-                    {halfName(problem.half)}'s firmware is for a {SENSOR_NAMES[problem.builtFor]} trackball, but its sensor
+                    {halfName(problem.half)}'s firmware is for {aModule(problem.builtFor)}, but its sensor
                     didn't identify as a PMW3360 or PMW3389 (ID {hex(problem.half.productId)}/{hex(problem.half.inverseProductId)})
                     and didn't start. Check its cable.
                 </>
@@ -56,7 +60,6 @@ function describe(problem: PointingProblem): ReactNode {
                 <>
                     Both halves are set up as the {problem.side} half, so the keyboard can't tell them apart. Flash the half
                     that's really on the {problem.otherSide} with{" "}
-                    {files.length === 0 && <>the {problem.otherSide}-half .uf2 for its pointing device</>}
                     {files.length === 1 && <File name={files[0]} />}
                     {files.length > 1 && (
                         <>
@@ -66,7 +69,7 @@ function describe(problem: PointingProblem): ReactNode {
                                     <File name={f} />
                                 </span>
                             ))}
-                            , whichever matches its sensor
+                            , whichever matches its pointing device
                         </>
                     )}
                     .
@@ -77,8 +80,8 @@ function describe(problem: PointingProblem): ReactNode {
 }
 
 /**
- * Shown once per connection when a half runs trackball firmware for the wrong
- * sensor, or both halves claim the same side. Names the .uf2 that fixes it.
+ * Shown once per connection when a half's firmware doesn't match its pointing
+ * device (or lack of one), or both halves claim the same side. Names the .uf2 that fixes it.
  */
 export const TrackballMismatchDialog: FC = () => {
     const { keyboard, isConnected } = useKeyboard();
@@ -93,7 +96,7 @@ export const TrackballMismatchDialog: FC = () => {
         <Dialog open={open} onOpenChange={(next) => !next && acknowledge()}>
             <DialogContent className="sm:max-w-[520px]">
                 <DialogHeader>
-                    <DialogTitle>{sensorProblem ? "Wrong trackball firmware" : "Wrong firmware on one half"}</DialogTitle>
+                    <DialogTitle>{sensorProblem ? "Wrong pointing-device firmware" : "Wrong firmware on one half"}</DialogTitle>
                     <DialogDescription asChild>
                         <div className="space-y-2 text-sm">
                             <ul className="list-disc space-y-2 pl-5">
