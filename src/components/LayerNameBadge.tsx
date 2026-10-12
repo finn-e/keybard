@@ -165,7 +165,7 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
             setKeyboard({ ...keyboard, cosmetic, layer_colors: updatedLayerColors });
 
             if (isConnected) {
-                await queue(`Layer ${selectedLayer} LED color`, async () => { await usbInstance.setLayerColor(selectedLayer, hsv.hue, hsv.sat); }, { type: "setting", writeKey: `layer-color:${selectedLayer}` });
+                await queue(`Layer ${selectedLayer} LED color`, async () => { await usbInstance.setLayerColor(selectedLayer, hsv.hue, hsv.sat, hsv.val); }, { type: "setting", writeKey: `layer-color:${selectedLayer}` });
             }
         }
         setIsColorPickerOpen(false);
@@ -191,7 +191,7 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
             setKeyboard({ ...keyboard, cosmetic, layer_colors: updatedLayerColors });
 
             if (isConnected) {
-                await queue(`Layer ${selectedLayer} LED color`, async () => { await usbInstance.setLayerColor(selectedLayer, ledHsv.hue, ledHsv.sat); }, { type: "setting", writeKey: `layer-color:${selectedLayer}` });
+                await queue(`Layer ${selectedLayer} LED color`, async () => { await usbInstance.setLayerColor(selectedLayer, ledHsv.hue, ledHsv.sat, ledHsv.val); }, { type: "setting", writeKey: `layer-color:${selectedLayer}` });
             }
         }
     };

@@ -23,7 +23,7 @@ describe('shared layer clipboard actions', () => {
   expect(m.updateKey).not.toHaveBeenCalled(); expect(m.led).not.toHaveBeenCalled();
   expect(m.queue.mock.calls.map(c=>c[2].writeKey)).toEqual(['key:1:0:0','key:1:0:1','layer-color:1']);
   for(const call of m.queue.mock.calls) await call[1]();
-  expect(m.updateKey).toHaveBeenCalledWith(1,0,0,4); expect(m.led).toHaveBeenCalledWith(1,10,20);
+  expect(m.updateKey).toHaveBeenCalledWith(1,0,0,4); expect(m.led).toHaveBeenCalledWith(1,10,20,30);
  });
  it('rejects malformed or differently sized layers before any mutation', () => {
   const {result}=renderHook(useLayerClipboardActions);

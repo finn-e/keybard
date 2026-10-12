@@ -50,7 +50,7 @@ export function useLayerClipboardActions() {
         });
         if (data.ledColor && isConnected) {
             const color = data.ledColor;
-            void queue(`Layer ${layer} LED color`, async () => { await usbInstance.setLayerColor(layer, color.hue, color.sat); },
+            void queue(`Layer ${layer} LED color`, async () => { await usbInstance.setLayerColor(layer, color.hue, color.sat, color.val); },
                 { type: 'setting', writeKey: `layer-color:${layer}` });
         }
     };
