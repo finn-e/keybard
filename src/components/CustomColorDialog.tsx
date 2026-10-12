@@ -34,6 +34,9 @@ interface CustomColorDialogProps {
     // Called at most every PREVIEW_INTERVAL_MS, and with the initial color
     // again if the dialog closes without Apply.
     onPreviewLed?: (ledHsv: Hsv) => void;
+    // Shows the key color on the layout while it's being picked; null ends the
+    // preview (on Apply, Cancel or close), leaving the saved color.
+    onPreviewDisplay?: (displayHsv: Hsv | null) => void;
     layerName?: string;
     onCloseAutoFocus?: (event: Event) => void;
 }
@@ -61,6 +64,7 @@ const CustomColorDialog = ({
     initialDisplayVal = 200,
     onApply,
     onPreviewLed,
+    onPreviewDisplay,
     layerName,
 }: CustomColorDialogProps) => {
     // Display color state
@@ -89,6 +93,8 @@ const CustomColorDialog = ({
         { last: 0, timer: null, pending: null, changed: false });
     const onPreviewRef = useRef(onPreviewLed);
     onPreviewRef.current = onPreviewLed;
+    const onPreviewDisplayRef = useRef(onPreviewDisplay);
+    onPreviewDisplayRef.current = onPreviewDisplay;
 
     const flushPreview = () => {
         const p = preview.current;
@@ -111,7 +117,10 @@ const CustomColorDialog = ({
         p.timer = null;
         p.pending = null;
     };
-    useEffect(() => stopPreview, []);
+    useEffect(() => () => {
+        stopPreview();
+        onPreviewDisplayRef.current?.(null);
+    }, []);
 
     // Reset to initial values when dialog opens
     useEffect(() => {
@@ -142,6 +151,7 @@ const CustomColorDialog = ({
             setDisplayHue(hsv.hue);
             setDisplaySat(hsv.sat);
             setDisplayVal(hsv.val);
+            onPreviewDisplay?.(hsv);
             return;
         }
         setLedHue(hsv.hue);
@@ -161,6 +171,7 @@ const CustomColorDialog = ({
     const handleOpenChange = (next: boolean) => {
         if (!next) {
             stopPreview();
+            onPreviewDisplay?.(null);
             // Closed without Apply: put the board's LEDs back.
             if (preview.current.changed) {
                 preview.current.changed = false;
@@ -177,6 +188,7 @@ const CustomColorDialog = ({
             { hue: displayHue, sat: displaySat, val: displayVal },
             { hue: ledHue, sat: ledSat, val: ledVal }
         );
+        onPreviewDisplay?.(null);
         onOpenChange(false);
     };
 

@@ -70,6 +70,31 @@ describe('Custom color live LED preview', () => {
         expect(onPreviewLed).toHaveBeenCalledTimes(1);
     });
 
+    it('shows the key color on the layout as it changes, and ends the preview on Cancel', () => {
+        const onPreviewDisplay = vi.fn();
+        const onApply = vi.fn();
+        render(<CustomColorDialog open onOpenChange={vi.fn()} onApply={onApply} onPreviewDisplay={onPreviewDisplay}
+            initialDisplayHue={10} initialDisplaySat={200} initialDisplayVal={150} />);
+        nudge('Hue', 'ArrowRight');
+        expect(onPreviewDisplay).toHaveBeenLastCalledWith({ hue: 11, sat: 200, val: 150 });
+        nudge('Brightness');
+        expect(onPreviewDisplay).toHaveBeenLastCalledWith({ hue: 11, sat: 200, val: 149 });
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(onPreviewDisplay).toHaveBeenLastCalledWith(null);
+        expect(onApply).not.toHaveBeenCalled();
+    });
+
+    it('ends the key color preview after Apply saves it', () => {
+        const onPreviewDisplay = vi.fn();
+        const onApply = vi.fn();
+        render(<CustomColorDialog open onOpenChange={vi.fn()} onApply={onApply} onPreviewDisplay={onPreviewDisplay}
+            initialDisplayHue={10} initialDisplaySat={200} initialDisplayVal={150} />);
+        nudge('Saturation');
+        fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+        expect(onApply).toHaveBeenCalledWith({ hue: 10, sat: 199, val: 150 }, expect.anything());
+        expect(onPreviewDisplay).toHaveBeenLastCalledWith(null);
+    });
+
     it('applies a complete hex code while typing, and Escape restores the earlier color', () => {
         const { onPreviewLed } = setup();
         fireEvent.click(screen.getByRole('button', { name: /Edit hex color/ }));
