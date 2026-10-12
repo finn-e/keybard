@@ -7,7 +7,7 @@
 //
 // Reply after the wrapper: [0x2C] [format = 1] [USB half: 5 bytes] [other half: 5 bytes]
 // Each half: [flags] [built_for] [detected] [Product_ID] [Inverse_Product_ID]
-//   flags: bit 0 reported, bit 1 left half, bit 2 sensor driver initialised
+//   flags: bit 0 reported, bit 1 left half, bit 2 sensor driver initialized
 //   built_for: 0 not a trackball build, 1 PMW3360, 2 PMW3389
 //   detected: 0 not checked, 1 PMW3360, 2 PMW3389, 3 no answer, 4 some other ID
 // Documented in svalboard/qmk keyboards/svalboard/docs/protocol.md.
