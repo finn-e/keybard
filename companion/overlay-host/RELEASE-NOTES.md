@@ -9,6 +9,7 @@ This release is a portable ZIP for 64-bit Windows 10 and 11, not a signed instal
 - **Held keys are highlighted from the start.** **Highlight held keys** is now on unless you turned it off before. Turn it off in Trainer's **Feedback** tab.
 - **The Svalboard icon matches your taskbar.** In the tray and taskbar it is a black glyph on a light taskbar and a white one on a dark taskbar, and switches when you change the Windows theme. Shortcuts and the installer keep the black-on-white icon.
 - **Resize the overlay where it is.** Drag the new resize grip, between the move grip and the menu above the overlay's corner: up or right makes the overlay bigger, down or left smaller. Its bottom-left corner stays put, and the size is saved like Trainer's **Overlay size** slider.
+- **Only the grip moves the overlay.** **Drag by keys** is gone from Trainer, the overlay's menu and the tray, so every click on the overlay, keys included, reaches the window underneath.
 - **macOS, for testers.** The ZIP now includes `start-macos.sh`, which runs Keybard Host on macOS 13 or later with Python 3.10 or later. Nobody has tried it on a Mac yet; see "macOS" in `README.md` for what to check.
 
 ## New in vLaunch2.2
@@ -40,7 +41,7 @@ This release is a portable ZIP for 64-bit Windows 10 and 11, not a signed instal
 - Shows your board's layout and follows your active layer, and your default layer on firmware that reports it.
 - Keeps up with edits: when Keybard saves a change to the keyboard, the overlay re-reads the layout by itself, showing the old one until the new one is read.
 - Uses Keybard's key icons. Shift and Caps Lock change the letters shown.
-- Stays on top and lets clicks pass through. Move it with its grip, or turn on **Drag by keys** to drag it by the keys themselves.
+- Stays on top and lets clicks pass through. Move it with its grip.
 - Adjustable color, outline, opacity and halo.
 - Highlights layer changes and, optionally, the keys you're holding. Includes recall practice.
 

@@ -20,7 +20,7 @@ export interface HostSnapshot {
     selectedDevice: string | null; status: string; devices: { id: string; name: string; serial: string }[];
     active: number; default: number | null; valid: boolean; pressed: number[];
     practiceHidden: number[]; practiceTarget: number | null;
-    matrixAvailable: boolean | null; visible: boolean; arrange: boolean; session: string;
+    matrixAvailable: boolean | null; visible: boolean; session: string;
 }
 /** The host's release and the Keybard it bundles. Hosts before vLaunch2 don't report them: 'unknown'. */
 export interface HostBuild { version: string; keybardCommit: string | null }
