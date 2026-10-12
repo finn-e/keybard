@@ -100,7 +100,7 @@ class HostState:
             return copy.deepcopy(dict(apiVersion=1, config=self.config, revision=self.revision,
                 layoutRevision=self.layout_revision, board=self.board if known_layout != self.layout_revision else None,
                 status=self.status, devices=self.devices, selectedDevice=self.selected_device, active=self.active, default=self.default, valid=self.valid,
-                modifiers=self.modifiers, practiceHidden=self.practice_hidden, practiceTarget=self.practice_target, pressed=self.pressed, matrixAvailable=self.matrix_available, visible=self.visible, arrange=False, session=self.session))
+                modifiers=self.modifiers, practiceHidden=self.practice_hidden, practiceTarget=self.practice_target, pressed=self.pressed, matrixAvailable=self.matrix_available, visible=self.visible, session=self.session))
 
 
 def serialize_profile(profile):

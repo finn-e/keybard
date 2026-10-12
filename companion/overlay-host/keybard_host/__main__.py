@@ -527,7 +527,6 @@ class Host(QObject):
         elif op == 'show':
             if value['value']: self.controls.set_collapsed(False)
             self.state.visible = value['value']; self.surface.setVisible(value['value']); self.show_action.setChecked(value['value']); self.controls.setVisible(value['value'])
-        elif op == 'arrange': pass  # Drag by keys was removed; older Keybard pages may still send it.
         elif op == 'place': self.place()
         elif op == 'practice':
             with self.state.lock:
