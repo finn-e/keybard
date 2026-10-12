@@ -6,6 +6,7 @@ This release is a portable ZIP for 64-bit Windows 10 and 11, not a signed instal
 
 ## Unreleased
 
+- **Held keys are highlighted from the start.** **Highlight held keys** is now on unless you turned it off before. Turn it off in Trainer's **Feedback** tab.
 - **Resize the overlay where it is.** Drag the new resize grip, between the move grip and the menu above the overlay's corner: up or right makes the overlay bigger, down or left smaller. Its bottom-left corner stays put, and the size is saved like Trainer's **Overlay size** slider.
 
 ## New in vLaunch2.2

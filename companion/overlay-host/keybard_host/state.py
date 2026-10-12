@@ -8,7 +8,7 @@ from pathlib import Path
 
 DEFAULTS = dict(layoutId='us', appearance=dict(fill='#14202b', fillAlpha=75, outline='#51606a', outlineAlpha=100,
     legend='#f0f5f7', legendAlpha=100, width=1, halo=False, changed='#8ce4d3', pressed='#ffd27a'),
-    effect='Short fade', duration=150, scale=100, hands='Both', highlightPressed=False, manualDefault=1)
+    effect='Short fade', duration=150, scale=100, hands='Both', highlightPressed=True, manualDefault=1)
 
 
 def validate_config(value):
