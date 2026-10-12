@@ -21,6 +21,7 @@ from .modifiers import ModifierReader
 from .server import REMOTE_ORIGINS, load_paranoid_page, make_server
 from .build import build_info
 from .browser import open_contained
+from .macos import float_window, hide_dock_icon, is_mac
 
 
 class Bridge(QObject):
@@ -32,8 +33,17 @@ class LocalPage(QWebEnginePage):
         return url.scheme() in ('http', 'about') and (url.scheme() == 'about' or (url.host() == '127.0.0.1' and url.port() == self.parent().host_port))
 
 
+def prepare_overlay_window(widget, platform=None):
+    # macOS hides tool windows while their app isn't the active one, and the Host never is.
+    if is_mac(platform): widget.setAttribute(Qt.WA_MacAlwaysShowToolWindow)
+
+
 class Surface(QWebEngineView):
     geometry_changed = Signal()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        float_window(self)
 
     def moveEvent(self, event):
         super().moveEvent(event)
@@ -50,6 +60,7 @@ class Surface(QWebEngineView):
         self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
+        prepare_overlay_window(self)
         self.setStyleSheet('background:transparent')
         page = LocalPage(self)
         self.setPage(page)
@@ -226,6 +237,7 @@ class OverlayControls(QWidget):
         self.surface = surface
         self.setWindowTitle('Keybard · Overlay controls')
         self.setAttribute(Qt.WA_ShowWithoutActivating)
+        prepare_overlay_window(self)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setStyleSheet('QToolButton {color:#eee;background:#303436;border:1px solid #666;border-radius:2px;padding:0;} QToolButton:hover {background:#505456;} QToolButton::menu-indicator {image:none;width:0;height:0;}')
         layout = QHBoxLayout(self); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(4)
@@ -244,6 +256,10 @@ class OverlayControls(QWidget):
         self.setFixedSize(80, 24)
         surface.geometry_changed.connect(self.reposition)
         self.reposition()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        float_window(self)
 
     def reposition(self):
         screen = self.surface.screen() or QApplication.primaryScreen()
@@ -548,6 +564,7 @@ def main():
         if args.allow_origin: parser.error('--paranoid accepts no extra origins')
         if args.assets == parser.get_default('assets'): args.assets = args.assets.parent / 'web-paranoid'
     app = QApplication(sys.argv[:1]); app.setApplicationName('Keybard Host'); app.setQuitOnLastWindowClosed(False)
+    hide_dock_icon()  # macOS: a menu bar app, without a Dock icon
     folder = Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation))
     folder.mkdir(parents=True, exist_ok=True)
     lock = QLockFile(str(folder / 'host.lock')); lock.setStaleLockTime(0)

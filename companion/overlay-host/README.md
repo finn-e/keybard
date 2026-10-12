@@ -40,7 +40,9 @@ Paranoid mode is a separate way to run Keybard Host, for people who want Keybard
 
 ## Linux and macOS
 
-Linux: copy the web build to `companion/overlay-host/web`, then run `bash companion/overlay-host/start-linux.sh`. On Wayland, placement, stacking and click-through depend on the compositor. macOS hasn't been tested.
+Linux: copy the web build to `companion/overlay-host/web`, then run `bash companion/overlay-host/start-linux.sh`. On Wayland, placement, stacking and click-through depend on the compositor.
+
+macOS: see [macOS](#macos) below.
 
 ### Linux setup
 
@@ -60,6 +62,48 @@ sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
 ```
 
 Under WSL, attach the board with [usbipd-win](https://github.com/dorssel/usbipd-win) (`usbipd bind`, then `usbipd attach --wsl`); Windows loses the board until it is detached. If Wayland fails with `Failed to create wl_display`, set `XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir`. WSLg doesn't show the overlay under X11 (`QT_QPA_PLATFORM=xcb`), so use Wayland there. If a Windows Host already uses port 5178, start the Linux Host with `--port 5179`. What works under WSLg says nothing about stacking, focus or click-through on native Ubuntu.
+
+### macOS
+
+> **Untested on real hardware.** The macOS support was written without a Mac. It needs a Mac tester before anyone calls it supported; please report what works and what doesn't in [svalboard/keybard#51](https://github.com/svalboard/keybard/issues/51).
+
+You need macOS 13 (Ventura) or later, on Apple Silicon or Intel, and Python 3.10 or later. The `python3` that comes with Xcode's command line tools is 3.9, which is too old: install Python from [python.org](https://www.python.org/downloads/macos/) or with `brew install python@3.13`.
+
+1. Download `KeybardHost-Windows.zip` from a [release](https://github.com/svalboard/keybard/releases) that includes `start-macos.sh`, and extract it. Despite the name it carries everything the Mac needs except Python and Qt; `start-macos.sh` downloads Qt into a `.venv` folder next to it on first launch.
+2. In Terminal, `cd` into the extracted `KeybardHost` folder and run `bash start-macos.sh`.
+
+From a source checkout instead, build the web assets into `companion/overlay-host/web` (see [Build](#build): `VITE_BASE_PATH=/ npm run build`, then copy `dist` there), and run `bash companion/overlay-host/start-macos.sh`. Paranoid mode is `bash start-macos.sh --paranoid`, which needs `web-paranoid/index.html`; it opens Keybard Paranoid in Google Chrome or Microsoft Edge from `/Applications` or `~/Applications`.
+
+On macOS the Host:
+
+- runs as a menu bar app: its icon is in the menu bar, with no Dock icon. Click it for the menu.
+- keeps the overlay above other windows, on every Space and over full-screen apps, and doesn't take focus or clicks.
+- stores its settings in `~/Library/Application Support/Keybard Host/`.
+- doesn't start at login. To have it start at login, add a login item for a script that runs `start-macos.sh`.
+
+#### Permissions
+
+The Host shouldn't need any privacy permission, but these are the ones to look at if something doesn't work (System Settings → Privacy & Security):
+
+- **Input Monitoring:** the Host reads the board's layer and held keys through the board's own Raw HID interface, not its keyboard interface, and reads Shift and Caps Lock from the system's modifier flags rather than watching keystrokes. Neither should need Input Monitoring. If the overlay never finds the board, or Shift and Caps Lock never change the legends, check whether macOS has listed Terminal (or your Python) here, and allow it.
+- **Accessibility:** not used. The Host doesn't move other apps' windows or send input.
+- **Local Network:** the Host only listens on `127.0.0.1`, which macOS doesn't ask about.
+
+Chrome needs the board too. Keybard and the Host should both be able to have it open at the same time, as on Windows, because hidapi opens it without exclusive access.
+
+#### What a Mac tester should check
+
+1. `bash start-macos.sh` installs and starts with no errors, and the menu bar icon appears with no Dock icon.
+2. Trainer opens in your browser, **Connect to Keybard Host** works, and the overlay shows your layout.
+3. The overlay is see-through between the keys, stays above other windows, and clicks pass through it to the window underneath.
+4. Clicking the overlay or its controls doesn't take focus from the app you're typing in.
+5. The move grip drags the overlay; the resize grip resizes it; **Drag by keys** drags it by its keys while clicks between keys still pass through.
+6. The overlay stays visible after you click on another app, switch Spaces, and open an app in full screen.
+7. Layer changes and, with **Held keys** on, held keys show up live. Shift and Caps Lock change the legends.
+8. Keybard in Chrome and the Host both stay connected to the board at the same time.
+9. **Quit host** from the menu bar quits it, and starting it again keeps your settings.
+10. `bash start-macos.sh --paranoid` opens Keybard Paranoid in its own Chrome or Edge window.
+11. Note your macOS version, Mac model (Apple Silicon or Intel), Python version and display setup (Retina, external monitors).
 
 ## For developers
 

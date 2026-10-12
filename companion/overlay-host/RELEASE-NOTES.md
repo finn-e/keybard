@@ -9,6 +9,7 @@ This release is a portable ZIP for 64-bit Windows 10 and 11, not a signed instal
 - **Held keys are highlighted from the start.** **Highlight held keys** is now on unless you turned it off before. Turn it off in Trainer's **Feedback** tab.
 - **The Svalboard icon has a transparent background** in the tray and taskbar, instead of a white square.
 - **Resize the overlay where it is.** Drag the new resize grip, between the move grip and the menu above the overlay's corner: up or right makes the overlay bigger, down or left smaller. Its bottom-left corner stays put, and the size is saved like Trainer's **Overlay size** slider.
+- **macOS, for testers.** The ZIP now includes `start-macos.sh`, which runs Keybard Host on macOS 13 or later with Python 3.10 or later. Nobody has tried it on a Mac yet; see "macOS" in `README.md` for what to check.
 
 ## New in vLaunch2.2
 
