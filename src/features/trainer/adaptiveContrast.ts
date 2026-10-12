@@ -31,6 +31,9 @@ export function decodeBackdrop(b: Backdrop, field: 'lum' | 'detail' = 'lum'): Ui
 
 export interface Rect { left: number; top: number; width: number; height: number }
 
+/** How fast a cell's weight falls off with distance from the key, in key sizes (weight 1/e at this distance). */
+const NEAR = .3;
+
 /** Pixels past a key's edge that its outline and halo can still cover. */
 const KEY_PAD = 4;
 
@@ -53,23 +56,30 @@ export function coveredCells(b: Backdrop, width: number, height: number, keys: R
 }
 
 /**
- * The background around a key: brightness mean and standard deviation of the uncovered
- * cells within a key's width of it, widening once if the key sits deep inside a cluster.
+ * The background around a key, from the uncovered cells within a key's width of it
+ * (widening once if the key sits deep inside a cluster). Nearer cells count more, so a
+ * key mostly over one of two windows goes with that window: weighted brightness mean
+ * and spread, and the cells' weighted fine detail.
  */
 export function sampleAround(lum: Uint8Array, covered: Uint8Array, b: Backdrop, width: number, height: number, rect: Rect,
     detail?: Uint8Array): KeyBackdrop | null {
     const reach = Math.max(rect.width, rect.height);
     for (const margin of [reach * .75, reach * 1.75]) {
         const { c0, c1, r0, r1 } = cellRange(b, width, height, rect, margin);
-        let n = 0, sum = 0, sq = 0, fine = 0;
+        const cw = width / b.cols, ch = height / b.rows;
+        let n = 0, total = 0, sum = 0, sq = 0, fine = 0;
         for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
             const i = r * b.cols + c;
             if (covered[i]) continue;
-            const v = lum[i]; n++; sum += v; sq += v * v; fine += detail?.[i] ?? 0;
+            // Distance from the cell's centre to the key's edge, in key sizes.
+            const x = (c + .5) * cw, y = (r + .5) * ch;
+            const dx = Math.max(rect.left - x, 0, x - rect.left - rect.width), dy = Math.max(rect.top - y, 0, y - rect.top - rect.height);
+            const w = Math.exp(-Math.hypot(dx, dy) / (reach * NEAR));
+            const v = lum[i]; n++; total += w; sum += w * v; sq += w * v * v; fine += w * (detail?.[i] ?? 0);
         }
-        if (n >= 4) {
-            const mean = sum / n;
-            return { mean, spread: Math.sqrt(Math.max(0, sq / n - mean * mean)), detail: fine / n };
+        if (n >= 4 && total > 0) {
+            const mean = sum / total;
+            return { mean, spread: Math.sqrt(Math.max(0, sq / total - mean * mean)), detail: fine / total };
         }
     }
     return null;
@@ -78,16 +88,20 @@ export function sampleAround(lum: Uint8Array, covered: Uint8Array, b: Backdrop, 
 /** Whether a key shows dark legends, with hysteresis so keys near the middle don't flicker. */
 export function wantsDarkLegend(mean: number, previous: boolean | undefined): boolean {
     if (previous === undefined) return mean > 140;
-    return previous ? mean > 115 : mean > 165;
+    return previous ? mean > 125 : mean > 155;
 }
 
-/** How busy a backdrop is, 0 (flat) to 1 (very busy): brightness changes between cells plus fine detail such as text. */
+/**
+ * How busy a backdrop is, 0 (flat) to 1 (very busy). Mostly fine detail such as text and
+ * texture; broad brightness changes count only a little, since one edge between two flat
+ * windows isn't busy (the legend colour handles it).
+ */
 export function busyness(backdrop: Pick<KeyBackdrop, 'spread' | 'detail'>): number {
-    const score = backdrop.spread + DETAIL_WEIGHT * backdrop.detail;
+    const score = SPREAD_WEIGHT * backdrop.spread + DETAIL_WEIGHT * backdrop.detail;
     return Math.max(0, Math.min(1, (score - BUSY_FROM) / (BUSY_FULL - BUSY_FROM)));
 }
-/** Score at which a backdrop starts to count as busy, and at which it's fully busy; how much fine detail counts. */
-const BUSY_FROM = 6, BUSY_FULL = 50, DETAIL_WEIGHT = 2;
+/** Score at which a backdrop starts to count as busy, and at which it's fully busy; how much each input counts. */
+const BUSY_FROM = 6, BUSY_FULL = 50, DETAIL_WEIGHT = 2, SPREAD_WEIGHT = .2;
 /** Backing-plate opacity (%) on a flat backdrop at least, and on a fully busy one. */
 const PLATE_MIN = 12, PLATE_MAX = 90;
 
