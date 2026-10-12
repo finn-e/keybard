@@ -12,14 +12,18 @@ export interface Backdrop {
     rows: number;
     /** Base64 of cols * rows bytes, row by row: perceived brightness 0-255 of each cell. */
     lum: string;
+    /** Same layout: fine detail in each cell, the mean difference of its pixels from the blurred background
+     *  (text and icons score high even when a cell's average brightness matches its neighbours'). */
+    detail?: string;
 }
 
-export interface KeyBackdrop { mean: number; spread: number }
+/** A key's background: brightness mean, spread between cells, and the cells' mean fine detail. */
+export interface KeyBackdrop { mean: number; spread: number; detail: number }
 
 const DARK = '#111417', LIGHT = '#f5f7f8';
 
-export function decodeBackdrop(b: Backdrop): Uint8Array {
-    const raw = atob(b.lum);
+export function decodeBackdrop(b: Backdrop, field: 'lum' | 'detail' = 'lum'): Uint8Array {
+    const raw = atob(b[field] ?? '');
     const out = new Uint8Array(raw.length);
     for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
     return out;
@@ -52,19 +56,20 @@ export function coveredCells(b: Backdrop, width: number, height: number, keys: R
  * The background around a key: brightness mean and standard deviation of the uncovered
  * cells within a key's width of it, widening once if the key sits deep inside a cluster.
  */
-export function sampleAround(lum: Uint8Array, covered: Uint8Array, b: Backdrop, width: number, height: number, rect: Rect): KeyBackdrop | null {
+export function sampleAround(lum: Uint8Array, covered: Uint8Array, b: Backdrop, width: number, height: number, rect: Rect,
+    detail?: Uint8Array): KeyBackdrop | null {
     const reach = Math.max(rect.width, rect.height);
     for (const margin of [reach * .75, reach * 1.75]) {
         const { c0, c1, r0, r1 } = cellRange(b, width, height, rect, margin);
-        let n = 0, sum = 0, sq = 0;
+        let n = 0, sum = 0, sq = 0, fine = 0;
         for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
             const i = r * b.cols + c;
             if (covered[i]) continue;
-            const v = lum[i]; n++; sum += v; sq += v * v;
+            const v = lum[i]; n++; sum += v; sq += v * v; fine += detail?.[i] ?? 0;
         }
         if (n >= 4) {
             const mean = sum / n;
-            return { mean, spread: Math.sqrt(Math.max(0, sq / n - mean * mean)) };
+            return { mean, spread: Math.sqrt(Math.max(0, sq / n - mean * mean)), detail: fine / n };
         }
     }
     return null;
@@ -76,12 +81,13 @@ export function wantsDarkLegend(mean: number, previous: boolean | undefined): bo
     return previous ? mean > 115 : mean > 165;
 }
 
-/** How busy a backdrop is, 0 (flat) to 1 (very busy), from its brightness spread. */
-export function busyness(spread: number): number {
-    return Math.max(0, Math.min(1, (spread - BUSY_FROM) / (BUSY_FULL - BUSY_FROM)));
+/** How busy a backdrop is, 0 (flat) to 1 (very busy): brightness changes between cells plus fine detail such as text. */
+export function busyness(backdrop: Pick<KeyBackdrop, 'spread' | 'detail'>): number {
+    const score = backdrop.spread + DETAIL_WEIGHT * backdrop.detail;
+    return Math.max(0, Math.min(1, (score - BUSY_FROM) / (BUSY_FULL - BUSY_FROM)));
 }
-/** Spread at which a backdrop starts to count as busy, and at which it's fully busy. */
-const BUSY_FROM = 6, BUSY_FULL = 50;
+/** Score at which a backdrop starts to count as busy, and at which it's fully busy; how much fine detail counts. */
+const BUSY_FROM = 6, BUSY_FULL = 50, DETAIL_WEIGHT = 2;
 /** Backing-plate opacity (%) on a flat backdrop at least, and on a fully busy one. */
 const PLATE_MIN = 12, PLATE_MAX = 90;
 
@@ -90,9 +96,8 @@ const PLATE_MIN = 12, PLATE_MAX = 90;
  * plate whose opacity rises with how busy the background is, so a busy one is covered
  * up rather than only recoloured.
  */
-export function adaptAppearance(base: Appearance, backdrop: KeyBackdrop, dark: boolean): Appearance {
+export function adaptAppearance(base: Appearance, t: number, dark: boolean): Appearance {
     const ink = dark ? DARK : LIGHT, plate = dark ? LIGHT : DARK;
-    const t = busyness(backdrop.spread);
     const lerp = (from: number, to: number) => Math.round(from + (to - from) * t);
     return {
         ...base,
@@ -102,4 +107,21 @@ export function adaptAppearance(base: Appearance, backdrop: KeyBackdrop, dark: b
         fillAlpha: lerp(Math.max(base.fillAlpha, PLATE_MIN), PLATE_MAX),
         halo: true,
     };
+}
+
+export interface AdaptedKey { id: number; sample: KeyBackdrop; busy: number; dark: boolean; appearance: Appearance }
+
+/** One backdrop update: each key's legend and plate opacity follow the background around that key. */
+export function adaptKeys(backdrop: Backdrop, width: number, height: number, keys: Array<{ id: number; rect: Rect }>,
+    base: Appearance, previousDark: Map<number, boolean>): AdaptedKey[] {
+    const lum = decodeBackdrop(backdrop), detail = backdrop.detail ? decodeBackdrop(backdrop, 'detail') : undefined;
+    const covered = coveredCells(backdrop, width, height, keys.map(k => k.rect));
+    const out: AdaptedKey[] = [];
+    for (const { id, rect } of keys) {
+        const sample = sampleAround(lum, covered, backdrop, width, height, rect, detail);
+        if (!sample) continue;
+        const busy = busyness(sample), dark = wantsDarkLegend(sample.mean, previousDark.get(id));
+        out.push({ id, sample, busy, dark, appearance: adaptAppearance(base, busy, dark) });
+    }
+    return out;
 }

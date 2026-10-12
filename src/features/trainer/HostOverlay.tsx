@@ -3,7 +3,7 @@ import { OverlaySurface, type SurfaceKey } from './OverlaySurface';
 import { useHost } from './host';
 import { surfaceKeys } from './useSurfaceKeys';
 import type { Appearance } from './core';
-import { adaptAppearance, coveredCells, decodeBackdrop, sampleAround, wantsDarkLegend, type Backdrop } from './adaptiveContrast';
+import { adaptKeys, type Backdrop } from './adaptiveContrast';
 import './trainer.css';
 export default function HostOverlay() {
     const { state } = useHost();
@@ -25,24 +25,21 @@ export default function HostOverlay() {
     const darkLegend = useRef(new Map<number, boolean>());
     const keyAppearanceRef = useRef<Map<number, Appearance> | undefined>(undefined);
     keyAppearanceRef.current = keyAppearance;
+    const labels = useRef(new Map<number, string>());
+    labels.current = new Map(keys.map(k => [k.id, k.label]));
     useEffect(() => {
         if (!adaptive || !appearance) { setKeyAppearance(undefined); darkLegend.current.clear(); return; }
         const onBackdrop = (event: Event) => {
             const backdrop = (event as CustomEvent<Backdrop | null>).detail;
             if (!backdrop) { setKeyAppearance(undefined); return; }
-            const lum = decodeBackdrop(backdrop);
             const keyRects = [...document.querySelectorAll<SVGGElement>('.trainer-native-surface [data-key-id]')]
                 .map(g => ({ id: Number(g.dataset.keyId), rect: g.querySelector('rect')?.getBoundingClientRect() }))
                 .filter((k): k is { id: number; rect: DOMRect } => !!k.rect);
-            const covered = coveredCells(backdrop, innerWidth, innerHeight, keyRects.map(k => k.rect));
-            const next = new Map<number, Appearance>();
-            for (const { id, rect } of keyRects) {
-                const sample = sampleAround(lum, covered, backdrop, innerWidth, innerHeight, rect);
-                if (!sample) { const kept = keyAppearanceRef.current?.get(id); if (kept) next.set(id, kept); continue; }
-                const dark = wantsDarkLegend(sample.mean, darkLegend.current.get(id));
-                darkLegend.current.set(id, dark);
-                next.set(id, adaptAppearance(appearance, sample, dark));
-            }
+            const adapted = adaptKeys(backdrop, innerWidth, innerHeight, keyRects, appearance, darkLegend.current);
+            const next = new Map(keyAppearanceRef.current ?? []);
+            for (const k of adapted) { darkLegend.current.set(k.id, k.dark); next.set(k.id, k.appearance); }
+            // For tuning from DevTools: what each key read and chose.
+            (window as unknown as { __adaptive?: unknown }).__adaptive = adapted.map(({ id, sample, busy, dark }) => ({ id, label: labels.current.get(id), ...sample, busy, dark }));
             setKeyAppearance(next);
         };
         window.addEventListener('keybard-host-backdrop', onBackdrop);

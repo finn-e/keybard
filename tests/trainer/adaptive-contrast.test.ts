@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adaptAppearance, busyness, coveredCells, decodeBackdrop, sampleAround, wantsDarkLegend, type Backdrop } from '@/features/trainer/adaptiveContrast';
+import { adaptAppearance, adaptKeys, busyness, coveredCells, decodeBackdrop, sampleAround, wantsDarkLegend, type Backdrop } from '@/features/trainer/adaptiveContrast';
 import { DEFAULTS } from '@/features/trainer/core';
 
 /**
@@ -41,22 +41,32 @@ describe('adaptive contrast', () => {
     });
 
     it('raises the plate opacity steadily with how busy the background is', () => {
-        const alphas = [0, 10, 20, 30, 40, 50, 80].map(spread => adaptAppearance(DEFAULTS.appearance, { mean: 120, spread }, false).fillAlpha);
+        const alphas = [0, 10, 20, 30, 40, 50, 80].map(spread => adaptAppearance(DEFAULTS.appearance, busyness({ spread, detail: 0 }), false).fillAlpha);
         for (let i = 1; i < alphas.length; i++) expect(alphas[i]).toBeGreaterThanOrEqual(alphas[i - 1]);
         expect(alphas[0]).toBeLessThanOrEqual(20);
         expect(alphas.at(-1)).toBe(90);
-        expect(busyness(0)).toBe(0);
-        expect(busyness(200)).toBe(1);
+        expect(busyness({ spread: 0, detail: 0 })).toBe(0);
+        expect(busyness({ spread: 200, detail: 0 })).toBe(1);
+        // Fine detail such as text counts even when the brightness hardly varies between cells.
+        expect(busyness({ spread: 2, detail: 20 })).toBeGreaterThan(busyness({ spread: 2, detail: 0 }));
     });
 
     it('backs a busy background with a firmer plate than a calm one', () => {
-        const calm = adaptAppearance(DEFAULTS.appearance, { mean: 16, spread: 4 }, false);
-        const busy = adaptAppearance(DEFAULTS.appearance, { mean: 120, spread: 60 }, false);
+        const calm = adaptAppearance(DEFAULTS.appearance, busyness({ spread: 4, detail: 0 }), false);
+        const busy = adaptAppearance(DEFAULTS.appearance, busyness({ spread: 60, detail: 0 }), false);
         expect(calm.legend).toBe('#f5f7f8');
         expect(calm.fill).toBe('#111417');
         expect(busy.fillAlpha).toBeGreaterThan(calm.fillAlpha);
         expect(busy.halo).toBe(true);
         // Feedback colours stay the user's.
         expect(busy.pressed).toBe(DEFAULTS.appearance.pressed);
+    });
+
+    it('gives each key its own opacity: one over text gets a firmer plate than one over a flat area', () => {
+        const cells = new Array(18 * 60).fill(30), detail = new Array(18 * 60).fill(0);
+        for (let i = 0; i < cells.length; i++) if (i % 60 >= 30) detail[i] = 25; // text on the right half
+        const b: Backdrop = { cols: 60, rows: 18, lum: btoa(String.fromCharCode(...cells)), detail: btoa(String.fromCharCode(...detail)) };
+        const [flat, text] = adaptKeys(b, 240, 72, [{ id: 1, rect: KEYS[0] }, { id: 2, rect: KEYS[1] }], DEFAULTS.appearance, new Map());
+        expect(text.appearance.fillAlpha).toBeGreaterThan(flat.appearance.fillAlpha + 20);
     });
 });

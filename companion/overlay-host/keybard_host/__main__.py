@@ -22,7 +22,7 @@ from .server import REMOTE_ORIGINS, load_paranoid_page, make_server
 from .build import build_info
 from .browser import open_contained
 from .macos import float_window, hide_dock_icon, is_mac
-from . import backdrop
+from . import backdrop, ontop
 
 
 class Bridge(QObject):
@@ -291,6 +291,8 @@ class Host(QObject):
         # Adaptive contrast samples the screen under the overlay this often (ms).
         self.sampling = False
         self.backdrop_timer = QTimer(self); self.backdrop_timer.timeout.connect(self.sample_backdrop); self.backdrop_timer.start(500)
+        # Windows can stack the overlay under ordinary windows despite its always-on-top style; check and fix.
+        self.ontop_timer = QTimer(self); self.ontop_timer.timeout.connect(lambda: ontop.keep_on_top((self.surface, self.controls))); self.ontop_timer.start(1000)
         self.controls.show()
         self.icon_light_background = taskbar_is_light()
         icon = host_icon(self.icon_light_background)

@@ -11,7 +11,7 @@ import base64
 import sys
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QImage, QPainter
 
 # Grid cell size in window pixels: fine enough to see background in the gaps between keys.
 CELL = 4
@@ -28,6 +28,18 @@ def brightness_grid(image, cols, rows):
     return b''.join(data[r * stride:r * stride + cols] for r in range(rows))
 
 
+def detail_grid(image, cols, rows):
+    """Fine detail per cell: the mean difference of its pixels from the image blurred to the grid.
+    Text and icons score high even where a cell's average brightness matches its neighbours'."""
+    image = image.convertToFormat(QImage.Format_RGB32)
+    blurred = image.scaled(cols, rows, Qt.IgnoreAspectRatio, Qt.SmoothTransformation).scaled(image.width(), image.height(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+    painter = QPainter(image)
+    painter.setCompositionMode(QPainter.CompositionMode_Difference)
+    painter.drawImage(0, 0, blurred)
+    painter.end()
+    return brightness_grid(image, cols, rows)
+
+
 def sample(surface):
     """The surface's rectangle as it appears on screen, as {cols, rows, lum} for the overlay page, or None."""
     screen = surface.screen()
@@ -36,4 +48,6 @@ def sample(surface):
     pixmap = screen.grabWindow(0, surface.x() - origin.x(), surface.y() - origin.y(), surface.width(), surface.height())
     if pixmap.isNull(): return None
     cols, rows = max(1, surface.width() // CELL), max(1, surface.height() // CELL)
-    return dict(cols=cols, rows=rows, lum=base64.b64encode(brightness_grid(pixmap.toImage(), cols, rows)).decode('ascii'))
+    image = pixmap.toImage()
+    encode = lambda grid: base64.b64encode(grid).decode('ascii')
+    return dict(cols=cols, rows=rows, lum=encode(brightness_grid(image, cols, rows)), detail=encode(detail_grid(image, cols, rows)))
