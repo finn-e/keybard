@@ -139,7 +139,7 @@ let refreshOp: 'refresh' | 'reload' = 'refresh';
  * Tell Keybard Host the board's layout changed, so its overlay re-reads it. Called once a batch
  * of writes has reached the board; a burst of edits gives one re-read (about 0.6 s of USB reads).
  * Only where the host is already in use: Keybard served by it, or a hosted page the user
- * connected to it from the Trainer. Never probes loopback otherwise.
+ * connected to it from the Overlay page. Never probes loopback otherwise.
  */
 export function notifyHostLayoutChanged(): void {
     const local = servedByHost() || (typeof window !== 'undefined' && !!window.__keybardNativeState);

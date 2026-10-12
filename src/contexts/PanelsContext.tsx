@@ -32,7 +32,7 @@ interface PanelsContextType {
 const PanelsContext = createContext<PanelsContextType | undefined>(undefined);
 
 export const PanelsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [activePanel, setActivePanel] = useState<string | null>(() => window.location.hash === "#trainer" ? "trainer" : null);
+    const [activePanel, setActivePanel] = useState<string | null>(() => ["#overlay", "#trainer"].includes(window.location.hash) ? "trainer" : null);
     const [alternativeHeader, setAlternativeHeader] = useState<boolean>(false);
     const [panelToGoBack, setPanelToGoBack] = useState<string | null>(null);
     const [itemToEdit, setItemToEdit] = useState<number | null>(null);

@@ -16,7 +16,7 @@ export function OverlaySurface({ keys, appearance, changed, held, effect, durati
     const minX = Math.min(...keys.map(k => k.x)), minY = Math.min(...keys.map(k => k.y));
     const width = Math.max(...keys.map(k => k.x + k.w)) - minX;
     const height = Math.max(...keys.map(k => k.y + k.h)) - minY;
-    return <svg role="img" aria-label="Trainer keyboard preview" viewBox={`-4 -4 ${width * 40 + 8} ${height * 40 + 8}`}>
+    return <svg role="img" aria-label="Overlay keyboard preview" viewBox={`-4 -4 ${width * 40 + 8} ${height * 40 + 8}`}>
         {keys.map(k => {
             const a = keyAppearance?.get(k.id) ?? appearance;
             const isHeld = held.has(k.id), isChanged = changed.has(k.id) && effect !== 'Off';

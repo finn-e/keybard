@@ -16,7 +16,7 @@ const SVIL_FLAG_CONTEXT_LAYER = 0x20;
 const SVIL_FLAG_DEFAULT_LAYER_STATE = 0x40;
 
 /**
- * "rc0": vRC0, without context or default layer reporting (Trainer can't follow layers).
+ * "rc0": vRC0, without context or default layer reporting (the overlay can't follow layers).
  * "rc": vRC1 or vRC2 (the two look identical over HID).
  */
 export type FirmwareUpdateNotice = "rc0" | "rc";
