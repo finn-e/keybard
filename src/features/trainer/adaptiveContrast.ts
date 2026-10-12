@@ -15,6 +15,8 @@ export interface Backdrop {
     /** Same layout: fine detail in each cell, the mean difference of its pixels from the blurred background
      *  (text and icons score high even when a cell's average brightness matches its neighbours'). */
     detail?: string;
+    /** Window rects [x, y, w, h] whose pixels aren't background (off screen, under the Host's controls). */
+    mask?: number[][];
 }
 
 /** A key's background: brightness mean, spread between cells, and the cells' mean fine detail. */
@@ -34,8 +36,8 @@ export interface Rect { left: number; top: number; width: number; height: number
 /** How fast a cell's weight falls off with distance from the key, in key sizes (weight 1/e at this distance). */
 const NEAR = .3;
 
-/** Pixels past a key's edge that its outline and halo can still cover. */
-const KEY_PAD = 4;
+/** Pixels past a key's edge that its outline and halo cover at the default size; the page passes the real figure. */
+export const KEY_PAD = 4;
 
 function cellRange(b: Backdrop, width: number, height: number, rect: Rect, pad: number) {
     const cw = width / b.cols, ch = height / b.rows;
@@ -45,13 +47,18 @@ function cellRange(b: Backdrop, width: number, height: number, rect: Rect, pad: 
     };
 }
 
-/** Cells the overlay draws on (any key, with its outline): their brightness is the overlay's, not the background's. */
-export function coveredCells(b: Backdrop, width: number, height: number, keys: Rect[]): Uint8Array {
+/**
+ * Cells whose brightness isn't the background's: those the overlay draws on (each key, padded
+ * by how far its outline and halo reach) and those the Host masks (off screen, under its controls).
+ */
+export function coveredCells(b: Backdrop, width: number, height: number, keys: Rect[], pad = KEY_PAD): Uint8Array {
     const covered = new Uint8Array(b.cols * b.rows);
-    for (const rect of keys) {
-        const { c0, c1, r0, r1 } = cellRange(b, width, height, rect, KEY_PAD);
+    const cover = (rect: Rect, by: number) => {
+        const { c0, c1, r0, r1 } = cellRange(b, width, height, rect, by);
         for (let r = r0; r <= r1; r++) covered.fill(1, r * b.cols + c0, r * b.cols + c1 + 1);
-    }
+    };
+    for (const rect of keys) cover(rect, pad);
+    for (const [left, top, w, h] of b.mask ?? []) if (w > 0 && h > 0) cover({ left, top, width: w, height: h }, 0);
     return covered;
 }
 
@@ -127,9 +134,9 @@ export interface AdaptedKey { id: number; sample: KeyBackdrop; busy: number; dar
 
 /** One backdrop update: each key's legend and plate opacity follow the background around that key. */
 export function adaptKeys(backdrop: Backdrop, width: number, height: number, keys: Array<{ id: number; rect: Rect }>,
-    base: Appearance, previousDark: Map<number, boolean>): AdaptedKey[] {
+    base: Appearance, previousDark: Map<number, boolean>, pad = KEY_PAD): AdaptedKey[] {
     const lum = decodeBackdrop(backdrop), detail = backdrop.detail ? decodeBackdrop(backdrop, 'detail') : undefined;
-    const covered = coveredCells(backdrop, width, height, keys.map(k => k.rect));
+    const covered = coveredCells(backdrop, width, height, keys.map(k => k.rect), pad);
     const out: AdaptedKey[] = [];
     for (const { id, rect } of keys) {
         const sample = sampleAround(lum, covered, backdrop, width, height, rect, detail);
@@ -138,4 +145,12 @@ export function adaptKeys(backdrop: Backdrop, width: number, height: number, key
         out.push({ id, sample, busy, dark, appearance: adaptAppearance(base, busy, dark) });
     }
     return out;
+}
+
+/**
+ * How far past a key's rect its drawing reaches, in window pixels: half the outline and its halo
+ * stroke (a.width + 2 units wide) at the overlay's scale, plus a grid cell for the grab's blur.
+ */
+export function keyPad(outlineWidth: number, unitsToPixels: number, cell: number): number {
+    return Math.ceil(((outlineWidth + 2) / 2) * unitsToPixels) + cell;
 }

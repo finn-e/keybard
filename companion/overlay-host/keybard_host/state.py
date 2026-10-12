@@ -45,6 +45,13 @@ def validate_config(value):
     return result
 
 
+def remembered_board(value):
+    """The remembered board from preferences, or None unless it has a string serial and uid."""
+    if isinstance(value, dict) and isinstance(value.get('serial'), str) and isinstance(value.get('uid'), str):
+        return value
+    return None
+
+
 class HostState:
     def __init__(self, path):
         self.lock = RLock()
@@ -71,10 +78,12 @@ class HostState:
         self.session = secrets.token_hex(12)
         try:
             saved = json.loads(self.path.read_text())
-            self.config = validate_config(saved.get('config', {}))
-            self.remembered = saved.get('remembered')
-        except (OSError, ValueError, TypeError, KeyError):
-            pass
+        except (OSError, ValueError):
+            saved = {}
+        if not isinstance(saved, dict): saved = {}
+        try: self.config = validate_config(saved.get('config', {}))
+        except (ValueError, TypeError, KeyError): pass
+        self.remembered = remembered_board(saved.get('remembered'))
 
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)

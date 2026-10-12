@@ -6,6 +6,11 @@ export interface SurfaceKey { id: number; x: number; y: number; w: number; h: nu
 interface Props { keys: SurfaceKey[]; appearance: Appearance; changed: Set<number>; held: Set<number>; effect: Preferences['effect']; duration: number; hidden: Set<number>; target?: number; onSelect?: (id: number) => void; capitals?: boolean; keyAppearance?: Map<number, Appearance> }
 /** A legend that is one letter or digit: drawn larger, and in capitals when asked. */
 const SINGLE_ALNUM = /^[\p{L}\p{N}]$/u;
+/** Upper case for the Capital letters option, unless that isn't a single character (ß -> SS). */
+export function capital(letter: string): string {
+    const upper = letter.toUpperCase();
+    return [...upper].length === 1 ? upper : letter;
+}
 export function OverlaySurface({ keys, appearance, changed, held, effect, duration, hidden, target, onSelect, capitals = false, keyAppearance }: Props) {
     if (!keys.length) return <p>No physical keys in this layout.</p>;
     const minX = Math.min(...keys.map(k => k.x)), minY = Math.min(...keys.map(k => k.y));
@@ -32,7 +37,7 @@ export function OverlaySurface({ keys, appearance, changed, held, effect, durati
                 </foreignObject> : lines.map((line, i) => <text key={i} x={(k.w * 40 - 3) / 2} y={(k.h * 40 - 3) / 2 + 4 + (i - (lines.length - 1) / 2) * 11}
                     textAnchor="middle" fontSize={SINGLE_ALNUM.test(line) ? 18 : line.length > 5 ? 8 : 12} fontWeight="600"
                     textLength={line.length > 6 ? Math.max(15, k.w * 40 - 9) : undefined} lengthAdjust="spacingAndGlyphs"
-                    fill={a.legend} fillOpacity={a.legendAlpha / 100} stroke={a.halo ? haloColor(a.legend) : 'none'} strokeOpacity={a.legendAlpha / 100} strokeWidth="3" paintOrder="stroke fill">{capitals && SINGLE_ALNUM.test(line) ? line.toUpperCase() : line}</text>)}
+                    fill={a.legend} fillOpacity={a.legendAlpha / 100} stroke={a.halo ? haloColor(a.legend) : 'none'} strokeOpacity={a.legendAlpha / 100} strokeWidth="3" paintOrder="stroke fill">{capitals && SINGLE_ALNUM.test(line) ? capital(line) : line}</text>)}
             </g>;
         })}
     </svg>;
@@ -48,7 +53,7 @@ function KeyLegend({ legend: l, color, opacity, halo, capitals }: { legend: NonN
     const top = layer ? l.keyContents?.layertext : l.topLabel;
     const content = layer ? l.keyContents?.top?.split('(')[1]?.replace(')', '') : getCenterContent(l.displayLabel, l.keycode, isMouse);
     const alnum = !layer && typeof content === 'string' && SINGLE_ALNUM.test(content); // not a layer key's number
-    const center = alnum && capitals ? (content as string).toUpperCase() : content;
+    const center = alnum && capitals ? capital(content as string) : content;
     return <div className="trainer-key-legend" style={{ color, opacity, filter: halo ? HALO(haloColor(color)) : undefined }}>
         {(icons.length > 0 || top) && <div className="trainer-key-heading">{icons.length ? icons : top}</div>}
         <div className="trainer-key-center" style={{ flexDirection: icon && !layer ? 'column' : 'row', fontSize: alnum ? 18 : typeof center === 'string' && center.length > 6 ? 7 : typeof center === 'string' && center.length > 3 ? 9 : 12 }}>

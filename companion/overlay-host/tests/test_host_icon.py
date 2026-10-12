@@ -26,7 +26,8 @@ class HostIconTest(unittest.TestCase):
     def test_reads_the_windows_taskbar_setting(self):
         import winreg
         for stored, light in ((1, True), (0, False)):
-            with mock.patch.object(winreg, 'QueryValueEx', return_value=(stored, winreg.REG_DWORD)):
+            # Independent of this machine's registry: the key needn't exist.
+            with mock.patch.object(winreg, "OpenKey", return_value=mock.MagicMock()), mock.patch.object(winreg, 'QueryValueEx', return_value=(stored, winreg.REG_DWORD)):
                 self.assertIs(host.taskbar_is_light(), light)
 
     @unittest.skipUnless(sys.platform == 'win32', 'Windows taskbar setting')

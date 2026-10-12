@@ -14,6 +14,10 @@ This release is a portable ZIP for 64-bit Windows 10 and 11, not a signed instal
 - **Adaptive contrast (prototype, Windows).** Each key restyles itself for the background around it, about twice a second: dark legends over light windows, light ones over dark windows, and a backing plate that gets more opaque the busier the background is. It's on by default while it's being developed; turn it off with **Adaptive contrast (prototype)** in the overlay's menu. The overlay still shows in screenshots and recordings.
 - **Capital letters, if you prefer.** Turn on **Capital letters** in the overlay's menu to show letter keys in capitals.
 - **Only the grip moves the overlay.** **Drag by keys** is gone from Trainer, the overlay's menu and the tray, so every click on the overlay, keys included, reaches the window underneath.
+- **The overlay stays on top.** Windows could leave the overlay, or its grips, underneath other windows; the Host now puts them back within a second.
+- **Overlay menu changes stick.** A Trainer setting saved shortly after you changed Capital letters, adaptive contrast or the overlay size no longer undoes that change.
+- **Size changes keep the overlay on screen.** Changing the size from Trainer keeps the overlay's bottom edge where it is instead of growing it off the bottom of the screen.
+- **A damaged settings file no longer stops the Host from starting**; it falls back to the default settings.
 - **macOS, for testers.** The ZIP now includes `start-macos.sh`, which runs Keybard Host on macOS 13 or later with Python 3.10 or later. Nobody has tried it on a Mac yet; see "macOS" in `README.md` for what to check.
 
 ## New in vLaunch2.2

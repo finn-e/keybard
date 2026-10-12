@@ -42,12 +42,24 @@ def buried(hwnd, api=None):
     return False
 
 
+def above(hwnd, other, api=None):
+    """Whether other is stacked above hwnd."""
+    u = api or _api()
+    h = u.GetWindow(hwnd, GW_HWNDPREV)
+    while h:
+        if h == other: return True
+        h = u.GetWindow(h, GW_HWNDPREV)
+    return False
+
+
 def keep_on_top(widgets, platform=None, api=None):
-    """Put the widgets' windows back on top, in order (last ends up highest), if any is buried."""
+    """Put the widgets' windows back on top, in order (last ends up highest), if any is buried
+    under an ordinary window or they're out of order among themselves."""
     if (platform or sys.platform) != 'win32': return False
     u = api or _api()
     handles = [int(w.winId()) for w in widgets if w.isVisible()]
-    if not any(buried(h, u) for h in handles): return False
+    misordered = any(above(handles[i], later, u) for i in range(len(handles)) for later in handles[:i])
+    if not misordered and not any(buried(h, u) for h in handles): return False
     for h in handles:
         u.SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER)
     return True

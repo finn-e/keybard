@@ -288,6 +288,8 @@ class Host(QObject):
             lambda: self.state.config['scale'], self.resize_overlay, self.set_capitals, self.set_adaptive)
         self.controls.capitals.setChecked(self.state.config['capitalAlphas'])
         self.controls.adaptive.setChecked(self.state.config['adaptiveContrast'])
+        # Expanding shows the overlay's adapted colours at once rather than at the next sample.
+        self.controls.collapser.clicked.connect(lambda: QTimer.singleShot(0, self.sample_backdrop))
         # Adaptive contrast samples the screen under the overlay this often (ms).
         self.sampling = False
         self.backdrop_timer = QTimer(self); self.backdrop_timer.timeout.connect(self.sample_backdrop); self.backdrop_timer.start(500)
@@ -361,9 +363,7 @@ class Host(QObject):
 
     def resize_overlay(self, scale, final):
         """The resize handle: follow the pointer live, then save the size as the overlay preference."""
-        bottom, area = self.surface.geometry().bottom(), (self.surface.screen() or self.app.primaryScreen()).availableGeometry()
         self.size_surface(scale)
-        self.surface.move(self.surface.x(), max(area.top(), bottom - self.surface.height() + 1))
         if not final: return
         with self.state.lock:
             if self.state.config['scale'] == scale: return
@@ -394,17 +394,20 @@ class Host(QObject):
 
     def sample_backdrop(self):
         """Adaptive contrast: send the overlay what's on screen under it; tell it to stop when off."""
-        active = backdrop.supported() and self.state.config['adaptiveContrast'] and self.state.visible and not self.controls.collapsed
+        active = (backdrop.supported() and self.state.config['adaptiveContrast'] and self.state.visible and not self.controls.collapsed
+                  and self.state.valid and self.state.board is not None)
         if active != self.sampling:
             self.sampling = active
             if not active: self.surface.page().runJavaScript("window.dispatchEvent(new CustomEvent('keybard-host-backdrop',{detail:null}))")
         if not active: return
-        grid = backdrop.sample(self.surface)
+        grid = backdrop.sample(self.surface, exclude=[self.controls.geometry()])
         if grid: self.surface.page().runJavaScript("window.dispatchEvent(new CustomEvent('keybard-host-backdrop',{detail:" + json.dumps(grid) + "}))")
 
     def size_surface(self, scale=None):
+        """Size the overlay for the scale, hands and layout, keeping its bottom edge put and on screen."""
         screen = self.surface.screen() or self.app.primaryScreen()
         area = screen.availableGeometry()
+        bottom = self.surface.geometry().bottom()
         width = min(int(1050 * (scale or self.state.config['scale']) / 100), area.width() - 32)
         board = self.state.board
         layout = list(board['keylayout'].values()) if board else []
@@ -417,6 +420,7 @@ class Host(QObject):
         if height > area.height() - 40:
             height = area.height() - 40; width = int(height / ratio)
         self.surface.setFixedSize(max(100, width), max(80, height))
+        self.surface.move(self.surface.x(), max(area.top(), min(bottom, area.bottom()) - self.surface.height() + 1))
 
     def place(self):
         self.size_surface()

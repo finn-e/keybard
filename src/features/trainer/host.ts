@@ -109,14 +109,19 @@ export function useHost() {
             await post('/api/host/command', () => value); setError('');
         } catch (e) { setError(e instanceof Error ? e.message : 'Host command failed'); }
     }, [post]);
-    const configure = useCallback(async (config: HostConfig) => {
+    const configure = useCallback(async (config: HostConfig | ((latest: HostConfig) => HostConfig)) => {
         if (!current.current || busyRef.current) return false;
         busyRef.current = true; setBusy(true);
         try {
-            // The revision is read at send time: a retry after a host restart uses the new host's.
-            const data = await post('/api/host/config', () => ({ config, revision: current.current?.revision ?? 0 }));
+            // The config and revision are read at send time: a retry after a host restart uses the new
+            // host's, and a change made meanwhile (overlay menu, resize grip) isn't overwritten.
+            let sent = typeof config === 'function' ? config(current.current.config) : config;
+            const data = await post('/api/host/config', () => {
+                if (typeof config === 'function' && current.current) sent = config(current.current.config);
+                return { config: sent, revision: current.current?.revision ?? 0 };
+            });
             if (!current.current) return false;
-            current.current = { ...current.current, config, revision: data.revision };
+            current.current = { ...current.current, config: sent, revision: data.revision };
             setState(current.current); setError(''); return true;
         } catch (e) { setError(e instanceof Error ? e.message : 'Could not save host settings'); return false; }
         finally { busyRef.current = false; setBusy(false); }

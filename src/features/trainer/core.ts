@@ -37,6 +37,13 @@ export function preferences(value: unknown): Preferences {
         result[key] = Math.max(key === 'duration' ? 50 : 50, Math.min(key === 'duration' ? 750 : 150, data[key] as number));
     return result;
 }
+/** The preferences that differ between two snapshots (a whole appearance counts as one field). */
+export function changedPreferences(before: Preferences, after: Preferences): Partial<Preferences> {
+    const changed: Partial<Preferences> = {};
+    for (const key of Object.keys(after) as Array<keyof Preferences>)
+        if (JSON.stringify(after[key]) !== JSON.stringify(before[key])) (changed as Record<string, unknown>)[key] = after[key];
+    return changed;
+}
 export function resolveBinding(keymap: number[][], index: number, active: number, defaults: number) {
     const mask = (active | defaults) >>> 0;
     for (let layer = 31; layer >= 0; layer--) {

@@ -7,7 +7,7 @@ import { fileService } from '@/services/file.service';
 import { useLayoutSettings } from '@/contexts/LayoutSettingsContext';
 import type { KeyboardInfo } from '@/types/keyboard.types';
 import example from '@/default-layouts/sval-default.svil?raw';
-import { DEFAULTS, PRESETS, STORAGE_KEY, preferences, type Appearance, type Preferences } from './core';
+import { DEFAULTS, PRESETS, STORAGE_KEY, changedPreferences, preferences, type Appearance, type Preferences } from './core';
 import { OverlaySurface, type SurfaceKey } from './OverlaySurface';
 import './trainer.css';
 import { useHost } from './host';
@@ -29,6 +29,8 @@ export default function TrainerPage({ active = true }: { active?: boolean }) {
     const board = following ? host.state!.board || sample : source === 'example' ? sample : source === 'import' ? imported || sample : source === 'draft' ? keyboard || sample : originalKeyboard || sample;
     const [prefs, setPrefs] = useState<Preferences>(readPreferences);
     const prefsRef = useRef(prefs); prefsRef.current = prefs;
+    // The Host's settings as Trainer last saw them: a save sends only what changed since.
+    const syncedPrefs = useRef(prefs);
     const [storageError, setStorageError] = useState(false);
     const [error, setError] = useState('');
     const [tab, setTab] = useState('Appearance');
@@ -46,12 +48,16 @@ export default function TrainerPage({ active = true }: { active?: boolean }) {
     useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs)); setStorageError(false); } catch { setStorageError(true); } }, [prefs]);
     useEffect(() => { setLayer(0); setBase(0); setCue(0); setRevealed(false); setFamiliar(new Set()); setSelected(null); setAttempts(0); setCorrect(0); }, [board]);
     useEffect(() => {
-        if (host.state && !hostDirty && !host.busy) setPrefs(preferences(host.state.config));
+        if (host.state && !hostDirty && !host.busy) { const synced = preferences(host.state.config); syncedPrefs.current = synced; setPrefs(synced); }
     }, [host.state?.revision, hostDirty, host.busy]);
     useEffect(() => {
         if (!host.state || !hostDirty || host.busy) return;
         const timer = setTimeout(() => {
-            void host.configure({ ...host.state!.config, ...prefs }).then(ok => { if (!ok || prefsRef.current === prefs) setHostDirty(false); });
+            const changed = changedPreferences(syncedPrefs.current, prefs);
+            void host.configure(latest => ({ ...latest, ...changed })).then(ok => {
+                if (ok) syncedPrefs.current = { ...syncedPrefs.current, ...changed } as Preferences;
+                if (!ok || prefsRef.current === prefs) setHostDirty(false);
+            });
         }, 160);
         return () => clearTimeout(timer);
     }, [prefs, hostDirty, host.busy, host.configure]);

@@ -37,13 +37,16 @@ fi
 .venv/bin/python -m pip install --quiet --disable-pip-version-check \
   -r requirements.txt
 
-web=web
+paranoid=0; custom=0
 for arg in "$@"; do
   case "$arg" in
-    --paranoid) web=web-paranoid ;;
-    --assets|--assets=*) web="" ;;  # the host checks a folder given to it
+    --paranoid) paranoid=1 ;;
+    --assets|--assets=*) custom=1 ;;  # the host checks a folder given to it
   esac
 done
+web=web
+[ "$paranoid" = 1 ] && web=web-paranoid
+[ "$custom" = 1 ] && web=""
 if [ -n "$web" ] && [ ! -f "$web/index.html" ]; then
   echo "Keybard's web build is missing from $(pwd)/$web." >&2
   echo "Extract the whole release ZIP, or see 'macOS' in README.md." >&2
