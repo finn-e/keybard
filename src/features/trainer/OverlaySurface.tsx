@@ -19,6 +19,9 @@ export function OverlaySurface({ keys, appearance, changed, held, effect, durati
             const lines = label.split('\n').slice(0, 3);
             return <g key={k.id} data-key-id={k.id} transform={`translate(${(k.x - minX) * 40} ${(k.y - minY) * 40})`} onClick={() => onSelect?.(k.id)}>
                 <title>{`${k.hand} · ${k.label.split('\n').join(' / ')} · layer ${k.layer}`}</title>
+                {/* The halo also traces the outline, in the contrasting colour, so keys stay visible on any background. */}
+                {a.halo && a.width > 0 && <rect width={k.w * 40 - 3} height={k.h * 40 - 3} rx="6" fill="none"
+                    stroke={haloColor(a.outline)} strokeWidth={a.width + 2} strokeOpacity={.55 * a.outlineAlpha / 100} />}
                 <rect width={k.w * 40 - 3} height={k.h * 40 - 3} rx="6" fill={a.fill} fillOpacity={a.fillAlpha / 100}
                     stroke={isHeld ? a.pressed : target === k.id ? a.changed : a.outline} strokeWidth={a.width} strokeOpacity={a.outlineAlpha / 100} />
                 {isChanged && <rect className={effect === 'Short fade' ? 'trainer-fade' : ''} style={{ animationDuration: `${duration}ms` }} width={k.w * 40 - 3} height={k.h * 40 - 3} rx="6"
@@ -29,11 +32,14 @@ export function OverlaySurface({ keys, appearance, changed, held, effect, durati
                 </foreignObject> : lines.map((line, i) => <text key={i} x={(k.w * 40 - 3) / 2} y={(k.h * 40 - 3) / 2 + 4 + (i - (lines.length - 1) / 2) * 11}
                     textAnchor="middle" fontSize={SINGLE_ALNUM.test(line) ? 18 : line.length > 5 ? 8 : 12} fontWeight="600"
                     textLength={line.length > 6 ? Math.max(15, k.w * 40 - 9) : undefined} lengthAdjust="spacingAndGlyphs"
-                    fill={a.legend} fillOpacity={a.legendAlpha / 100} stroke={a.halo ? haloColor(a.legend) : 'none'} strokeOpacity={a.legendAlpha / 100} strokeWidth="2" paintOrder="stroke fill">{capitals && SINGLE_ALNUM.test(line) ? line.toUpperCase() : line}</text>)}
+                    fill={a.legend} fillOpacity={a.legendAlpha / 100} stroke={a.halo ? haloColor(a.legend) : 'none'} strokeOpacity={a.legendAlpha / 100} strokeWidth="3" paintOrder="stroke fill">{capitals && SINGLE_ALNUM.test(line) ? line.toUpperCase() : line}</text>)}
             </g>;
         })}
     </svg>;
 }
+
+/** A legend halo: stacked shadows build a solid edge in the contrasting colour, readable on any background. */
+const HALO = (c: string) => `drop-shadow(0 0 .5px ${c}) drop-shadow(0 0 1px ${c}) drop-shadow(0 0 1.5px ${c})`;
 
 function KeyLegend({ legend: l, color, opacity, halo, capitals }: { legend: NonNullable<SurfaceKey['legend']>; color: string; opacity: number; halo: boolean; capitals: boolean }) {
     const { icons, isMouse } = getHeaderIcons(l.keycode, l.displayLabel);
@@ -43,7 +49,7 @@ function KeyLegend({ legend: l, color, opacity, halo, capitals }: { legend: NonN
     const content = layer ? l.keyContents?.top?.split('(')[1]?.replace(')', '') : getCenterContent(l.displayLabel, l.keycode, isMouse);
     const alnum = !layer && typeof content === 'string' && SINGLE_ALNUM.test(content); // not a layer key's number
     const center = alnum && capitals ? (content as string).toUpperCase() : content;
-    return <div className="trainer-key-legend" style={{ color, opacity, filter: halo ? `drop-shadow(0 0 1px ${haloColor(color)})` : undefined }}>
+    return <div className="trainer-key-legend" style={{ color, opacity, filter: halo ? HALO(haloColor(color)) : undefined }}>
         {(icons.length > 0 || top) && <div className="trainer-key-heading">{icons.length ? icons : top}</div>}
         <div className="trainer-key-center" style={{ flexDirection: icon && !layer ? 'column' : 'row', fontSize: alnum ? 18 : typeof center === 'string' && center.length > 6 ? 7 : typeof center === 'string' && center.length > 3 ? 9 : 12 }}>
             {!layer && icon}{center}{layer && icon}
