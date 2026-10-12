@@ -127,7 +127,7 @@ def taskbar_is_light():
 
 
 def host_icon(light_background):
-    """The Svalboard glyph in whichever colour contrasts with the taskbar or tray."""
+    """The Svalboard glyph in whichever color contrasts with the taskbar or tray."""
     name = 'svalboard.png' if light_background else 'svalboard-light.png'
     return QIcon(str(Path(__file__).parent / 'assets' / name))
 
@@ -288,7 +288,7 @@ class Host(QObject):
             lambda: self.state.config['scale'], self.resize_overlay, self.set_capitals, self.set_adaptive)
         self.controls.capitals.setChecked(self.state.config['capitalAlphas'])
         self.controls.adaptive.setChecked(self.state.config['adaptiveContrast'])
-        # Expanding shows the overlay's adapted colours at once rather than at the next sample.
+        # Expanding shows the overlay's adapted colors at once rather than at the next sample.
         self.controls.collapser.clicked.connect(lambda: QTimer.singleShot(0, self.sample_backdrop))
         # Adaptive contrast samples the screen under the overlay this often (ms).
         self.sampling = False

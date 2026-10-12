@@ -24,7 +24,7 @@ export function OverlaySurface({ keys, appearance, changed, held, effect, durati
             const lines = label.split('\n').slice(0, 3);
             return <g key={k.id} data-key-id={k.id} transform={`translate(${(k.x - minX) * 40} ${(k.y - minY) * 40})`} onClick={() => onSelect?.(k.id)}>
                 <title>{`${k.hand} · ${k.label.split('\n').join(' / ')} · layer ${k.layer}`}</title>
-                {/* The halo also traces the outline, in the contrasting colour, so keys stay visible on any background. */}
+                {/* The halo also traces the outline, in the contrasting color, so keys stay visible on any background. */}
                 {a.halo && a.width > 0 && <rect width={k.w * 40 - 3} height={k.h * 40 - 3} rx="6" fill="none"
                     stroke={haloColor(a.outline)} strokeWidth={a.width + 2} strokeOpacity={.55 * a.outlineAlpha / 100} />}
                 <rect width={k.w * 40 - 3} height={k.h * 40 - 3} rx="6" fill={a.fill} fillOpacity={a.fillAlpha / 100}
@@ -43,7 +43,7 @@ export function OverlaySurface({ keys, appearance, changed, held, effect, durati
     </svg>;
 }
 
-/** A legend halo: stacked shadows build a solid edge in the contrasting colour, readable on any background. */
+/** A legend halo: stacked shadows build a solid edge in the contrasting color, readable on any background. */
 const HALO = (c: string) => `drop-shadow(0 0 .5px ${c}) drop-shadow(0 0 1px ${c}) drop-shadow(0 0 1.5px ${c})`;
 
 function KeyLegend({ legend: l, color, opacity, halo, capitals }: { legend: NonNullable<SurfaceKey['legend']>; color: string; opacity: number; halo: boolean; capitals: boolean }) {

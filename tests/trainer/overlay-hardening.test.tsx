@@ -57,7 +57,7 @@ describe('halo', () => {
             hidden={new Set()} effect="Off" duration={150} />).container;
     }
 
-    it('traces the outline in the contrasting colour and builds the legend halo from stacked shadows', () => {
+    it('traces the outline in the contrasting color and builds the legend halo from stacked shadows', () => {
         const container = draw(true);
         const ring = container.querySelector('rect[fill="none"]')!;
         expect(ring.getAttribute('stroke')).toBe(haloColor(DEFAULTS.appearance.outline));

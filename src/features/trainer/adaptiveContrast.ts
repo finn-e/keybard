@@ -4,7 +4,7 @@ import type { Appearance } from './core';
  * Adaptive contrast: Keybard Host samples the screen under the overlay and
  * sends a coarse brightness grid. The grid includes the overlay itself (it stays in
  * screenshots), so each key reads the background from the uncovered cells around it,
- * between and beside the keys, and picks legend and backing colours that stand out.
+ * between and beside the keys, and picks legend and backing colors that stand out.
  */
 export interface Backdrop {
     /** Grid size in cells; cells evenly cover the overlay window. */
@@ -78,7 +78,7 @@ export function sampleAround(lum: Uint8Array, covered: Uint8Array, b: Backdrop, 
         for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
             const i = r * b.cols + c;
             if (covered[i]) continue;
-            // Distance from the cell's centre to the key's edge, in key sizes.
+            // Distance from the cell's center to the key's edge, in key sizes.
             const x = (c + .5) * cw, y = (r + .5) * ch;
             const dx = Math.max(rect.left - x, 0, x - rect.left - rect.width), dy = Math.max(rect.top - y, 0, y - rect.top - rect.height);
             const w = Math.exp(-Math.hypot(dx, dy) / (reach * NEAR));
@@ -101,7 +101,7 @@ export function wantsDarkLegend(mean: number, previous: boolean | undefined): bo
 /**
  * How busy a backdrop is, 0 (flat) to 1 (very busy). Mostly fine detail such as text and
  * texture; broad brightness changes count only a little, since one edge between two flat
- * windows isn't busy (the legend colour handles it).
+ * windows isn't busy (the legend color handles it).
  */
 export function busyness(backdrop: Pick<KeyBackdrop, 'spread' | 'detail'>): number {
     const score = SPREAD_WEIGHT * backdrop.spread + DETAIL_WEIGHT * backdrop.detail;
@@ -115,7 +115,7 @@ const PLATE_MIN = 12, PLATE_MAX = 90;
 /**
  * The key's appearance over its backdrop: legends against the background, and a backing
  * plate whose opacity rises with how busy the background is, so a busy one is covered
- * up rather than only recoloured.
+ * up rather than only recolored.
  */
 export function adaptAppearance(base: Appearance, t: number, dark: boolean): Appearance {
     const ink = dark ? DARK : LIGHT, plate = dark ? LIGHT : DARK;

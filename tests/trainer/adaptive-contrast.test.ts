@@ -70,7 +70,7 @@ describe('adaptive contrast', () => {
         expect(calm.fill).toBe('#111417');
         expect(busy.fillAlpha).toBeGreaterThan(calm.fillAlpha);
         expect(busy.halo).toBe(true);
-        // Feedback colours stay the user's.
+        // Feedback colors stay the user's.
         expect(busy.pressed).toBe(DEFAULTS.appearance.pressed);
     });
 

@@ -1,4 +1,4 @@
-"""Release hardening: preferences loading, stacking, sampling and overlay controls behaviour."""
+"""Release hardening: preferences loading, stacking, sampling and overlay controls behavior."""
 import json
 import os
 import tempfile

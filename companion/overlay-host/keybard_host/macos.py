@@ -1,4 +1,4 @@
-"""macOS window behaviour that Qt has no flag for.
+"""macOS window behavior that Qt has no flag for.
 
 Calls the Objective-C runtime through ctypes, so the Host needs no pyobjc.
 Everything here is best effort: on other platforms, or if a call fails, it
