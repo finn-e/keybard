@@ -13,7 +13,25 @@ export const layerColors = [
 ];
 
 // function to get color by name
-export function getColorByName(name: string) {
+/** A custom layer color: a "#rrggbb" hex code instead of a preset name. */
+export function isHexColor(color: string | undefined): color is string {
+    return !!color && /^#[0-9a-f]{6}$/i.test(color);
+}
+
+/** The text class (white or black) that reads best on a custom hex background. */
+export function textClassForHex(hex: string): "text-white" | "text-black" {
+    const channel = (i: number) => {
+        const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+        return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    const luminance = 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+    // Contrast with white is 1.05 / (L + 0.05), with black (L + 0.05) / 0.05; they meet at L ~ 0.18.
+    return luminance > 0.179 ? "text-black" : "text-white";
+}
+
+/** A preset layer color by name, or a custom hex color as { name, hex }. */
+export function getColorByName(name: string): { name: string; hex: string } | undefined {
+    if (isHexColor(name)) return { name, hex: name };
     return layerColors.find((color) => color.name === name);
 }
 

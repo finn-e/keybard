@@ -18,6 +18,8 @@ import {
     hoverBackgroundClasses,
     hoverBorderClasses,
     colorClasses,
+    isHexColor,
+    textClassForHex,
     layerColors,
     getColorByName
 } from "@/utils/colors";
@@ -499,6 +501,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
 
     const layerTextColorClass = useMemo(() => {
         const layerName = layerColorNames?.[selectedLayer] || "green";
+        if (isHexColor(layerName)) return textClassForHex(layerName);
         const classes = colorClasses[layerName] || colorClasses.primary;
         return classes.split(" ").find(c => c.startsWith("text-"));
     }, [layerColorNames, selectedLayer]);

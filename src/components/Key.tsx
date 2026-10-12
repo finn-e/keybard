@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { colorClasses, hoverContainerTextClasses } from "@/utils/colors";
+import { colorClasses, hoverContainerTextClasses, isHexColor, textClassForHex } from "@/utils/colors";
 import { KeyContent } from "@/types/keyboard.types";
 import { DragItem } from "@/contexts/DragContext";
 import { getHeaderIcons, getCenterContent, getTypeIcon } from "@/utils/key-icons";
@@ -118,17 +118,21 @@ export const Key = React.forwardRef<HTMLDivElement, KeyProps>((props, ref) => {
             wordWrap: shouldShrinkText ? "break-word" : undefined
         };
 
+        // For subsection keys, only highlight container if "full" is selected
+        // For "inner" selection, the container should not be red
+        const shouldHighlightContainer = selected;
+
         const bottomTextStyle: React.CSSProperties = keyData.bottomStr.length > 4 ? { whiteSpace: "pre-line", fontSize: "0.6rem", wordWrap: "break-word" } : {};
 
-        const colorClass = colorClasses[layerColor] || colorClasses["primary"];
+        // A custom hex layer color has no class; draw it inline, with readable text.
+        const customHex = isHexColor(layerColor) ? layerColor : undefined;
+        const colorClass = customHex ? textClassForHex(customHex) : (colorClasses[layerColor] || colorClasses["primary"]);
+        if (customHex && !shouldHighlightContainer && !drag.isDragHover && !drag.isDragSource && !style?.backgroundColor) boxStyle.backgroundColor = customHex;
         const effectiveHoverColor = hoverLayerColor || layerColor;
         const hoverTextClass = hoverContainerTextClasses[effectiveHoverColor] || hoverContainerTextClasses["primary"];
 
 
 
-        // For subsection keys, only highlight container if "full" is selected
-        // For "inner" selection, the container should not be red
-        const shouldHighlightContainer = selected;
 
         const containerClasses = cn(
             "flex flex-col items-center justify-start cursor-pointer transition-all duration-200 ease-in-out uppercase group overflow-hidden select-none", // Changed justify-between to justify-start
