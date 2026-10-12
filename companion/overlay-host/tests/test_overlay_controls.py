@@ -40,6 +40,28 @@ class OverlayControlsTest(unittest.TestCase):
         actions[0].trigger(); actions[1].trigger()
         self.assertEqual(self.calls, ['hide', 'open'])
 
+    def test_collapse_leaves_only_the_controls_and_expand_restores(self):
+        button = self.controls.collapser
+        self.assertEqual(button.accessibleName(), 'Collapse overlay')
+        button.click()
+        self.assertTrue(self.controls.collapsed)
+        self.assertEqual(self.surface.windowOpacity(), 0)
+        self.assertFalse(self.controls.resizer.isEnabled())
+        self.assertEqual(button.accessibleName(), 'Expand overlay')
+        button.click()
+        self.assertFalse(self.controls.collapsed)
+        self.assertEqual(self.surface.windowOpacity(), 1)
+        self.assertTrue(self.controls.resizer.isEnabled())
+
+    def test_collapsed_overlay_still_moves_with_its_handle(self):
+        self.controls.set_collapsed(True)
+        self.surface.move(100, 100)
+        before = self.surface.pos()
+        handle = self.controls.handle
+        handle.mousePressEvent(QMouseEvent(QMouseEvent.MouseButtonPress, QPointF(4,4), QPointF(200,200), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+        handle.mouseMoveEvent(QMouseEvent(QMouseEvent.MouseMove, QPointF(24,14), QPointF(220,210), Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
+        self.assertEqual(self.surface.pos(), before + QPoint(20,10))
+
     def test_handle_drags_surface_even_in_click_through(self):
         self.surface.pass_clicks_through()
         self.surface.move(100, 100)

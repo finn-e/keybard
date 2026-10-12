@@ -101,6 +101,10 @@ def overlay_control_icon(kind):
     elif kind == 'resize':
         for x1, y1, x2, y2 in ((2,14,14,2), (9,2,14,2), (14,2,14,7), (2,9,2,14), (2,14,7,14)):
             painter.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+    elif kind == 'collapse':
+        painter.drawLine(QPointF(3, 12), QPointF(13, 12))
+    elif kind == 'expand':
+        painter.drawRect(3, 3, 10, 10)
     else:
         painter.setPen(Qt.NoPen); painter.setBrush(QColor('#eeeeee'))
         for x in (3, 8, 13): painter.drawEllipse(QPointF(x, 8), 1.2, 1.2)
@@ -210,17 +214,31 @@ class OverlayControls(QWidget):
         layout = QHBoxLayout(self); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(4)
         self.handle = DragHandle(surface, self)
         self.resizer = ResizeHandle(surface, self, get_scale, set_scale)
+        self.collapser = QToolButton(self); self.collapser.setIconSize(QSize(16, 16))
+        self.collapser.clicked.connect(lambda: self.set_collapsed(not self.collapsed))
         self.more = QToolButton(self); self.more.setIcon(overlay_control_icon('more')); self.more.setIconSize(QSize(16, 16)); self.more.setToolTip('Overlay controls'); self.more.setAccessibleName('Overlay controls')
         self.more.setPopupMode(QToolButton.InstantPopup)
         menu = QMenu(self.more)
         menu.addAction('Hide overlay', hide)
         menu.addAction('Open Keybard', open_controls)
         self.more.setMenu(menu)
-        for button in (self.handle, self.resizer, self.more):
+        for button in (self.handle, self.resizer, self.collapser, self.more):
             button.setFixedSize(24, 24); layout.addWidget(button)
-        self.setFixedSize(80, 24)
+        self.setFixedSize(108, 24)
+        self.collapsed = False
+        self.set_collapsed(False)
         surface.geometry_changed.connect(self.reposition)
         self.reposition()
+
+    def set_collapsed(self, value):
+        """Collapsed: only these controls show. The overlay's window stays, fully transparent,
+        so the move grip still moves it and the controls stay put above its corner."""
+        self.collapsed = value
+        self.surface.setWindowOpacity(0 if value else 1)
+        self.resizer.setEnabled(not value)
+        label = 'Expand overlay' if value else 'Collapse overlay'
+        self.collapser.setIcon(overlay_control_icon('expand' if value else 'collapse'))
+        self.collapser.setToolTip(label); self.collapser.setAccessibleName(label)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -463,6 +481,7 @@ class Host(QObject):
             with self.state.lock: self.state.pressed = []
             self.size_surface()
         elif op == 'show':
+            if value['value']: self.controls.set_collapsed(False)
             self.state.visible = value['value']; self.surface.setVisible(value['value']); self.show_action.setChecked(value['value']); self.controls.setVisible(value['value'])
         elif op == 'arrange': pass  # Drag by keys was removed; older Keybard pages may still send it.
         elif op == 'place': self.place()
