@@ -160,6 +160,24 @@ def overlay_control_icon(kind):
     return QIcon(pixmap)
 
 
+def taskbar_is_light():
+    """Whether the taskbar/tray (Windows) or the app theme (elsewhere) is light."""
+    if sys.platform == 'win32':
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize') as key:
+                return bool(winreg.QueryValueEx(key, 'SystemUsesLightTheme')[0])
+        except OSError:
+            return False  # no setting: the taskbar is dark
+    return QApplication.styleHints().colorScheme() != Qt.ColorScheme.Dark
+
+
+def host_icon(light_background):
+    """The Svalboard glyph in whichever colour contrasts with the taskbar or tray."""
+    name = 'svalboard.png' if light_background else 'svalboard-light.png'
+    return QIcon(str(Path(__file__).parent / 'assets' / name))
+
+
 class DragHandle(QToolButton):
     def __init__(self, surface, parent):
         super().__init__(parent)
@@ -300,9 +318,13 @@ class Host(QObject):
             lambda: self.state.config['scale'], self.resize_overlay)
         self.controls.drag_by_keys.setChecked(state.arrange)
         self.controls.show()
-        icon = QIcon(str(Path(__file__).parent / 'assets' / 'svalboard.png'))
+        self.icon_light_background = taskbar_is_light()
+        icon = host_icon(self.icon_light_background)
         app.setWindowIcon(icon); self.surface.setWindowIcon(icon)
         self.tray = QSystemTrayIcon(icon, self)
+        # Follow light/dark changes. Windows sends no Qt signal for the taskbar's own setting, so check it.
+        app.styleHints().colorSchemeChanged.connect(lambda _scheme: self.update_icon())
+        self.icon_timer = QTimer(self); self.icon_timer.timeout.connect(self.update_icon); self.icon_timer.start(3000)
         menu = QMenu()
         self.status_action = menu.addAction('Keybard Host · waiting for board'); self.status_action.setEnabled(False)
         menu.addSeparator(); menu.addAction('Open Keybard', self.open_controls)
@@ -351,6 +373,13 @@ class Host(QObject):
             script = "window.dispatchEvent(new CustomEvent('keybard-host-state',{detail:" + encoded + "}))"
         self.last_publish = time.monotonic()
         self.surface.page().runJavaScript(script)
+
+    def update_icon(self):
+        light = taskbar_is_light()
+        if light == self.icon_light_background: return
+        self.icon_light_background = light
+        icon = host_icon(light)
+        self.app.setWindowIcon(icon); self.surface.setWindowIcon(icon); self.tray.setIcon(icon)
 
     def open_controls(self):
         if self.paranoid: return open_paranoid(self.url)
