@@ -43,7 +43,7 @@ class BackdropTest(unittest.TestCase):
         surface.screen.return_value.grabWindow.return_value = pixmap
         grid = backdrop.sample(surface)
         surface.screen.return_value.grabWindow.assert_called_once_with(0, 10, 20, 60, 30)
-        self.assertEqual((grid['cols'], grid['rows']), (10, 5))
+        self.assertEqual((grid['cols'], grid['rows']), (60 // backdrop.CELL, 30 // backdrop.CELL))
         self.assertTrue(all(abs(v - 128) < 3 for v in base64.b64decode(grid['lum'])))
 
     def test_exclusion_is_windows_only(self):

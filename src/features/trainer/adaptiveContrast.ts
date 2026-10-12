@@ -1,9 +1,10 @@
 import type { Appearance } from './core';
 
 /**
- * Adaptive contrast (prototype): Keybard Host samples the screen behind the overlay
- * and sends a coarse brightness grid; each key then picks legend and backing colours
- * that stand out against whatever is behind that key.
+ * Adaptive contrast (prototype): Keybard Host samples the screen under the overlay and
+ * sends a coarse brightness grid. The grid includes the overlay itself (it stays in
+ * screenshots), so each key reads the background from the uncovered cells around it,
+ * between and beside the keys, and picks legend and backing colours that stand out.
  */
 export interface Backdrop {
     /** Grid size in cells; cells evenly cover the overlay window. */
@@ -24,19 +25,49 @@ export function decodeBackdrop(b: Backdrop): Uint8Array {
     return out;
 }
 
-/** Brightness mean and standard deviation of the cells under a rect, in window pixels. */
-export function sampleRect(lum: Uint8Array, b: Backdrop, width: number, height: number,
-    rect: { left: number; top: number; width: number; height: number }): KeyBackdrop | null {
+export interface Rect { left: number; top: number; width: number; height: number }
+
+/** Pixels past a key's edge that its outline and halo can still cover. */
+const KEY_PAD = 4;
+
+function cellRange(b: Backdrop, width: number, height: number, rect: Rect, pad: number) {
     const cw = width / b.cols, ch = height / b.rows;
-    const c0 = Math.max(0, Math.floor(rect.left / cw)), c1 = Math.min(b.cols - 1, Math.floor((rect.left + rect.width) / cw));
-    const r0 = Math.max(0, Math.floor(rect.top / ch)), r1 = Math.min(b.rows - 1, Math.floor((rect.top + rect.height) / ch));
-    let n = 0, sum = 0, sq = 0;
-    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
-        const v = lum[r * b.cols + c]; n++; sum += v; sq += v * v;
+    return {
+        c0: Math.max(0, Math.floor((rect.left - pad) / cw)), c1: Math.min(b.cols - 1, Math.floor((rect.left + rect.width + pad) / cw)),
+        r0: Math.max(0, Math.floor((rect.top - pad) / ch)), r1: Math.min(b.rows - 1, Math.floor((rect.top + rect.height + pad) / ch)),
+    };
+}
+
+/** Cells the overlay draws on (any key, with its outline): their brightness is the overlay's, not the background's. */
+export function coveredCells(b: Backdrop, width: number, height: number, keys: Rect[]): Uint8Array {
+    const covered = new Uint8Array(b.cols * b.rows);
+    for (const rect of keys) {
+        const { c0, c1, r0, r1 } = cellRange(b, width, height, rect, KEY_PAD);
+        for (let r = r0; r <= r1; r++) covered.fill(1, r * b.cols + c0, r * b.cols + c1 + 1);
     }
-    if (!n) return null;
-    const mean = sum / n;
-    return { mean, spread: Math.sqrt(Math.max(0, sq / n - mean * mean)) };
+    return covered;
+}
+
+/**
+ * The background around a key: brightness mean and standard deviation of the uncovered
+ * cells within a key's width of it, widening once if the key sits deep inside a cluster.
+ */
+export function sampleAround(lum: Uint8Array, covered: Uint8Array, b: Backdrop, width: number, height: number, rect: Rect): KeyBackdrop | null {
+    const reach = Math.max(rect.width, rect.height);
+    for (const margin of [reach * .75, reach * 1.75]) {
+        const { c0, c1, r0, r1 } = cellRange(b, width, height, rect, margin);
+        let n = 0, sum = 0, sq = 0;
+        for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+            const i = r * b.cols + c;
+            if (covered[i]) continue;
+            const v = lum[i]; n++; sum += v; sq += v * v;
+        }
+        if (n >= 4) {
+            const mean = sum / n;
+            return { mean, spread: Math.sqrt(Math.max(0, sq / n - mean * mean)) };
+        }
+    }
+    return null;
 }
 
 /** Whether a key shows dark legends, with hysteresis so keys near the middle don't flicker. */
@@ -45,17 +76,30 @@ export function wantsDarkLegend(mean: number, previous: boolean | undefined): bo
     return previous ? mean > 115 : mean > 165;
 }
 
-/** The key's appearance over its backdrop: legends against the background, a firmer plate when it's busy. */
+/** How busy a backdrop is, 0 (flat) to 1 (very busy), from its brightness spread. */
+export function busyness(spread: number): number {
+    return Math.max(0, Math.min(1, (spread - BUSY_FROM) / (BUSY_FULL - BUSY_FROM)));
+}
+/** Spread at which a backdrop starts to count as busy, and at which it's fully busy. */
+const BUSY_FROM = 6, BUSY_FULL = 50;
+/** Backing-plate opacity (%) on a flat backdrop at least, and on a fully busy one. */
+const PLATE_MIN = 12, PLATE_MAX = 90;
+
+/**
+ * The key's appearance over its backdrop: legends against the background, and a backing
+ * plate whose opacity rises with how busy the background is, so a busy one is covered
+ * up rather than only recoloured.
+ */
 export function adaptAppearance(base: Appearance, backdrop: KeyBackdrop, dark: boolean): Appearance {
     const ink = dark ? DARK : LIGHT, plate = dark ? LIGHT : DARK;
-    const busy = backdrop.spread > 28;
+    const t = busyness(backdrop.spread);
+    const lerp = (from: number, to: number) => Math.round(from + (to - from) * t);
     return {
         ...base,
         legend: ink, legendAlpha: 100,
-        outline: ink, outlineAlpha: Math.max(base.outlineAlpha, 70),
+        outline: ink, outlineAlpha: lerp(Math.max(base.outlineAlpha, 70), 100),
         fill: plate,
-        // A calm background needs only a light plate; a busy one gets a firmer one.
-        fillAlpha: busy ? Math.round(Math.min(85, 40 + backdrop.spread)) : Math.max(base.fillAlpha, 15),
+        fillAlpha: lerp(Math.max(base.fillAlpha, PLATE_MIN), PLATE_MAX),
         halo: true,
     };
 }

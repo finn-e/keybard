@@ -225,7 +225,7 @@ class OverlayControls(QWidget):
         self.capitals = menu.addAction('Capital letters'); self.capitals.setCheckable(True)
         self.capitals.triggered.connect(set_capitals)
         self.adaptive = menu.addAction('Adaptive contrast (prototype)'); self.adaptive.setCheckable(True)
-        self.adaptive.setToolTip('Restyle each key for what is behind it. Hides the overlay from screenshots while on.')
+        self.adaptive.setToolTip('Restyle each key for the background around it')
         self.adaptive.triggered.connect(set_adaptive)
         self.adaptive.setVisible(backdrop.supported())
         self.more.setMenu(menu)
@@ -288,8 +288,8 @@ class Host(QObject):
             lambda: self.state.config['scale'], self.resize_overlay, self.set_capitals, self.set_adaptive)
         self.controls.capitals.setChecked(self.state.config['capitalAlphas'])
         self.controls.adaptive.setChecked(self.state.config['adaptiveContrast'])
-        # Adaptive contrast samples what's behind the overlay this often (ms).
-        self.capture_excluded = False
+        # Adaptive contrast samples the screen under the overlay this often (ms).
+        self.sampling = False
         self.backdrop_timer = QTimer(self); self.backdrop_timer.timeout.connect(self.sample_backdrop); self.backdrop_timer.start(500)
         self.controls.show()
         self.icon_light_background = taskbar_is_light()
@@ -391,11 +391,10 @@ class Host(QObject):
         self.controls.adaptive.setChecked(self.state.config['adaptiveContrast'])
 
     def sample_backdrop(self):
-        """Adaptive contrast: send the overlay what's behind it; stop, and allow capture again, when off."""
+        """Adaptive contrast: send the overlay what's on screen under it; tell it to stop when off."""
         active = backdrop.supported() and self.state.config['adaptiveContrast'] and self.state.visible and not self.controls.collapsed
-        if active != self.capture_excluded:
-            self.capture_excluded = active
-            backdrop.exclude_from_capture(self.surface, active)
+        if active != self.sampling:
+            self.sampling = active
             if not active: self.surface.page().runJavaScript("window.dispatchEvent(new CustomEvent('keybard-host-backdrop',{detail:null}))")
         if not active: return
         grid = backdrop.sample(self.surface)

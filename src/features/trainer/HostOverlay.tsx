@@ -3,7 +3,7 @@ import { OverlaySurface, type SurfaceKey } from './OverlaySurface';
 import { useHost } from './host';
 import { surfaceKeys } from './useSurfaceKeys';
 import type { Appearance } from './core';
-import { adaptAppearance, decodeBackdrop, sampleRect, wantsDarkLegend, type Backdrop } from './adaptiveContrast';
+import { adaptAppearance, coveredCells, decodeBackdrop, sampleAround, wantsDarkLegend, type Backdrop } from './adaptiveContrast';
 import './trainer.css';
 export default function HostOverlay() {
     const { state } = useHost();
@@ -18,22 +18,27 @@ export default function HostOverlay() {
         document.documentElement.style.background = 'transparent'; document.body.style.background = 'transparent';
         document.body.style.margin = '0'; document.body.style.overflow = 'hidden';
     }, []);
-    // Adaptive contrast (prototype): the Host sends what's behind the overlay; restyle each key for it.
+    // Adaptive contrast (prototype): the Host sends what's under the overlay; restyle each key for the background around it.
     const adaptive = state?.config.adaptiveContrast === true;
     const appearance = state?.config.appearance;
     const [keyAppearance, setKeyAppearance] = useState<Map<number, Appearance>>();
     const darkLegend = useRef(new Map<number, boolean>());
+    const keyAppearanceRef = useRef<Map<number, Appearance> | undefined>(undefined);
+    keyAppearanceRef.current = keyAppearance;
     useEffect(() => {
         if (!adaptive || !appearance) { setKeyAppearance(undefined); darkLegend.current.clear(); return; }
         const onBackdrop = (event: Event) => {
             const backdrop = (event as CustomEvent<Backdrop | null>).detail;
             if (!backdrop) { setKeyAppearance(undefined); return; }
             const lum = decodeBackdrop(backdrop);
+            const keyRects = [...document.querySelectorAll<SVGGElement>('.trainer-native-surface [data-key-id]')]
+                .map(g => ({ id: Number(g.dataset.keyId), rect: g.querySelector('rect')?.getBoundingClientRect() }))
+                .filter((k): k is { id: number; rect: DOMRect } => !!k.rect);
+            const covered = coveredCells(backdrop, innerWidth, innerHeight, keyRects.map(k => k.rect));
             const next = new Map<number, Appearance>();
-            for (const g of document.querySelectorAll<SVGGElement>('.trainer-native-surface [data-key-id]')) {
-                const id = Number(g.dataset.keyId), rect = g.querySelector('rect')?.getBoundingClientRect();
-                const sample = rect && sampleRect(lum, backdrop, innerWidth, innerHeight, rect);
-                if (!sample) continue;
+            for (const { id, rect } of keyRects) {
+                const sample = sampleAround(lum, covered, backdrop, innerWidth, innerHeight, rect);
+                if (!sample) { const kept = keyAppearanceRef.current?.get(id); if (kept) next.set(id, kept); continue; }
                 const dark = wantsDarkLegend(sample.mean, darkLegend.current.get(id));
                 darkLegend.current.set(id, dark);
                 next.set(id, adaptAppearance(appearance, sample, dark));
