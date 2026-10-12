@@ -22,6 +22,7 @@ from .server import REMOTE_ORIGINS, load_paranoid_page, make_server
 from .build import build_info
 from .browser import open_contained
 from .macos import float_window, hide_dock_icon, is_mac
+from . import backdrop
 
 
 class Bridge(QObject):
@@ -203,7 +204,7 @@ SCALE_MIN, SCALE_MAX = 50, 150
 
 class OverlayControls(QWidget):
     """A separate input window: the handle moves the overlay while the keyboard passes clicks through."""
-    def __init__(self, surface, open_controls, get_scale=lambda: 100, set_scale=lambda scale, final: None, set_capitals=lambda value: None):
+    def __init__(self, surface, open_controls, get_scale=lambda: 100, set_scale=lambda scale, final: None, set_capitals=lambda value: None, set_adaptive=lambda value: None):
         super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus)
         self.surface = surface
         self.setWindowTitle('Keybard · Overlay controls')
@@ -223,6 +224,10 @@ class OverlayControls(QWidget):
         menu.addSeparator()
         self.capitals = menu.addAction('Capital letters'); self.capitals.setCheckable(True)
         self.capitals.triggered.connect(set_capitals)
+        self.adaptive = menu.addAction('Adaptive contrast (prototype)'); self.adaptive.setCheckable(True)
+        self.adaptive.setToolTip('Restyle each key for what is behind it. Hides the overlay from screenshots while on.')
+        self.adaptive.triggered.connect(set_adaptive)
+        self.adaptive.setVisible(backdrop.supported())
         self.more.setMenu(menu)
         for button in (self.handle, self.resizer, self.collapser, self.more):
             button.setFixedSize(24, 24); layout.addWidget(button)
@@ -280,8 +285,12 @@ class Host(QObject):
         self.surface.pass_clicks_through()
         self.place()
         self.controls = OverlayControls(self.surface, self.open_controls,
-            lambda: self.state.config['scale'], self.resize_overlay, self.set_capitals)
+            lambda: self.state.config['scale'], self.resize_overlay, self.set_capitals, self.set_adaptive)
         self.controls.capitals.setChecked(self.state.config['capitalAlphas'])
+        self.controls.adaptive.setChecked(self.state.config['adaptiveContrast'])
+        # Adaptive contrast samples what's behind the overlay this often (ms).
+        self.capture_excluded = False
+        self.backdrop_timer = QTimer(self); self.backdrop_timer.timeout.connect(self.sample_backdrop); self.backdrop_timer.start(500)
         self.controls.show()
         self.icon_light_background = taskbar_is_light()
         icon = host_icon(self.icon_light_background)
@@ -361,14 +370,36 @@ class Host(QObject):
             except (OSError, RuntimeError, ValueError): return self.size_surface()
         self.publish_state()
 
-    def set_capitals(self, value):
-        """The overlay menu's Capital letters toggle: show letter keys in capitals, saved like Trainer's settings."""
+    def set_flag(self, name, value):
+        """An overlay menu toggle, saved with the Host's settings like Trainer's."""
         with self.state.lock:
-            if self.state.config['capitalAlphas'] != value:
-                try: self.state.configure(dict(self.state.config, capitalAlphas=value), self.state.revision)
+            if self.state.config[name] != value:
+                try: self.state.configure(dict(self.state.config, **{name: value}), self.state.revision)
                 except (OSError, RuntimeError, ValueError): pass
-            self.controls.capitals.setChecked(self.state.config['capitalAlphas'])
+        self.sync_menu()
         self.publish_state()
+
+    def set_capitals(self, value): self.set_flag('capitalAlphas', value)
+
+    def set_adaptive(self, value):
+        self.set_flag('adaptiveContrast', value)
+        self.sample_backdrop()
+
+    def sync_menu(self):
+        """Keep the overlay menu's check marks in step when Trainer or another page changes them."""
+        self.controls.capitals.setChecked(self.state.config['capitalAlphas'])
+        self.controls.adaptive.setChecked(self.state.config['adaptiveContrast'])
+
+    def sample_backdrop(self):
+        """Adaptive contrast: send the overlay what's behind it; stop, and allow capture again, when off."""
+        active = backdrop.supported() and self.state.config['adaptiveContrast'] and self.state.visible and not self.controls.collapsed
+        if active != self.capture_excluded:
+            self.capture_excluded = active
+            backdrop.exclude_from_capture(self.surface, active)
+            if not active: self.surface.page().runJavaScript("window.dispatchEvent(new CustomEvent('keybard-host-backdrop',{detail:null}))")
+        if not active: return
+        grid = backdrop.sample(self.surface)
+        if grid: self.surface.page().runJavaScript("window.dispatchEvent(new CustomEvent('keybard-host-backdrop',{detail:" + json.dumps(grid) + "}))")
 
     def size_surface(self, scale=None):
         screen = self.surface.screen() or self.app.primaryScreen()
@@ -482,7 +513,7 @@ class Host(QObject):
             if time.monotonic() - self.state.practice_at > 2.5:
                 self.state.practice_hidden = []; self.state.practice_target = None
         self.status_action.setText(self.state.status[:65])
-        self.controls.capitals.setChecked(self.state.config['capitalAlphas'])
+        self.sync_menu()
         self.publish_state()
 
     def command(self, value):

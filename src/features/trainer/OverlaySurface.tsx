@@ -3,20 +3,21 @@ import { getHeaderIcons, getCenterContent, getTypeIcon } from '@/utils/key-icons
 import type { Appearance, Preferences } from './core';
 import { haloColor } from './core';
 export interface SurfaceKey { id: number; x: number; y: number; w: number; h: number; label: string; code: number; layer: number; hand: string; legend?: { keycode: string; keyContents?: KeyContent; displayLabel: string; topLabel: string; bottomStr: string } }
-interface Props { keys: SurfaceKey[]; appearance: Appearance; changed: Set<number>; held: Set<number>; effect: Preferences['effect']; duration: number; hidden: Set<number>; target?: number; onSelect?: (id: number) => void; capitals?: boolean }
+interface Props { keys: SurfaceKey[]; appearance: Appearance; changed: Set<number>; held: Set<number>; effect: Preferences['effect']; duration: number; hidden: Set<number>; target?: number; onSelect?: (id: number) => void; capitals?: boolean; keyAppearance?: Map<number, Appearance> }
 /** A legend that is one letter or digit: drawn larger, and in capitals when asked. */
 const SINGLE_ALNUM = /^[\p{L}\p{N}]$/u;
-export function OverlaySurface({ keys, appearance: a, changed, held, effect, duration, hidden, target, onSelect, capitals = false }: Props) {
+export function OverlaySurface({ keys, appearance, changed, held, effect, duration, hidden, target, onSelect, capitals = false, keyAppearance }: Props) {
     if (!keys.length) return <p>No physical keys in this layout.</p>;
     const minX = Math.min(...keys.map(k => k.x)), minY = Math.min(...keys.map(k => k.y));
     const width = Math.max(...keys.map(k => k.x + k.w)) - minX;
     const height = Math.max(...keys.map(k => k.y + k.h)) - minY;
     return <svg role="img" aria-label="Trainer keyboard preview" viewBox={`-4 -4 ${width * 40 + 8} ${height * 40 + 8}`}>
         {keys.map(k => {
+            const a = keyAppearance?.get(k.id) ?? appearance;
             const isHeld = held.has(k.id), isChanged = changed.has(k.id) && effect !== 'Off';
             const label = hidden.has(k.id) ? '·' : k.label;
             const lines = label.split('\n').slice(0, 3);
-            return <g key={k.id} transform={`translate(${(k.x - minX) * 40} ${(k.y - minY) * 40})`} onClick={() => onSelect?.(k.id)}>
+            return <g key={k.id} data-key-id={k.id} transform={`translate(${(k.x - minX) * 40} ${(k.y - minY) * 40})`} onClick={() => onSelect?.(k.id)}>
                 <title>{`${k.hand} · ${k.label.split('\n').join(' / ')} · layer ${k.layer}`}</title>
                 <rect width={k.w * 40 - 3} height={k.h * 40 - 3} rx="6" fill={a.fill} fillOpacity={a.fillAlpha / 100}
                     stroke={isHeld ? a.pressed : target === k.id ? a.changed : a.outline} strokeWidth={a.width} strokeOpacity={a.outlineAlpha / 100} />

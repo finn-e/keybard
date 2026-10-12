@@ -15,7 +15,7 @@ class StateTests(unittest.TestCase):
             self.assertEqual(HostState(path).config, cfg)
             self.assertEqual(state.snapshot()['config'], cfg)
     def test_allowlist_bounds_and_boolean_types(self):
-        for value in ({'command': 'flash'}, {'manualDefault': -1}, {'duration': float('nan')}, {'highlightPressed': 1}, {'capitalAlphas': 'yes'}, {'appearance': {'fill': 'url(http://x)'}}, {'appearance': {'width': 5}}):
+        for value in ({'command': 'flash'}, {'manualDefault': -1}, {'duration': float('nan')}, {'highlightPressed': 1}, {'capitalAlphas': 'yes'}, {'adaptiveContrast': 1}, {'appearance': {'fill': 'url(http://x)'}}, {'appearance': {'width': 5}}):
             with self.assertRaises(ValueError): validate_config(value)
     def test_held_key_highlight_defaults_on_but_keeps_a_saved_choice(self):
         with tempfile.TemporaryDirectory() as tmp:

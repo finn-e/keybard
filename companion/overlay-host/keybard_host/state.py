@@ -9,7 +9,7 @@ from pathlib import Path
 DEFAULTS = dict(layoutId='us', appearance=dict(fill='#14202b', fillAlpha=75, outline='#51606a', outlineAlpha=100,
     legend='#f0f5f7', legendAlpha=100, width=1, halo=False, changed='#8ce4d3', pressed='#ffd27a'),
     effect='Short fade', duration=150, scale=100, hands='Both', highlightPressed=True, manualDefault=1,
-    capitalAlphas=False)
+    capitalAlphas=False, adaptiveContrast=False)
 
 
 def validate_config(value):
@@ -35,7 +35,7 @@ def validate_config(value):
         elif key == 'layoutId':
             if not isinstance(val, str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,32}', val): raise ValueError('Invalid keyboard language')
             result[key] = val
-        elif key in ('highlightPressed', 'capitalAlphas'):
+        elif key in ('highlightPressed', 'capitalAlphas', 'adaptiveContrast'):
             if type(val) is not bool: raise ValueError('Invalid on/off preference')
             result[key] = val
         elif val not in dict(effect=('Off', 'Quick flash', 'Short fade'), hands=('Both', 'Left', 'Right'))[key]:
