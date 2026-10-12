@@ -75,6 +75,7 @@ describe('Custom color live LED preview', () => {
         const onApply = vi.fn();
         render(<CustomColorDialog open onOpenChange={vi.fn()} onApply={onApply} onPreviewDisplay={onPreviewDisplay}
             initialDisplayHue={10} initialDisplaySat={200} initialDisplayVal={150} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Key color' }));
         nudge('Hue', 'ArrowRight');
         expect(onPreviewDisplay).toHaveBeenLastCalledWith({ hue: 11, sat: 200, val: 150 });
         nudge('Brightness');
@@ -89,6 +90,7 @@ describe('Custom color live LED preview', () => {
         const onApply = vi.fn();
         render(<CustomColorDialog open onOpenChange={vi.fn()} onApply={onApply} onPreviewDisplay={onPreviewDisplay}
             initialDisplayHue={10} initialDisplaySat={200} initialDisplayVal={150} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Key color' }));
         nudge('Saturation');
         fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
         expect(onApply).toHaveBeenCalledWith({ hue: 10, sat: 199, val: 150 }, expect.anything());

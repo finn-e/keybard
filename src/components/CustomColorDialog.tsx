@@ -78,7 +78,7 @@ const CustomColorDialog = ({
     const [ledVal, setLedVal] = useState(initialLedVal);
 
     // Which color is being edited
-    const [activeTarget, setActiveTarget] = useState<ColorTarget>('display');
+    const [activeTarget, setActiveTarget] = useState<ColorTarget>('led');
 
     // Hex editing state
     const [isEditingHex, setIsEditingHex] = useState(false);
@@ -131,7 +131,7 @@ const CustomColorDialog = ({
             setLedHue(initialLedHue);
             setLedSat(initialLedSat);
             setLedVal(initialLedVal);
-            setActiveTarget('display');
+            setActiveTarget('led');
             setIsEditingHex(false);
             preview.current.changed = false;
         }
@@ -262,39 +262,12 @@ const CustomColorDialog = ({
                     <DialogTitle>
                         {layerName ? `Colors for ${layerName}` : "Colors"}
                     </DialogTitle>
-                    <DialogDescription className="sr-only">Choose a key or LED color, then adjust its hue, saturation, and brightness.</DialogDescription>
+                    <DialogDescription className="sr-only">Choose an LED or key color, then adjust its hue, saturation, and brightness.</DialogDescription>
                 </DialogHeader>
 
                 <div className="grid gap-6 py-4">
                     {/* Color Preview Section */}
                     <div className="flex items-center justify-start gap-8">
-                        {/* Display Color Key Shape */}
-                        <button
-                            type="button"
-                            aria-pressed={activeTarget === 'display'}
-                            className="flex items-center gap-3 cursor-pointer group rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4"
-                            onClick={() => setActiveTarget('display')}
-                        >
-                            <div
-                                className={cn(
-                                    "w-16 h-16 rounded-lg transition-all",
-                                    activeTarget === 'display' ? "" : "group-hover:scale-105"
-                                )}
-                                style={{
-                                    backgroundColor: displayColor,
-                                    boxShadow: activeTarget === 'display'
-                                        ? `0 0 0 4px var(--kb-ink), 0 0 20px ${displayColor}80`
-                                        : `0 0 0 4px transparent`
-                                }}
-                            />
-                            <span className={cn(
-                                "text-sm font-semibold transition-colors",
-                                activeTarget === 'display' ? "text-kb-ink" : "text-kb-ink/60 group-hover:text-kb-ink"
-                            )}>
-                                Key color
-                            </span>
-                        </button>
-
                         {/* LED Color Circle */}
                         <button
                             type="button"
@@ -319,6 +292,33 @@ const CustomColorDialog = ({
                                 activeTarget === 'led' ? "text-kb-ink" : "text-kb-ink/60 group-hover:text-kb-ink"
                             )}>
                                 LED color
+                            </span>
+                        </button>
+
+                        {/* Display Color Key Shape */}
+                        <button
+                            type="button"
+                            aria-pressed={activeTarget === 'display'}
+                            className="flex items-center gap-3 cursor-pointer group rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4"
+                            onClick={() => setActiveTarget('display')}
+                        >
+                            <div
+                                className={cn(
+                                    "w-16 h-16 rounded-lg transition-all",
+                                    activeTarget === 'display' ? "" : "group-hover:scale-105"
+                                )}
+                                style={{
+                                    backgroundColor: displayColor,
+                                    boxShadow: activeTarget === 'display'
+                                        ? `0 0 0 4px var(--kb-ink), 0 0 20px ${displayColor}80`
+                                        : `0 0 0 4px transparent`
+                                }}
+                            />
+                            <span className={cn(
+                                "text-sm font-semibold transition-colors",
+                                activeTarget === 'display' ? "text-kb-ink" : "text-kb-ink/60 group-hover:text-kb-ink"
+                            )}>
+                                Key color
                             </span>
                         </button>
                     </div>
