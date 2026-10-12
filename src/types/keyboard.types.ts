@@ -1,5 +1,6 @@
 // Type definitions for Svil keyboard configuration system
 // Keyboard configuration and Sval protocol data.
+import type { PointingHardwareReport } from "../utils/pointing-hardware";
 
 export interface KeyboardInfo {
     via_proto?: number;
@@ -32,6 +33,7 @@ export interface KeyboardInfo {
     feature_flags?: number;                  // NEW: Svil feature flags
     keycode_version?: string;                // QMK keycode numbering the keycodes are in, e.g. "0.0.9"
     storage_reset?: boolean;                 // board reset its settings: its storage could not be read
+    pointing_hardware?: PointingHardwareReport; // connected boards: each half's side and trackball sensor (POINTING_HARDWARE)
     storage_write_failed?: boolean;          // board couldn't save a change since it started: changes will be lost on restart
     keycode_version_reported?: boolean;      // Connected boards: whether GET_INFO reported the numbering (vLaunch on)
     raw_keycode_count?: number;              // Loaded files: keycodes stored as numbers rather than names
