@@ -18,7 +18,7 @@ export default function HostOverlay() {
         document.documentElement.style.background = 'transparent'; document.body.style.background = 'transparent';
         document.body.style.margin = '0'; document.body.style.overflow = 'hidden';
     }, []);
-    // Adaptive contrast (prototype): the Host sends what's under the overlay; restyle each key for the background around it.
+    // Adaptive contrast: the Host sends what's under the overlay; restyle each key for the background around it.
     const adaptive = state?.config.adaptiveContrast === true;
     const appearance = state?.config.appearance;
     const [keyAppearance, setKeyAppearance] = useState<Map<number, Appearance>>();

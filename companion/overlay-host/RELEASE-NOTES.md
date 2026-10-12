@@ -6,12 +6,12 @@ This release is a portable ZIP for 64-bit Windows 10 and 11, not a signed instal
 
 ## Unreleased
 
-- **Held keys are highlighted from the start.** **Highlight held keys** is now on unless you turned it off before. Turn it off in Trainer's **Feedback** tab.
+- **Held keys are highlighted.** **Highlight held keys** is now on by default, and this update turns it on once for everyone, since earlier versions saved it as off on their own. Turn it off in Trainer's **Feedback** tab; that choice is kept.
 - **The Svalboard icon matches your taskbar.** In the tray and taskbar it is a black glyph on a light taskbar and a white one on a dark taskbar, and switches when you change the Windows theme. Shortcuts and the installer keep the black-on-white icon.
 - **Resize the overlay where it is.** Drag the new resize grip, between the move grip and the menu above the overlay's corner: up or right makes the overlay bigger, down or left smaller. Its bottom-left corner stays put, and the size is saved like Trainer's **Overlay size** slider.
 - **Collapse the overlay out of the way.** The new collapse button, beside the grips above the overlay's corner, hides the overlay and leaves just the grips. Click it again to bring the overlay back; no trip to the tray needed. The move grip still moves it while it's collapsed. It replaces **Hide overlay** in the overlay's menu; the tray's **Show overlay** still hides it completely.
 - **Bigger letters and numbers.** Keys that show a single letter or digit draw it half again as large, at every overlay size.
-- **Adaptive contrast (prototype, Windows).** Each key restyles itself for the background around it, about twice a second: dark legends over light windows, light ones over dark windows, and a backing plate that gets more opaque the busier the background is. It's on by default while it's being developed; turn it off with **Adaptive contrast (prototype)** in the overlay's menu. The overlay still shows in screenshots and recordings.
+- **Adaptive contrast (Windows).** Turn on **Adaptive contrast** in the overlay's menu and each key restyles itself for the background around it, about twice a second: dark legends over light windows, light ones over dark windows, and a backing plate that gets more opaque the busier the background is. The overlay still shows in screenshots and recordings.
 - **Capital letters, if you prefer.** Turn on **Capital letters** in the overlay's menu to show letter keys in capitals.
 - **Only the grip moves the overlay.** **Drag by keys** is gone from Trainer, the overlay's menu and the tray, so every click on the overlay, keys included, reaches the window underneath.
 - **The overlay stays on top.** Windows could leave the overlay, or its grips, underneath other windows; the Host now puts them back within a second.

@@ -9,7 +9,18 @@ from pathlib import Path
 DEFAULTS = dict(layoutId='us', appearance=dict(fill='#14202b', fillAlpha=75, outline='#51606a', outlineAlpha=100,
     legend='#f0f5f7', legendAlpha=100, width=1, halo=False, changed='#8ce4d3', pressed='#ffd27a'),
     effect='Short fade', duration=150, scale=100, hands='Both', highlightPressed=True, manualDefault=1,
-    capitalAlphas=False, adaptiveContrast=True)  # adaptive contrast: on while the prototype is developed
+    capitalAlphas=False, adaptiveContrast=False)
+
+
+def _highlight_held_keys(config):
+    # Hosts before version 1 saved highlightPressed: false on every connect, so a saved false
+    # isn't a choice the user made: start everyone on the new default once.
+    config['highlightPressed'] = True
+
+
+# PREFERENCES_MIGRATIONS[n] upgrades a preferences config saved at version n to n + 1.
+PREFERENCES_MIGRATIONS = [_highlight_held_keys]
+PREFERENCES_VERSION = len(PREFERENCES_MIGRATIONS)
 
 
 def validate_config(value):
@@ -84,11 +95,16 @@ class HostState:
         try: self.config = validate_config(saved.get('config', {}))
         except (ValueError, TypeError, KeyError): pass
         self.remembered = remembered_board(saved.get('remembered'))
+        version = saved.get('version', 0)
+        if 'config' in saved and type(version) is int and 0 <= version < PREFERENCES_VERSION:
+            for migrate in PREFERENCES_MIGRATIONS[version:]: migrate(self.config)
+            try: self.save()
+            except OSError: pass  # migrated in memory; saved with the next change
 
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix('.tmp')
-        temporary.write_text(json.dumps(dict(config=self.config, remembered=self.remembered)))
+        temporary.write_text(json.dumps(dict(version=PREFERENCES_VERSION, config=self.config, remembered=self.remembered)))
         temporary.replace(self.path)
 
     def configure(self, config, revision):

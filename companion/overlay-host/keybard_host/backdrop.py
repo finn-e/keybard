@@ -1,4 +1,4 @@
-"""Adaptive contrast (prototype): sample the screen under the overlay.
+"""Adaptive contrast: sample the screen under the overlay.
 
 A couple of times a second the Host grabs the overlay's rectangle as it appears on
 screen, overlay included, and sends a coarse brightness grid to the overlay page. The

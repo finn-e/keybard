@@ -224,7 +224,7 @@ class OverlayControls(QWidget):
         menu.addSeparator()
         self.capitals = menu.addAction('Capital letters'); self.capitals.setCheckable(True)
         self.capitals.triggered.connect(set_capitals)
-        self.adaptive = menu.addAction('Adaptive contrast (prototype)'); self.adaptive.setCheckable(True)
+        self.adaptive = menu.addAction('Adaptive contrast'); self.adaptive.setCheckable(True)
         self.adaptive.setToolTip('Restyle each key for the background around it')
         self.adaptive.triggered.connect(set_adaptive)
         self.adaptive.setVisible(backdrop.supported())
