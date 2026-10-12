@@ -203,7 +203,7 @@ SCALE_MIN, SCALE_MAX = 50, 150
 
 class OverlayControls(QWidget):
     """A separate input window: the handle moves the overlay while the keyboard passes clicks through."""
-    def __init__(self, surface, hide, open_controls, get_scale=lambda: 100, set_scale=lambda scale, final: None):
+    def __init__(self, surface, open_controls, get_scale=lambda: 100, set_scale=lambda scale, final: None, set_capitals=lambda value: None):
         super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus)
         self.surface = surface
         self.setWindowTitle('Keybard · Overlay controls')
@@ -219,8 +219,10 @@ class OverlayControls(QWidget):
         self.more = QToolButton(self); self.more.setIcon(overlay_control_icon('more')); self.more.setIconSize(QSize(16, 16)); self.more.setToolTip('Overlay controls'); self.more.setAccessibleName('Overlay controls')
         self.more.setPopupMode(QToolButton.InstantPopup)
         menu = QMenu(self.more)
-        menu.addAction('Hide overlay', hide)
         menu.addAction('Open Keybard', open_controls)
+        menu.addSeparator()
+        self.capitals = menu.addAction('Capital letters'); self.capitals.setCheckable(True)
+        self.capitals.triggered.connect(set_capitals)
         self.more.setMenu(menu)
         for button in (self.handle, self.resizer, self.collapser, self.more):
             button.setFixedSize(24, 24); layout.addWidget(button)
@@ -277,9 +279,9 @@ class Host(QObject):
         self.surface.show()
         self.surface.pass_clicks_through()
         self.place()
-        self.controls = OverlayControls(self.surface,
-            lambda: self.command(dict(op='show', value=False)), self.open_controls,
-            lambda: self.state.config['scale'], self.resize_overlay)
+        self.controls = OverlayControls(self.surface, self.open_controls,
+            lambda: self.state.config['scale'], self.resize_overlay, self.set_capitals)
+        self.controls.capitals.setChecked(self.state.config['capitalAlphas'])
         self.controls.show()
         self.icon_light_background = taskbar_is_light()
         icon = host_icon(self.icon_light_background)
@@ -357,6 +359,15 @@ class Host(QObject):
             config = dict(self.state.config, scale=scale)
             try: self.state.configure(config, self.state.revision)
             except (OSError, RuntimeError, ValueError): return self.size_surface()
+        self.publish_state()
+
+    def set_capitals(self, value):
+        """The overlay menu's Capital letters toggle: show letter keys in capitals, saved like Trainer's settings."""
+        with self.state.lock:
+            if self.state.config['capitalAlphas'] != value:
+                try: self.state.configure(dict(self.state.config, capitalAlphas=value), self.state.revision)
+                except (OSError, RuntimeError, ValueError): pass
+            self.controls.capitals.setChecked(self.state.config['capitalAlphas'])
         self.publish_state()
 
     def size_surface(self, scale=None):
@@ -471,6 +482,7 @@ class Host(QObject):
             if time.monotonic() - self.state.practice_at > 2.5:
                 self.state.practice_hidden = []; self.state.practice_target = None
         self.status_action.setText(self.state.status[:65])
+        self.controls.capitals.setChecked(self.state.config['capitalAlphas'])
         self.publish_state()
 
     def command(self, value):

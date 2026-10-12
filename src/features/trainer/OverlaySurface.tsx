@@ -3,8 +3,10 @@ import { getHeaderIcons, getCenterContent, getTypeIcon } from '@/utils/key-icons
 import type { Appearance, Preferences } from './core';
 import { haloColor } from './core';
 export interface SurfaceKey { id: number; x: number; y: number; w: number; h: number; label: string; code: number; layer: number; hand: string; legend?: { keycode: string; keyContents?: KeyContent; displayLabel: string; topLabel: string; bottomStr: string } }
-interface Props { keys: SurfaceKey[]; appearance: Appearance; changed: Set<number>; held: Set<number>; effect: Preferences['effect']; duration: number; hidden: Set<number>; target?: number; onSelect?: (id: number) => void }
-export function OverlaySurface({ keys, appearance: a, changed, held, effect, duration, hidden, target, onSelect }: Props) {
+interface Props { keys: SurfaceKey[]; appearance: Appearance; changed: Set<number>; held: Set<number>; effect: Preferences['effect']; duration: number; hidden: Set<number>; target?: number; onSelect?: (id: number) => void; capitals?: boolean }
+/** A legend that is one letter or digit: drawn larger, and in capitals when asked. */
+const SINGLE_ALNUM = /^[\p{L}\p{N}]$/u;
+export function OverlaySurface({ keys, appearance: a, changed, held, effect, duration, hidden, target, onSelect, capitals = false }: Props) {
     if (!keys.length) return <p>No physical keys in this layout.</p>;
     const minX = Math.min(...keys.map(k => k.x)), minY = Math.min(...keys.map(k => k.y));
     const width = Math.max(...keys.map(k => k.x + k.w)) - minX;
@@ -22,25 +24,27 @@ export function OverlaySurface({ keys, appearance: a, changed, held, effect, dur
                     fill={a.changed} fillOpacity={a.fillAlpha / 200} stroke={a.changed} strokeOpacity={a.outlineAlpha / 100} strokeWidth={a.width ? a.width + 1 : 0} />}
                 {isHeld && <rect width={k.w * 40 - 3} height={k.h * 40 - 3} rx="6" fill={a.pressed} fillOpacity={a.fillAlpha / 200} />}
                 {k.legend && !hidden.has(k.id) ? <foreignObject x="2" y="2" width={k.w * 40 - 7} height={k.h * 40 - 7}>
-                    <KeyLegend legend={k.legend} color={a.legend} opacity={a.legendAlpha / 100} halo={a.halo} />
+                    <KeyLegend legend={k.legend} color={a.legend} opacity={a.legendAlpha / 100} halo={a.halo} capitals={capitals} />
                 </foreignObject> : lines.map((line, i) => <text key={i} x={(k.w * 40 - 3) / 2} y={(k.h * 40 - 3) / 2 + 4 + (i - (lines.length - 1) / 2) * 11}
-                    textAnchor="middle" fontSize={line.length > 5 ? 8 : 12} fontWeight="600"
+                    textAnchor="middle" fontSize={SINGLE_ALNUM.test(line) ? 18 : line.length > 5 ? 8 : 12} fontWeight="600"
                     textLength={line.length > 6 ? Math.max(15, k.w * 40 - 9) : undefined} lengthAdjust="spacingAndGlyphs"
-                    fill={a.legend} fillOpacity={a.legendAlpha / 100} stroke={a.halo ? haloColor(a.legend) : 'none'} strokeOpacity={a.legendAlpha / 100} strokeWidth="2" paintOrder="stroke fill">{line}</text>)}
+                    fill={a.legend} fillOpacity={a.legendAlpha / 100} stroke={a.halo ? haloColor(a.legend) : 'none'} strokeOpacity={a.legendAlpha / 100} strokeWidth="2" paintOrder="stroke fill">{capitals && SINGLE_ALNUM.test(line) ? line.toUpperCase() : line}</text>)}
             </g>;
         })}
     </svg>;
 }
 
-function KeyLegend({ legend: l, color, opacity, halo }: { legend: NonNullable<SurfaceKey['legend']>; color: string; opacity: number; halo: boolean }) {
+function KeyLegend({ legend: l, color, opacity, halo, capitals }: { legend: NonNullable<SurfaceKey['legend']>; color: string; opacity: number; halo: boolean; capitals: boolean }) {
     const { icons, isMouse } = getHeaderIcons(l.keycode, l.displayLabel);
     const layer = l.keyContents?.type === 'layer';
     const icon = getTypeIcon(l.keyContents?.type || '', 'small');
     const top = layer ? l.keyContents?.layertext : l.topLabel;
-    const center = layer ? l.keyContents?.top?.split('(')[1]?.replace(')', '') : getCenterContent(l.displayLabel, l.keycode, isMouse);
+    const content = layer ? l.keyContents?.top?.split('(')[1]?.replace(')', '') : getCenterContent(l.displayLabel, l.keycode, isMouse);
+    const alnum = !layer && typeof content === 'string' && SINGLE_ALNUM.test(content); // not a layer key's number
+    const center = alnum && capitals ? (content as string).toUpperCase() : content;
     return <div className="trainer-key-legend" style={{ color, opacity, filter: halo ? `drop-shadow(0 0 1px ${haloColor(color)})` : undefined }}>
         {(icons.length > 0 || top) && <div className="trainer-key-heading">{icons.length ? icons : top}</div>}
-        <div className="trainer-key-center" style={{ flexDirection: icon && !layer ? 'column' : 'row', fontSize: typeof center === 'string' && center.length > 6 ? 7 : typeof center === 'string' && center.length > 3 ? 9 : 12 }}>
+        <div className="trainer-key-center" style={{ flexDirection: icon && !layer ? 'column' : 'row', fontSize: alnum ? 18 : typeof center === 'string' && center.length > 6 ? 7 : typeof center === 'string' && center.length > 3 ? 9 : 12 }}>
             {!layer && icon}{center}{layer && icon}
         </div>
         {l.bottomStr && <div className="trainer-key-heading">{l.bottomStr}</div>}

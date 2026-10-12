@@ -20,7 +20,7 @@ class OverlayControlsTest(unittest.TestCase):
     def setUp(self):
         self.surface = Surface(5178)
         self.calls = []
-        self.controls = OverlayControls(self.surface, lambda: self.calls.append('hide'), lambda: self.calls.append('open'))
+        self.controls = OverlayControls(self.surface, lambda: self.calls.append('open'))
 
     def tearDown(self):
         self.controls.close(); self.surface.close()
@@ -34,11 +34,21 @@ class OverlayControlsTest(unittest.TestCase):
         self.assertFalse(self.controls.windowFlags() & Qt.WindowTransparentForInput)
         self.assertFalse(self.controls.handle.testAttribute(Qt.WA_TransparentForMouseEvents))
 
-    def test_control_menu_has_hide_and_open_only(self):
-        actions = self.controls.more.menu().actions()
-        self.assertEqual([a.text() for a in actions], ['Hide overlay', 'Open Keybard'])
-        actions[0].trigger(); actions[1].trigger()
-        self.assertEqual(self.calls, ['hide', 'open'])
+    def test_control_menu_has_open_and_capital_letters(self):
+        actions = [a for a in self.controls.more.menu().actions() if not a.isSeparator()]
+        self.assertEqual([a.text() for a in actions], ['Open Keybard', 'Capital letters'])
+        actions[0].trigger()
+        self.assertEqual(self.calls, ['open'])
+
+    def test_capital_letters_is_a_checkable_toggle(self):
+        values = []
+        controls = OverlayControls(self.surface, lambda: None, set_capitals=lambda v: values.append(v))
+        try:
+            self.assertTrue(controls.capitals.isCheckable())
+            controls.capitals.trigger(); controls.capitals.trigger()
+            self.assertEqual(values, [True, False])
+        finally:
+            controls.close(); controls.deleteLater()
 
     def test_collapse_leaves_only_the_controls_and_expand_restores(self):
         button = self.controls.collapser
@@ -96,7 +106,7 @@ class OverlayControlsTest(unittest.TestCase):
     def test_resize_handle_scales_from_the_drag_and_saves_on_release(self):
         calls = []
         self.controls.close()
-        self.controls = OverlayControls(self.surface, lambda: None, lambda: None, lambda: 100, lambda scale, final: calls.append((scale, final)))
+        self.controls = OverlayControls(self.surface, lambda: None, lambda: 100, lambda scale, final: calls.append((scale, final)))
         self.surface.setFixedSize(1000, 300)
         handle = self.controls.resizer
         press = lambda kind, x, y, button, buttons: QMouseEvent(kind, QPointF(4,4), QPointF(x,y), button, buttons, Qt.NoModifier)

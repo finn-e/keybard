@@ -9,7 +9,9 @@ This release is a portable ZIP for 64-bit Windows 10 and 11, not a signed instal
 - **Held keys are highlighted from the start.** **Highlight held keys** is now on unless you turned it off before. Turn it off in Trainer's **Feedback** tab.
 - **The Svalboard icon matches your taskbar.** In the tray and taskbar it is a black glyph on a light taskbar and a white one on a dark taskbar, and switches when you change the Windows theme. Shortcuts and the installer keep the black-on-white icon.
 - **Resize the overlay where it is.** Drag the new resize grip, between the move grip and the menu above the overlay's corner: up or right makes the overlay bigger, down or left smaller. Its bottom-left corner stays put, and the size is saved like Trainer's **Overlay size** slider.
-- **Collapse the overlay out of the way.** The new collapse button, beside the grips above the overlay's corner, hides the overlay and leaves just the grips. Click it again to bring the overlay back; no trip to the tray needed. The move grip still moves it while it's collapsed.
+- **Collapse the overlay out of the way.** The new collapse button, beside the grips above the overlay's corner, hides the overlay and leaves just the grips. Click it again to bring the overlay back; no trip to the tray needed. The move grip still moves it while it's collapsed. It replaces **Hide overlay** in the overlay's menu; the tray's **Show overlay** still hides it completely.
+- **Bigger letters and numbers.** Keys that show a single letter or digit draw it half again as large, at every overlay size.
+- **Capital letters, if you prefer.** Turn on **Capital letters** in the overlay's menu to show letter keys in capitals.
 - **Only the grip moves the overlay.** **Drag by keys** is gone from Trainer, the overlay's menu and the tray, so every click on the overlay, keys included, reaches the window underneath.
 - **macOS, for testers.** The ZIP now includes `start-macos.sh`, which runs Keybard Host on macOS 13 or later with Python 3.10 or later. Nobody has tried it on a Mac yet; see "macOS" in `README.md` for what to check.
 

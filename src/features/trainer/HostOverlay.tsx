@@ -27,5 +27,6 @@ export default function HostOverlay() {
     if (!state?.valid || !keys.length || !state.visible) return null;
     return <div className="trainer-native-surface"><OverlaySurface keys={keys} appearance={state.config.appearance}
         effect={state.config.effect} duration={state.config.duration} changed={changed}
-        held={new Set(state.pressed)} hidden={new Set(state.practiceHidden)} target={state.practiceTarget ?? undefined} /></div>;
+        held={new Set(state.pressed)} hidden={new Set(state.practiceHidden)} target={state.practiceTarget ?? undefined}
+        capitals={state.config.capitalAlphas === true} /></div>;
 }

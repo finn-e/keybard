@@ -15,7 +15,7 @@ class StateTests(unittest.TestCase):
             self.assertEqual(HostState(path).config, cfg)
             self.assertEqual(state.snapshot()['config'], cfg)
     def test_allowlist_bounds_and_boolean_types(self):
-        for value in ({'command': 'flash'}, {'manualDefault': -1}, {'duration': float('nan')}, {'highlightPressed': 1}, {'appearance': {'fill': 'url(http://x)'}}, {'appearance': {'width': 5}}):
+        for value in ({'command': 'flash'}, {'manualDefault': -1}, {'duration': float('nan')}, {'highlightPressed': 1}, {'capitalAlphas': 'yes'}, {'appearance': {'fill': 'url(http://x)'}}, {'appearance': {'width': 5}}):
             with self.assertRaises(ValueError): validate_config(value)
     def test_held_key_highlight_defaults_on_but_keeps_a_saved_choice(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -23,6 +23,9 @@ class StateTests(unittest.TestCase):
             self.assertIs(HostState(path).config['highlightPressed'], True)
             path.write_text('{"config": {"highlightPressed": false}}')
             self.assertIs(HostState(path).config['highlightPressed'], False)
+            self.assertIs(HostState(path).config['capitalAlphas'], False)
+            path.write_text('{"config": {"capitalAlphas": true}}')
+            self.assertIs(HostState(path).config['capitalAlphas'], True)
     def test_snapshot_does_not_alias_mutable_host_data(self):
         state = HostState('/nonexistent/keybard-test.json'); s = state.snapshot(); s['config']['appearance']['fill'] = 'bad'
         self.assertEqual(state.config['appearance']['fill'], DEFAULTS['appearance']['fill'])

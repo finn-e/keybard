@@ -12,7 +12,7 @@ export const HOST_ORIGIN = (import.meta.env.VITE_KEYBARD_HOST_ORIGIN as string |
 const REMOTE_KEY = 'keybard-host-remote';
 const servedByHost = () => typeof document !== 'undefined' && document.documentElement.dataset.keybardHost === 'true';
 function rememberedRemote() { try { return appStorage.getItem(REMOTE_KEY) === '1'; } catch { return false; } }
-export interface HostConfig extends Preferences { highlightPressed: boolean; manualDefault: number }
+export interface HostConfig extends Preferences { highlightPressed: boolean; manualDefault: number; capitalAlphas?: boolean }
 export interface HostSnapshot {
     modifiers?: { shift: boolean; capsLock: boolean } | null;
     apiVersion: number; config: HostConfig; revision: number; layoutRevision: number;

@@ -21,6 +21,7 @@ Use Chrome or Edge. **Open Keybard** in the tray menu takes you back to Trainer.
 ## Using it
 
 - **Place it:** drag the move grip above the overlay's top-right corner. **Size it:** drag the resize grip next to it, up or right to grow, down or left to shrink. **Collapse it:** the collapse button beside the grips hides the overlay and leaves just the grips; click it again to bring it back. Clicks anywhere else, keys included, pass through to the window underneath.
+- **Overlay menu:** the menu beside the grips opens Keybard, and **Capital letters** shows letter keys in capitals.
 - **Tray menu:** show or hide the overlay, drag or place it at the bottom of the screen, reload the layout, open Keybard's Trainer, or quit. Closing the browser leaves the overlay running.
 - **After you edit your layout in Keybard**, the overlay updates by itself about a second after the change reaches the keyboard, as long as Keybard is connected to Keybard Host (the Trainer's **Connect to Keybard Host**, once). For changes made elsewhere, choose **Reload layout** from the tray.
 - **Held keys:** the keys you're holding are highlighted. Turn this off with **Highlight held keys** in Trainer's Feedback tab. Very short taps can be missed.
