@@ -104,7 +104,7 @@ export function prepareImport(file: KeyboardInfo, current?: KeyboardInfo): Impor
         const layer = Number(entry.key.match(/^id_layer(\d+)_color$/)?.[1] ?? -1);
         if (layer < 0) continue;
         next.layer_colors = [...(next.layer_colors ?? [])];
-        next.layer_colors[layer] = { hue: entry.data[0], sat: entry.data[1], val: 255 };
+        next.layer_colors[layer] = { hue: entry.data[0], sat: entry.data[1], val: file.layer_colors?.[layer]?.val ?? 255 };
         next.cosmetic.layer_colors = { ...next.cosmetic.layer_colors, [layer]: file.cosmetic?.layer_colors?.[layer] ?? getClosestPresetColor(entry.data[0], entry.data[1], 255) };
     }
     const labels = new LabelService(usbInstance);

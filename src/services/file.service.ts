@@ -489,7 +489,8 @@ export class FileService {
                         key: `id_layer${idx}_color`,
                         channel: 0,
                         valueId: idx, // layer color index
-                        data: [color.hue, color.sat]
+                        // [hue, sat, val]: older Keybard reads the first two and ignores val
+                        data: [color.hue, color.sat, color.val ?? 255]
                     });
                 }
             });
@@ -806,10 +807,12 @@ export class FileService {
                 const match = cv.key?.match(/^id_layer(\d+)_color$/);
                 if (match && Array.isArray(cv.data) && cv.data.length >= 2) {
                     const layerIdx = parseInt(match[1], 10);
+                    // Files from before per-layer brightness hold only [hue, sat]
+                    const val = cv.data[2];
                     layerColors[layerIdx] = {
                         hue: cv.data[0],
                         sat: cv.data[1],
-                        val: 255,
+                        val: Number.isInteger(val) && val >= 0 && val <= 255 ? val : 255,
                     };
                 } else if (cv.key && Array.isArray(cv.data) && cv.data.length >= 1) {
                     // Non-layer-color custom value (pointing device settings, etc.)
