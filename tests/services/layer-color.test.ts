@@ -37,6 +37,12 @@ describe('layer LED color', () => {
         expect(calls).toEqual([[SET, 0, 35, 85, 200], [SET, 0, 51, 100], [SAVE, 0]]);
     });
 
+    it('shows a preview color without saving it', async () => {
+        const { usb, calls } = fakeBoard(true);
+        await usb.setLayerColor(3, 85, 200, 100, false);
+        expect(calls).toEqual([[SET, 0, 35, 85, 200], [SET, 0, 51, 100]]);
+    });
+
     it('reads brightness back from firmware that stores it', async () => {
         const { usb } = fakeBoard(true);
         await usb.setLayerColor(2, 10, 20, 100);

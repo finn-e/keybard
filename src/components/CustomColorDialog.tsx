@@ -30,11 +30,19 @@ interface CustomColorDialogProps {
         displayHsv: { hue: number; sat: number; val: number },
         ledHsv: { hue: number; sat: number; val: number }
     ) => void;
+    // Shows an LED color on the board while it's being picked (not saved).
+    // Called at most every PREVIEW_INTERVAL_MS, and with the initial color
+    // again if the dialog closes without Apply.
+    onPreviewLed?: (ledHsv: Hsv) => void;
     layerName?: string;
     onCloseAutoFocus?: (event: Event) => void;
 }
 
 type ColorTarget = 'display' | 'led';
+type Hsv = { hue: number; sat: number; val: number };
+
+/** Live LED previews go out at most this often (10 Hz). */
+export const PREVIEW_INTERVAL_MS = 100;
 
 /**
  * Dialog for selecting custom HSV colors for layer lights
@@ -52,6 +60,7 @@ const CustomColorDialog = ({
     initialDisplaySat = 255,
     initialDisplayVal = 200,
     onApply,
+    onPreviewLed,
     layerName,
 }: CustomColorDialogProps) => {
     // Display color state
@@ -73,6 +82,36 @@ const CustomColorDialog = ({
     const hexInputRef = useRef<HTMLInputElement>(null);
     const hexButtonRef = useRef<HTMLButtonElement>(null);
     const cancelHex = useRef(false);
+    const hexStart = useRef<Hsv | null>(null);
+
+    // Live LED preview, throttled; `changed` means the board may differ from the initial color.
+    const preview = useRef<{ last: number; timer: ReturnType<typeof setTimeout> | null; pending: Hsv | null; changed: boolean }>(
+        { last: 0, timer: null, pending: null, changed: false });
+    const onPreviewRef = useRef(onPreviewLed);
+    onPreviewRef.current = onPreviewLed;
+
+    const flushPreview = () => {
+        const p = preview.current;
+        p.timer = null;
+        if (!p.pending) return;
+        p.last = Date.now();
+        onPreviewRef.current?.(p.pending);
+        p.pending = null;
+    };
+    const previewLed = (hsv: Hsv) => {
+        const p = preview.current;
+        if (!onPreviewRef.current) return;
+        p.pending = hsv;
+        p.changed = true;
+        if (!p.timer) p.timer = setTimeout(flushPreview, Math.max(0, PREVIEW_INTERVAL_MS - (Date.now() - p.last)));
+    };
+    const stopPreview = () => {
+        const p = preview.current;
+        if (p.timer) clearTimeout(p.timer);
+        p.timer = null;
+        p.pending = null;
+    };
+    useEffect(() => stopPreview, []);
 
     // Reset to initial values when dialog opens
     useEffect(() => {
@@ -85,6 +124,7 @@ const CustomColorDialog = ({
             setLedVal(initialLedVal);
             setActiveTarget('display');
             setIsEditingHex(false);
+            preview.current.changed = false;
         }
     }, [open, initialDisplayHue, initialDisplaySat, initialDisplayVal, initialLedHue, initialLedSat, initialLedVal]);
 
@@ -96,26 +136,43 @@ const CustomColorDialog = ({
         return { hue: ledHue, sat: ledSat, val: ledVal };
     };
 
-    // Set active color values
-    const setActiveHue = (v: number) => {
-        if (activeTarget === 'display') setDisplayHue(v);
-        else setLedHue(v);
+    // Set active color values; LED changes are shown on the board as they happen
+    const setActiveHsv = (hsv: Hsv) => {
+        if (activeTarget === 'display') {
+            setDisplayHue(hsv.hue);
+            setDisplaySat(hsv.sat);
+            setDisplayVal(hsv.val);
+            return;
+        }
+        setLedHue(hsv.hue);
+        setLedSat(hsv.sat);
+        setLedVal(hsv.val);
+        if (hsv.hue !== ledHue || hsv.sat !== ledSat || hsv.val !== ledVal) previewLed(hsv);
     };
-    const setActiveSat = (v: number) => {
-        if (activeTarget === 'display') setDisplaySat(v);
-        else setLedSat(v);
-    };
-    const setActiveVal = (v: number) => {
-        if (activeTarget === 'display') setDisplayVal(v);
-        else setLedVal(v);
-    };
+    const setActiveHue = (v: number) => setActiveHsv({ ...getActiveHsv(), hue: v });
+    const setActiveSat = (v: number) => setActiveHsv({ ...getActiveHsv(), sat: v });
+    const setActiveVal = (v: number) => setActiveHsv({ ...getActiveHsv(), val: v });
 
     const activeHsv = getActiveHsv();
     const displayColor = hsvToHex(displayHue, displaySat, displayVal);
     const ledColor = hsvToHex(ledHue, ledSat, ledVal);
     const activeColor = hsvToHex(activeHsv.hue, activeHsv.sat, activeHsv.val);
 
+    const handleOpenChange = (next: boolean) => {
+        if (!next) {
+            stopPreview();
+            // Closed without Apply: put the board's LEDs back.
+            if (preview.current.changed) {
+                preview.current.changed = false;
+                onPreviewRef.current?.({ hue: initialLedHue, sat: initialLedSat, val: initialLedVal });
+            }
+        }
+        onOpenChange(next);
+    };
+
     const handleApply = () => {
+        stopPreview();
+        preview.current.changed = false;
         onApply(
             { hue: displayHue, sat: displaySat, val: displayVal },
             { hue: ledHue, sat: ledSat, val: ledVal }
@@ -127,27 +184,35 @@ const CustomColorDialog = ({
     const startEditingHex = () => {
         cancelHex.current = false;
         setHexInput(activeColor);
+        hexStart.current = activeHsv;
         setIsEditingHex(true);
         setTimeout(() => hexInputRef.current?.select(), 0);
+    };
+
+    const parseHex = (text: string): Hsv | null => {
+        let hex = text.trim();
+        if (!hex.startsWith('#')) hex = '#' + hex;
+        return /^#[0-9A-Fa-f]{6}$/.test(hex) ? hexToHsv(hex) : null;
+    };
+
+    // A complete hex code takes effect while typing; Escape restores the color from before editing.
+    const handleHexChange = (text: string) => {
+        setHexInput(text);
+        const hsv = parseHex(text);
+        if (hsv) setActiveHsv(hsv);
+    };
+
+    const cancelHexInput = () => {
+        cancelHex.current = true;
+        setIsEditingHex(false);
+        if (hexStart.current) setActiveHsv(hexStart.current);
     };
 
     const applyHexInput = () => {
         if (cancelHex.current) return;
         setIsEditingHex(false);
-        let hex = hexInput.trim();
-        if (!hex.startsWith('#')) hex = '#' + hex;
-        if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
-            const hsv = hexToHsv(hex);
-            if (activeTarget === 'display') {
-                setDisplayHue(hsv.hue);
-                setDisplaySat(hsv.sat);
-                setDisplayVal(hsv.val);
-            } else {
-                setLedHue(hsv.hue);
-                setLedSat(hsv.sat);
-                setLedVal(hsv.val);
-            }
-        }
+        const hsv = parseHex(hexInput);
+        if (hsv) setActiveHsv(hsv);
     };
 
     const handleHexKeyDown = (e: React.KeyboardEvent) => {
@@ -155,7 +220,7 @@ const CustomColorDialog = ({
             e.preventDefault();
             e.stopPropagation();
             if (e.key === 'Enter') applyHexInput();
-            else { cancelHex.current = true; setIsEditingHex(false); }
+            else cancelHexInput();
             requestAnimationFrame(() => hexButtonRef.current?.focus());
         }
     };
@@ -172,13 +237,12 @@ const CustomColorDialog = ({
     )`;
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-[400px]" onCloseAutoFocus={onCloseAutoFocus}
                 onEscapeKeyDown={(event) => {
                     if (isEditingHex) {
                         event.preventDefault();
-                        cancelHex.current = true;
-                        setIsEditingHex(false);
+                        cancelHexInput();
                         requestAnimationFrame(() => hexButtonRef.current?.focus());
                     }
                 }}>
@@ -335,7 +399,7 @@ const CustomColorDialog = ({
                                     ref={hexInputRef}
                                     aria-label="Hex color"
                                     value={hexInput}
-                                    onChange={(e) => setHexInput(e.target.value)}
+                                    onChange={(e) => handleHexChange(e.target.value)}
                                     onBlur={applyHexInput}
                                     onKeyDown={handleHexKeyDown}
                                     className="w-28 text-left text-sm font-mono"
@@ -360,7 +424,7 @@ const CustomColorDialog = ({
                 <DialogFooter className="gap-3 sm:gap-4">
                     <Button
                         variant="outline"
-                        onClick={() => onOpenChange(false)}
+                        onClick={() => handleOpenChange(false)}
                         className="rounded-full px-8 py-5 text-base border-slate-300 dark:border-neutral-500 hover:bg-slate-50 dark:hover:bg-neutral-800 transition-colors"
                     >
                         Cancel

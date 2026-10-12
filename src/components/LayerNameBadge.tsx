@@ -196,6 +196,12 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
         }
     };
 
+    // Live LED preview from the color dialog: shown on the board, not saved (Apply saves).
+    const handlePreviewLedColor = (ledHsv: { hue: number; sat: number; val: number }) => {
+        if (!isConnected) return;
+        usbInstance.setLayerColor(selectedLayer, ledHsv.hue, ledHsv.sat, ledHsv.val, false).catch(() => {});
+    };
+
     // Layer Actions
     const handleCopyLayer = () => copy(selectedLayer);
     const handlePasteLayer = () => { void paste(selectedLayer); };
@@ -455,6 +461,7 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
                 initialDisplaySat={hexToHsv(displayColorHex).sat}
                 initialDisplayVal={hexToHsv(displayColorHex).val}
                 onApply={handleSetCustomColor}
+                onPreviewLed={handlePreviewLedColor}
                 layerName={svalService.getLayerName(keyboard, selectedLayer)}
             />
         </>
