@@ -60,6 +60,8 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
     const { queue } = useChanges();
     const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
     const [isCustomColorOpen, setIsCustomColorOpen] = useState(false);
+    // The board's LED brightness (shared by every layer), read when the color dialog opens.
+    const [ledBrightness, setLedBrightness] = useState(128);
     const [isEditing, setIsEditing] = useState(false);
     const [editValue, setEditValue] = useState("");
     const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
@@ -169,7 +171,7 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
             setKeyboard({ ...keyboard, cosmetic, layer_colors: updatedLayerColors });
 
             if (isConnected) {
-                await queue(`Layer ${selectedLayer} LED color`, async () => { await usbInstance.setLayerColor(selectedLayer, hsv.hue, hsv.sat, hsv.val); }, { type: "setting", writeKey: `layer-color:${selectedLayer}` });
+                await queue(`Layer ${selectedLayer} LED color`, async () => { await usbInstance.setLayerColor(selectedLayer, hsv.hue, hsv.sat); }, { type: "setting", writeKey: `layer-color:${selectedLayer}` });
             }
         }
         setIsColorPickerOpen(false);
@@ -190,12 +192,14 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
 
             // Store LED color as hardware HSV
             const updatedLayerColors = [...(keyboard.layer_colors || [])];
-            updatedLayerColors[selectedLayer] = { hue: ledHsv.hue, sat: ledHsv.sat, val: ledHsv.val };
+            updatedLayerColors[selectedLayer] = { hue: ledHsv.hue, sat: ledHsv.sat, val: updatedLayerColors[selectedLayer]?.val ?? 255 };
 
             setKeyboard({ ...keyboard, cosmetic, layer_colors: updatedLayerColors });
 
             if (isConnected) {
-                await queue(`Layer ${selectedLayer} LED color`, async () => { await usbInstance.setLayerColor(selectedLayer, ledHsv.hue, ledHsv.sat, ledHsv.val); }, { type: "setting", writeKey: `layer-color:${selectedLayer}` });
+                await queue(`Layer ${selectedLayer} LED color`, async () => { await usbInstance.setLayerColor(selectedLayer, ledHsv.hue, ledHsv.sat); }, { type: "setting", writeKey: `layer-color:${selectedLayer}` });
+                setLedBrightness(ledHsv.val);
+                await queue("LED brightness", async () => { await usbInstance.setLedBrightness(ledHsv.val); }, { type: "setting", writeKey: "led-brightness" });
             }
         }
     };
@@ -208,7 +212,9 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
     // Live LED preview from the color dialog: shown on the board, not saved (Apply saves).
     const handlePreviewLedColor = (ledHsv: { hue: number; sat: number; val: number }) => {
         if (!isConnected) return;
-        usbInstance.setLayerColor(selectedLayer, ledHsv.hue, ledHsv.sat, ledHsv.val, false).catch(() => {});
+        usbInstance.setLayerColor(selectedLayer, ledHsv.hue, ledHsv.sat, false)
+            .then(() => usbInstance.setLedBrightness(ledHsv.val, false))
+            .catch(() => {});
     };
 
     // Layer Actions
@@ -361,8 +367,11 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
                                 type="button"
                                 aria-label="Custom layer color"
                                 className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 w-5 h-5 rounded-full transition-all hover:scale-110 border-2 border-transparent bg-gray-200 dark:bg-neutral-700 flex items-center justify-center"
-                                onClick={() => {
+                                onClick={async () => {
                                     setIsColorPickerOpen(false);
+                                    if (isConnected) {
+                                        try { setLedBrightness(await usbInstance.getLedBrightness()); } catch { /* keep the last known value */ }
+                                    }
                                     setIsCustomColorOpen(true);
                                 }}
                             >
@@ -464,7 +473,7 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
                 // LED Color (Hardware)
                 initialLedHue={keyboard.layer_colors?.[selectedLayer]?.hue ?? 85}
                 initialLedSat={keyboard.layer_colors?.[selectedLayer]?.sat ?? 255}
-                initialLedVal={keyboard.layer_colors?.[selectedLayer]?.val ?? 200}
+                initialLedVal={ledBrightness}
                 // Display Color (UI) - Convert current display hex to HSV
                 initialDisplayHue={hexToHsv(savedColorHex).hue}
                 initialDisplaySat={hexToHsv(savedColorHex).sat}

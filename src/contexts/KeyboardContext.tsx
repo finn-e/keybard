@@ -271,7 +271,12 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 console.log("[KeyboardContext] Loading layer colors from keyboard...");
                 try {
                     const layerColors = await usbInstance.getAllLayerColors();
-                    loadedInfo.layer_colors = layerColors;
+                    // Convert to format with val (brightness) - default to max
+                    loadedInfo.layer_colors = layerColors.map(c => ({
+                        hue: c.hue,
+                        sat: c.sat,
+                        val: 255
+                    }));
                     console.log("[KeyboardContext] Layer colors loaded:", loadedInfo.layer_colors);
 
                     // Also update cosmetic.layer_colors with the closest preset color names

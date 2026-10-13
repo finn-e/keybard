@@ -2,7 +2,7 @@ import { KeyboardInfo } from "../types/keyboard.types";
 import { PendingChange } from "./changes.service";
 import { customValueService } from "./custom-value.service";
 import { LabelService } from "./label.service";
-import { SvilUSB, usbInstance } from "./usb.service";
+import { usbInstance } from "./usb.service";
 import { keyService } from "./key.service";
 import { NO_SELECTION } from "./fragment.service";
 
@@ -201,13 +201,13 @@ export class ImportService {
             }
         }
 
-        const channelsToSave = new Set<number>();
-
         // 7. Sync VIA3 Custom Values (DPI, scroll mode, automouse, bump filter, etc.)
         if (newKb.custom_values && newKb.custom_values.length > 0 && currentKb.menus) {
             // Walk connected keyboard's menu tree to get channel/valueId/width for each key
             const menuItemsWithRefs = customValueService.extractAllItemsWithRefs(currentKb.menus);
             const menuRefMap = new Map(menuItemsWithRefs.map(({ item, ref }) => [ref.key, { item, ref }]));
+
+            const channelsToSave = new Set<number>();
 
             for (const entry of newKb.custom_values) {
                 const menuEntry = menuRefMap.get(entry.key);
@@ -248,36 +248,17 @@ export class ImportService {
 
                 channelsToSave.add(ref.channel);
             }
-        }
 
-        // 8. Layer LED brightness. It isn't in the menus: the color control carries only
-        // hue and saturation, and brightness has its own custom values (48 + layer).
-        if (newKb.layer_colors && currentKb.layer_colors) {
-            const layers = Math.min(newKb.layer_colors.length, currentKb.layers || 0);
-            for (let l = 0; l < layers; l++) {
-                const val = newKb.layer_colors[l]?.val;
-                if (val === undefined || val === currentKb.layer_colors[l]?.val) continue;
-                const valueId = SvilUSB.LAYER_VAL_VALUE_ID_BASE + l;
+            // Save each affected channel
+            for (const channel of channelsToSave) {
                 await queue(
-                    `Update layer ${l} LED brightness`,
+                    `Save custom values channel ${channel}`,
                     async () => {
-                        await customValueService.setRaw(SvilUSB.LAYER_COLOR_CHANNEL, valueId, [val]);
+                        await customValueService.save(channel);
                     },
-                    { type: "custom_ui" as any, writeKey: `custom:id_layer${l}_val` }
+                    { type: "custom_ui" as any, writeKey: `custom-save:${channel}` }
                 );
-                channelsToSave.add(SvilUSB.LAYER_COLOR_CHANNEL);
             }
-        }
-
-        // Save each affected channel
-        for (const channel of channelsToSave) {
-            await queue(
-                `Save custom values channel ${channel}`,
-                async () => {
-                    await customValueService.save(channel);
-                },
-                { type: "custom_ui" as any, writeKey: `custom-save:${channel}` }
-            );
         }
         if (writes.length) {
             await queue("Save imported configuration", () => services.keyboardService.saveSvil(), { type: "key", writeKey: "save-svil" });

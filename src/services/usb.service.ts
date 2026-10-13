@@ -1116,10 +1116,10 @@ export class SvilUSB {
    * Packet: [0x08][channel][value_id]
    * Response: [0x08][channel][value_id][data...]
    */
-  async customValueGet(channel: number, valueId: number, size: number = 2, fill: number[] = []): Promise<Uint8Array> {
+  async customValueGet(channel: number, valueId: number, size: number = 2): Promise<Uint8Array> {
     const resp = await this.send(
       SvilUSB.CMD_VIA_LIGHTING_GET_VALUE,
-      [channel, valueId, ...fill],
+      [channel, valueId],
       {
         uint8: true,
         skipBytes: 3, // Skip cmd_echo, channel, value_id
@@ -1164,55 +1164,63 @@ export class SvilUSB {
     );
   }
 
-  // Layer Color convenience methods (channel 0)
-  // Hue and saturation: value_ids 32-47, 2 bytes [hue, sat] (0-255, QMK HSV).
-  // Brightness: value_ids 48-63, 1 byte [val]. It has its own IDs because VIA's
-  // color control writes [hue, sat] to 32-47 with the rest of the report zeroed,
-  // so a third byte there can't tell "brightness 0" from "not sent".
+  // Layer Color convenience methods (channel 0, value_ids 32-47)
+  // Color format: 2 bytes [hue, sat] (0-255 range, QMK HSV)
 
   static readonly LAYER_COLOR_VALUE_ID_BASE = 32;
-  static readonly LAYER_VAL_VALUE_ID_BASE = 48;
   static readonly LAYER_COLOR_CHANNEL = 0;
 
   /**
    * Get layer color from keyboard.
-   * Firmware without per-layer brightness ignores IDs 48-63 and echoes the
-   * request back, so the 0xFF we send comes back as full brightness, which is
-   * what that firmware shows.
+   * Returns HSV (hue, sat) - value/brightness controlled separately.
    */
-  async getLayerColor(layer: number): Promise<{ hue: number; sat: number; val: number }> {
+  async getLayerColor(layer: number): Promise<{ hue: number; sat: number }> {
     const valueId = SvilUSB.LAYER_COLOR_VALUE_ID_BASE + layer;
     const data = await this.customValueGet(SvilUSB.LAYER_COLOR_CHANNEL, valueId, 2);
-    const valId = SvilUSB.LAYER_VAL_VALUE_ID_BASE + layer;
-    const val = await this.customValueGet(SvilUSB.LAYER_COLOR_CHANNEL, valId, 1, [0xff]);
-    return { hue: data[0], sat: data[1], val: val[0] };
+    return { hue: data[0], sat: data[1] };
   }
 
   /**
    * Set layer color on keyboard.
-   * Takes HSV values (0-255 range). With save false the board shows the color
-   * but keeps the stored one, for live previews.
+   * Takes HSV values (0-255 range).
    */
-  async setLayerColor(layer: number, hue: number, sat: number, val: number, save = true): Promise<void> {
+  async setLayerColor(layer: number, hue: number, sat: number, save = true): Promise<void> {
     const valueId = SvilUSB.LAYER_COLOR_VALUE_ID_BASE + layer;
-    console.log(`setLayerColor: layer=${layer}, valueId=${valueId}, hue=${hue}, sat=${sat}, val=${val}`);
+    console.log(`setLayerColor: layer=${layer}, valueId=${valueId}, hue=${hue}, sat=${sat}`);
     await this.customValueSet(SvilUSB.LAYER_COLOR_CHANNEL, valueId, [hue, sat]);
-    await this.customValueSet(SvilUSB.LAYER_COLOR_CHANNEL, SvilUSB.LAYER_VAL_VALUE_ID_BASE + layer, [val]);
     if (save) await this.customValueSave(SvilUSB.LAYER_COLOR_CHANNEL);
+  }
+
+  // LED brightness: QMK's own rgblight brightness on VIA's lighting channel, the
+  // value RGB_VAI/RGB_VAD change. It applies to every layer. 0-255; the firmware
+  // scales it to RGBLIGHT_LIMIT_VAL.
+
+  static readonly RGBLIGHT_CHANNEL = 2;
+  static readonly RGBLIGHT_BRIGHTNESS_ID = 1;
+
+  async getLedBrightness(): Promise<number> {
+    const data = await this.customValueGet(SvilUSB.RGBLIGHT_CHANNEL, SvilUSB.RGBLIGHT_BRIGHTNESS_ID, 1);
+    return data[0];
+  }
+
+  /** With save false the board shows the brightness but keeps the stored one, for live previews. */
+  async setLedBrightness(val: number, save = true): Promise<void> {
+    await this.customValueSet(SvilUSB.RGBLIGHT_CHANNEL, SvilUSB.RGBLIGHT_BRIGHTNESS_ID, [val]);
+    if (save) await this.customValueSave(SvilUSB.RGBLIGHT_CHANNEL);
   }
 
   /**
    * Get all layer colors (for initial sync).
    * Returns array of 16 HSV values.
    */
-  async getAllLayerColors(): Promise<Array<{ hue: number; sat: number; val: number }>> {
-    const colors: Array<{ hue: number; sat: number; val: number }> = [];
+  async getAllLayerColors(): Promise<Array<{ hue: number; sat: number }>> {
+    const colors: Array<{ hue: number; sat: number }> = [];
     for (let i = 0; i < 16; i++) {
       try {
         const color = await this.getLayerColor(i);
         colors.push(color);
       } catch {
-        colors.push({ hue: 0, sat: 0, val: 0 });
+        colors.push({ hue: 0, sat: 0 });
       }
     }
     return colors;

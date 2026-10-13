@@ -6,7 +6,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { prepareImport } from '../../src/services/import-preflight';
 import { ImportService } from '../../src/services/import.service';
 import { fileService } from '../../src/services/file.service';
-import { customValueService } from '../../src/services/custom-value.service';
 import type { KeyboardInfo } from '../../src/types/keyboard.types';
 import { createKbinfoWithFragments, createFragmentState, FRAGMENT_IDS, FRAGMENT_NAMES } from '../fixtures/fragments.fixture';
 
@@ -82,33 +81,6 @@ describe('restoring a .svil after a settings reset', () => {
         expect(keys).toEqual(['fragment:0', 'setting:5', 'setting:6', 'custom:id_layer0_color', 'custom:id_layer1_color', 'custom:id_layer2_color', 'custom-save:0', 'save-svil']);
         await writes[0]();
         expect(svc.keyboardService.updateFragmentSelection).toHaveBeenCalledExactlyOnceWith(review.keyboard, 0, 1);
-    });
-
-    it('restores each layer LED brightness', async () => {
-        const saved = configured();
-        saved.layer_colors![1].val = 100;
-        saved.layer_colors![2].val = 0;
-        const file = reload(saved);
-        expect(file.layer_colors?.map(c => c.val)).toEqual([255, 100, 0, 255]);
-
-        const board = reset();
-        const review = prepareImport(file, board);
-        expect(review.keyboard.layer_colors?.map(c => c.val)).toEqual([255, 100, 0, 255]);
-
-        const setRaw = vi.spyOn(customValueService, 'setRaw').mockResolvedValue(undefined);
-        const { keys, writes } = await sync(review.keyboard, board);
-        expect(keys).toEqual(['fragment:0', 'setting:5', 'setting:6', 'custom:id_layer0_color', 'custom:id_layer1_color', 'custom:id_layer2_color',
-            'custom:id_layer1_val', 'custom:id_layer2_val', 'custom-save:0', 'save-svil']);
-        await writes[keys.indexOf('custom:id_layer1_val')]();
-        await writes[keys.indexOf('custom:id_layer2_val')]();
-        expect(setRaw.mock.calls).toEqual([[0, 49, [100]], [0, 50, [0]]]);
-        setRaw.mockRestore();
-    });
-
-    it('reads full brightness from files saved before it was stored', () => {
-        const svil = JSON.parse(fileService.kbinfoToSvil(configured()));
-        for (const cv of svil.custom_values) if (/^id_layer\d+_color$/.test(cv.key)) cv.data = cv.data.slice(0, 2);
-        expect(fileService.svilToKBINFO(svil).layer_colors?.map(c => c.val)).toEqual([255, 255, 255, 255]);
     });
 
     it('writes nothing when the board already matches the file', async () => {

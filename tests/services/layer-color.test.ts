@@ -5,59 +5,49 @@ const SET = SvilUSB.CMD_VIA_LIGHTING_SET_VALUE;
 const GET = SvilUSB.CMD_VIA_LIGHTING_GET_VALUE;
 const SAVE = SvilUSB.CMD_VIA_LIGHTING_SAVE;
 
-/**
- * Fakes the board's VIA custom values on channel 0. `withVal` is firmware that keeps a
- * per-layer brightness at IDs 48-63; without it the board only knows hue/sat at 32-47
- * and, like released firmware, leaves the buffer as sent for any other ID.
- */
-function fakeBoard(withVal: boolean) {
-    const store = new Map<number, number[]>();
+/** Records the VIA lighting commands sent; GET of rgblight brightness answers `brightness`. */
+function fakeBoard(brightness = 128) {
     const calls: number[][] = [];
     const usb = new SvilUSB();
     vi.spyOn(usb, 'send').mockImplementation(async (cmd: number, args: number[] = []) => {
         calls.push([cmd, ...args]);
-        const [, id, ...data] = args;
-        const known = (id >= 32 && id < 48) || (withVal && id >= 48 && id < 64);
-        if (cmd === SET && known) store.set(id, id >= 48 ? data.slice(0, 1) : data.slice(0, 2));
-        if (cmd === GET) {
-            const reply = new Uint8Array(29); // the report after cmd, channel, value_id
-            reply.set(data);
-            if (known) reply.set(store.get(id) ?? []);
-            return reply;
-        }
-        return new Uint8Array(29);
+        const reply = new Uint8Array(29); // the report after cmd, channel, value_id
+        if (cmd === GET && args[0] === 2 && args[1] === 1) reply[0] = brightness;
+        return reply;
     });
-    return { usb, store, calls };
+    return { usb, calls };
 }
 
 describe('layer LED color', () => {
-    it('sends brightness with hue and saturation, then saves', async () => {
-        const { usb, calls } = fakeBoard(true);
-        await usb.setLayerColor(3, 85, 200, 100);
-        expect(calls).toEqual([[SET, 0, 35, 85, 200], [SET, 0, 51, 100], [SAVE, 0]]);
+    it('sends hue and saturation, then saves', async () => {
+        const { usb, calls } = fakeBoard();
+        await usb.setLayerColor(3, 85, 200);
+        expect(calls).toEqual([[SET, 0, 35, 85, 200], [SAVE, 0]]);
     });
 
     it('shows a preview color without saving it', async () => {
-        const { usb, calls } = fakeBoard(true);
-        await usb.setLayerColor(3, 85, 200, 100, false);
-        expect(calls).toEqual([[SET, 0, 35, 85, 200], [SET, 0, 51, 100]]);
+        const { usb, calls } = fakeBoard();
+        await usb.setLayerColor(3, 85, 200, false);
+        expect(calls).toEqual([[SET, 0, 35, 85, 200]]);
+    });
+});
+
+describe('LED brightness', () => {
+    it('reads the board-wide rgblight brightness from VIA lighting channel 2', async () => {
+        const { usb, calls } = fakeBoard(200);
+        await expect(usb.getLedBrightness()).resolves.toBe(200);
+        expect(calls).toEqual([[GET, 2, 1]]);
     });
 
-    it('reads brightness back from firmware that stores it', async () => {
-        const { usb } = fakeBoard(true);
-        await usb.setLayerColor(2, 10, 20, 100);
-        await expect(usb.getLayerColor(2)).resolves.toEqual({ hue: 10, sat: 20, val: 100 });
+    it('sets it and saves channel 2', async () => {
+        const { usb, calls } = fakeBoard();
+        await usb.setLedBrightness(255);
+        expect(calls).toEqual([[SET, 2, 1, 255], [SAVE, 2]]);
     });
 
-    it('keeps brightness 0 distinct from "not set"', async () => {
-        const { usb } = fakeBoard(true);
-        await usb.setLayerColor(0, 10, 20, 0);
-        await expect(usb.getLayerColor(0)).resolves.toEqual({ hue: 10, sat: 20, val: 0 });
-    });
-
-    it('reports full brightness on firmware without per-layer brightness', async () => {
-        const { usb } = fakeBoard(false);
-        await usb.setLayerColor(1, 10, 20, 100);
-        await expect(usb.getLayerColor(1)).resolves.toEqual({ hue: 10, sat: 20, val: 255 });
+    it('previews it without saving', async () => {
+        const { usb, calls } = fakeBoard();
+        await usb.setLedBrightness(10, false);
+        expect(calls).toEqual([[SET, 2, 1, 10]]);
     });
 });

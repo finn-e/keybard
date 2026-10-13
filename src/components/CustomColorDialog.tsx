@@ -400,6 +400,9 @@ const CustomColorDialog = ({
                                 className="absolute inset-0 [&_[data-slot=slider-track]]:bg-transparent [&_[data-slot=slider-range]]:bg-transparent"
                             />
                         </div>
+                        {activeTarget === 'led' && (
+                            <p className="text-xs text-muted-foreground">LED brightness applies to every layer, like the brightness keys.</p>
+                        )}
                     </div>
 
                     {/* Hex value display / input */}
