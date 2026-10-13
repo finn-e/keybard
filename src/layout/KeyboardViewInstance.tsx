@@ -862,6 +862,7 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
                             isToggling3D={isToggling3D}
                             showDropTargetHighlight={isLayoutDropTarget}
                             isLayerDragActive={isLayerDragActive}
+                            showPointingSlots={isPrimary}
                         />
                     </div>
                 </div>

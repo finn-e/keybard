@@ -53,7 +53,7 @@ interface KeyboardProps {
     isToggling3D?: boolean;
     showDropTargetHighlight?: boolean;
     isLayerDragActive?: boolean;
-    /** Draw each hand's pointing slot (live module animation). Thumbnails and print pass false. */
+    /** Draw each hand's pointing slot (live module animation). Only the primary layer view does, so stacked and 3D views don't each run their own animations. */
     showPointingSlots?: boolean;
 }
 

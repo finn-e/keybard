@@ -13,6 +13,9 @@ export const POINTING_LIVE_INTERVAL_MS = 33;
 /** Delay after POINTING_LIVE_MAX_MISSES consecutive empty or failed reads. */
 export const POINTING_LIVE_BACKOFF_MS = 1000;
 export const POINTING_LIVE_MAX_MISSES = 3;
+/** Delay once POINTING_LIVE_QUIET_READS reads in a row carried no motion; motion returns to the fast rate. */
+export const POINTING_LIVE_QUIET_MS = 100;
+export const POINTING_LIVE_QUIET_READS = 30;
 
 /** What the poller needs from the app; injectable for tests. */
 export interface PointingLiveDeps {
@@ -61,9 +64,12 @@ export class PointingLiveService {
     private timer: ReturnType<typeof setTimeout> | undefined;
     /** A read is scheduled or in flight. */
     private looping = false;
+    /** A read is in flight; when it finishes, its tick decides whether to go on. */
+    private inFlight = false;
     /** Bumped by reset() so a read in flight from an old connection is dropped. */
     private generation = 0;
     private misses = 0;
+    private quietReads = 0;
     private lastReadAt: number | null = null;
     private listening = false;
 
@@ -103,6 +109,7 @@ export class PointingLiveService {
         this.generation++;
         this.stop();
         this.misses = 0;
+        this.quietReads = 0;
         this.lastReadAt = null;
         this.sources.left.clear();
         this.sources.right.clear();
@@ -128,7 +135,9 @@ export class PointingLiveService {
     }
 
     private kick() {
-        if (this.looping || !this.canPoll()) return;
+        // A read in flight reschedules itself when it finishes; starting another loop here
+        // would leave two running.
+        if (this.looping || this.inFlight || !this.canPoll()) return;
         this.schedule(0);
     }
 
@@ -147,18 +156,41 @@ export class PointingLiveService {
         }
         const generation = this.generation;
         let report: PointingMotionReport | null = null;
+        this.inFlight = true;
         try {
             report = await this.deps.getPointingMotion(this.kbinfo);
         } catch {
             report = null;
+        } finally {
+            this.inFlight = false;
         }
-        if (generation !== this.generation || !this.looping) return;
+        // The board cleared what it sent, so keep it unless the connection changed meanwhile.
+        // Go on polling if something still wants it: kick() left that to this tick.
+        if (generation === this.generation) this.take(report);
+        if (!this.canPoll()) {
+            this.stop();
+            return;
+        }
+        this.schedule(this.nextDelay());
+    }
 
+    private nextDelay(): number {
+        if (this.misses >= POINTING_LIVE_MAX_MISSES) return POINTING_LIVE_BACKOFF_MS;
+        if (this.quietReads >= POINTING_LIVE_QUIET_READS) return POINTING_LIVE_QUIET_MS;
+        return POINTING_LIVE_INTERVAL_MS;
+    }
+
+    private take(report: PointingMotionReport | null) {
         const now = this.deps.now();
         const fallbackDt = this.lastReadAt === null ? POINTING_LIVE_INTERVAL_MS : Math.max(1, now - this.lastReadAt);
         this.lastReadAt = now;
         if (report) {
             this.misses = 0;
+            const moved = (["left", "right"] as const).some((side) => {
+                const h = report[side];
+                return h.dx !== 0 || h.dy !== 0 || h.h !== 0 || h.v !== 0 || h.buttons !== 0;
+            });
+            this.quietReads = moved ? 0 : this.quietReads + 1;
             for (const side of ["left", "right"] as const) {
                 const sample = toLiveSample(report, side, now, fallbackDt);
                 if (sample) this.sources[side].push(sample);
@@ -166,12 +198,6 @@ export class PointingLiveService {
         } else {
             this.misses++;
         }
-
-        if (!this.canPoll()) {
-            this.stop();
-            return;
-        }
-        this.schedule(this.misses >= POINTING_LIVE_MAX_MISSES ? POINTING_LIVE_BACKOFF_MS : POINTING_LIVE_INTERVAL_MS);
     }
 
     private listen() {

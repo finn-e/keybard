@@ -159,6 +159,7 @@ const KeyboardConnector: React.FC = () => {
                                 console.log(`Clicked key at layer ${layer}, row ${row}, col ${col}`);
                             }}
                             isConnected={isConnected}
+                            showPointingSlots={false}
                         />
                     )}
                 </div>

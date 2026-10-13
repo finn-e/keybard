@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { PointingLiveService, POINTING_LIVE_BACKOFF_MS, POINTING_LIVE_INTERVAL_MS } from '../../src/services/pointing-live.service';
+import { PointingLiveService, POINTING_LIVE_BACKOFF_MS, POINTING_LIVE_INTERVAL_MS, POINTING_LIVE_QUIET_MS, POINTING_LIVE_QUIET_READS } from '../../src/services/pointing-live.service';
 import type { PointingMotionReport, PointingMotionHalf } from '../../src/utils/pointing-motion';
 
 const half = (o: Partial<PointingMotionHalf> = {}): PointingMotionHalf => ({
@@ -73,6 +73,43 @@ describe('PointingLiveService', () => {
         b();
         await advance(POINTING_LIVE_INTERVAL_MS * 3);
         expect(getPointingMotion).toHaveBeenCalledTimes(4);
+    });
+
+    it('keeps one loop when released and reacquired while a read is out', async () => {
+        let inFlight = 0, maxInFlight = 0;
+        getPointingMotion.mockImplementation(async () => {
+            inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+            await new Promise((r) => setTimeout(r, 20));
+            inFlight--;
+            return report({ dx: 1 });
+        });
+        svc.setConnection(kb, true, 1);
+        const a = svc.acquire();
+        await advance(5); // first read is out
+        a();
+        const b = svc.acquire();
+        await advance(1000);
+        expect(maxInFlight).toBe(1);
+        // One loop: a read takes 20 ms, then 33 ms until the next.
+        expect(getPointingMotion.mock.calls.length).toBeLessThanOrEqual(Math.ceil(1000 / (20 + POINTING_LIVE_INTERVAL_MS)) + 1);
+        b();
+    });
+
+    it('slows down while nothing moves and speeds up on motion', async () => {
+        replies.push(report());
+        svc.setConnection(kb, true, 1);
+        const release = svc.acquire();
+        await advance(POINTING_LIVE_INTERVAL_MS * POINTING_LIVE_QUIET_READS);
+        const quietStart = getPointingMotion.mock.calls.length;
+        await advance(POINTING_LIVE_QUIET_MS * 5);
+        expect(getPointingMotion.mock.calls.length - quietStart).toBeLessThanOrEqual(6);
+        replies.length = 0;
+        replies.push(report({ dx: 4 }));
+        await advance(POINTING_LIVE_QUIET_MS); // the next read sees motion
+        const fastStart = getPointingMotion.mock.calls.length;
+        await advance(POINTING_LIVE_INTERVAL_MS * 3);
+        expect(getPointingMotion.mock.calls.length - fastStart).toBeGreaterThanOrEqual(3);
+        release();
     });
 
     it('never polls a board without the feature bit', async () => {
