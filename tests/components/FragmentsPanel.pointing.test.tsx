@@ -21,11 +21,28 @@ vi.mock('@/services/keyboard.service', async () => {
 import FragmentsPanel from '../../src/layout/SecondarySidebar/Panels/FragmentsPanel';
 
 describe('FragmentsPanel with pointing slots', () => {
-    it('lists the ten key positions and not the pointing slots', () => {
+    it('lists the ten key positions to choose and each pointing slot locked to its detected module', () => {
         mocks.keyboard = createSvalboardPointingKbinfo({ hwDetection: [[IDX.left, ID.pointing_trackpoint]] });
-        render(<FragmentsPanel />);
+        const { container } = render(<FragmentsPanel />);
         expect(screen.getAllByRole('combobox')).toHaveLength(10);
-        expect(screen.queryByText(/pointing/i)).toBeNull();
+        const left = container.querySelector('[data-pointing-instance="left_pointing"]')!;
+        const right = container.querySelector('[data-pointing-instance="right_pointing"]')!;
+        expect(left).toBeTruthy();
+        expect(right).toBeTruthy();
+        expect(left.textContent).toContain('Locked');
+        expect(left.querySelector('[role="status"]')!.textContent).toBe(
+            mocks.keyboard.fragments.pointing_trackpoint.description ?? 'pointing_trackpoint');
+        // Not reported yet: listed, not locked, no module named.
+        expect(right.textContent).not.toContain('Locked');
+        expect(right.querySelector('[role="status"]')!.textContent).toBe('Detecting');
+        expect(left.querySelector('button, [role="combobox"], select')).toBeNull();
+    });
+
+    it('lists no pointing rows for older firmware without pointing slots', async () => {
+        const { createKbinfoWithFragments } = await import('../fixtures/fragments.fixture');
+        mocks.keyboard = createKbinfoWithFragments();
+        const { container } = render(<FragmentsPanel />);
+        expect(container.querySelector('[data-pointing-instance]')).toBeNull();
     });
 
     it('"Restore default" never writes a selection for a pointing slot', async () => {

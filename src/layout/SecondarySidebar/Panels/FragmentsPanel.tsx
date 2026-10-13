@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useChanges } from "@/contexts/ChangesContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
+import { isWidgetInstance } from "@/services/fragment-composer.service";
 import { keyboardService } from "@/services/keyboard.service";
 import type { FragmentInstance, KeyboardInfo } from "@/types/keyboard.types";
 
@@ -240,6 +241,39 @@ const FragmentsPanel: React.FC = () => {
     const rightInstances = selectableInstances.filter(({ instance }) => getSide(instance.id) === "right");
     const otherInstances = selectableInstances.filter(({ instance }) => getSide(instance.id) === "other");
 
+    // Pointing slots follow hardware detection only: shown, never selectable.
+    const pointingInstances = (keyboard.composition?.instances ?? [])
+        .map((instance, idx) => ({ idx, instance }))
+        .filter(({ instance }) => isWidgetInstance(keyboard, instance));
+    const renderPointingRows = (side: "left" | "right") => pointingInstances
+        .filter(({ instance }) => getSide(instance.id) === side)
+        .map(({ idx, instance }) => {
+            const hwFragmentId = safeMapGet(keyboard.fragmentState?.hwDetection, idx);
+            const hwDetected = hwFragmentId !== undefined && hwFragmentId !== 0xff;
+            const hwFragmentName = hwDetected ? fragmentService.getFragmentNameById(keyboard, hwFragmentId) : undefined;
+            const value = hwFragmentName ? fragmentService.getFragmentDisplayName(keyboard, hwFragmentName) : "Detecting";
+            const label = formatInstanceLabel(fragmentService.getInstanceDisplayName(instance.id));
+            return (
+                <div
+                    key={instance.id}
+                    data-pointing-instance={instance.id}
+                    className="flex flex-row flex-wrap items-center p-3 gap-3 panel-layer-item group/item rounded-md"
+                >
+                    <div className="flex flex-col items-start gap-1 shrink-0 w-[100px]">
+                        <Label className="text-sm font-medium">{label}</Label>
+                        {hwFragmentName && <span className="text-xs text-amber-600 dark:text-amber-400">Locked</span>}
+                    </div>
+                    <div
+                        role="status"
+                        aria-label={fragmentService.getInstanceDisplayName(instance.id)}
+                        className="flex-1 basis-36 min-w-0 rounded-md border border-input px-3 py-2 text-sm opacity-70"
+                    >
+                        {value}
+                    </div>
+                </div>
+            );
+        });
+
     return (
         <div className="flex flex-col">
             <div className="flex flex-col px-4 gap-3 py-2">
@@ -326,6 +360,7 @@ const FragmentsPanel: React.FC = () => {
                                 </div>
                             );
                         })}
+                        {renderPointingRows("left")}
                     </div>
                 )}
                 {rightInstances.length > 0 && (
@@ -394,6 +429,7 @@ const FragmentsPanel: React.FC = () => {
                                 </div>
                             );
                         })}
+                        {renderPointingRows("right")}
                     </div>
                 )}
                 {otherInstances.map(({ idx, instance }) => {
