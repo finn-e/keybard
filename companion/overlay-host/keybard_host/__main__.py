@@ -411,7 +411,12 @@ class Host(QObject):
                 action.triggered.connect(lambda _checked=False, n=name: apply(n))
                 actions[name] = action
             return menu, actions
-        self.style_menu, self.style_actions = choices('Style', PRESETS, lambda n: self.set_config(appearance=dict(PRESETS[n])))
+        # A style sets the colors; the outline shadow (halo) is its own toggle and survives a style change.
+        self.style_menu, self.style_actions = choices('Style', PRESETS,
+            lambda n: self.set_config(appearance=dict(PRESETS[n], halo=self.state.config['appearance']['halo'])))
+        self.halo_action = QAction('Outline shadow', self, checkable=True)
+        self.halo_action.setToolTip('A contrasting shadow around legends and key outlines, readable on any background')
+        self.halo_action.triggered.connect(lambda value: self.set_config(appearance=dict(self.state.config['appearance'], halo=value)))
         self.highlight_menu, self.highlight_actions = choices('Layer highlight', EFFECTS, lambda n: self.set_config(**EFFECTS[n]))
         self.hands_menu, self.hands_actions = choices('Hands', ('Both', 'Left', 'Right'), lambda n: self.set_config(hands=n))
         self.held_action = QAction('Highlight held keys', self, checkable=True)
@@ -420,7 +425,7 @@ class Host(QObject):
     def add_settings(self, menu):
         menu.addMenu(self.board_menu)
         menu.addSeparator()
-        for item in (self.style_menu, self.highlight_menu, self.held_action, self.hands_menu):
+        for item in (self.style_menu, self.halo_action, self.highlight_menu, self.held_action, self.hands_menu):
             menu.addAction(item) if isinstance(item, QAction) else menu.addMenu(item)
 
     def fill_board_menu(self):
@@ -451,7 +456,9 @@ class Host(QObject):
         self.controls.capitals.setChecked(self.state.config['capitalAlphas'])
         self.controls.adaptive.setChecked(self.state.config['adaptiveContrast'])
         config = self.state.config
-        for name, action in self.style_actions.items(): action.setChecked(config['appearance'] == PRESETS[name])
+        colors = {k: v for k, v in config['appearance'].items() if k != 'halo'}
+        for name, action in self.style_actions.items(): action.setChecked(colors == {k: v for k, v in PRESETS[name].items() if k != 'halo'})
+        self.halo_action.setChecked(config['appearance']['halo'])
         for name, action in self.highlight_actions.items(): action.setChecked(config['effect'] == EFFECTS[name]['effect'])
         for name, action in self.hands_actions.items(): action.setChecked(config['hands'] == name)
         self.held_action.setChecked(config['highlightPressed'])

@@ -142,7 +142,7 @@ class QtHardeningTest(unittest.TestCase):
     def test_a_failed_save_puts_the_check_mark_back(self):
         controls = mock.Mock()
         host = SimpleNamespace(state=self.state, controls=controls, publish_state=mock.Mock(), command=mock.Mock(),
-                               style_actions={}, highlight_actions={}, hands_actions={}, held_action=mock.Mock())
+                               style_actions={}, highlight_actions={}, hands_actions={}, held_action=mock.Mock(), halo_action=mock.Mock())
         host.sync_menu = lambda: Host.sync_menu(host)
         host.set_config = lambda **fields: Host.set_config(host, **fields)
         with mock.patch.object(self.state, 'save', side_effect=OSError):
@@ -157,7 +157,7 @@ class QtHardeningTest(unittest.TestCase):
         from keybard_host.state import EFFECTS, PRESETS
         actions = {name: mock.Mock() for name in PRESETS}
         host = SimpleNamespace(state=self.state, controls=mock.Mock(), publish_state=mock.Mock(), command=mock.Mock(),
-                               style_actions=actions, highlight_actions={}, hands_actions={}, held_action=mock.Mock())
+                               style_actions=actions, highlight_actions={}, hands_actions={}, held_action=mock.Mock(), halo_action=mock.Mock())
         host.sync_menu = lambda: Host.sync_menu(host)
         Host.set_config(host, appearance=dict(PRESETS['High contrast']), **EFFECTS['Flash'], hands='Left')
         self.assertEqual(self.state.config['appearance'], PRESETS['High contrast'])
@@ -168,6 +168,10 @@ class QtHardeningTest(unittest.TestCase):
         host.command.reset_mock()
         Host.set_config(host, hands='Left')  # no change: nothing saved or re-applied
         host.command.assert_not_called()
+        # The outline shadow is separate from the style: Dark without it still checks Dark.
+        Host.set_config(host, appearance=dict(PRESETS['Dark'], halo=True))
+        actions['Dark'].setChecked.assert_called_with(True)
+        host.halo_action.setChecked.assert_called_with(True)
 
     def test_icon_swaps_once_when_the_taskbar_theme_changes(self):
         host = SimpleNamespace(icon_light_background=False, app=mock.Mock(), surface=mock.Mock(), tray=mock.Mock())
