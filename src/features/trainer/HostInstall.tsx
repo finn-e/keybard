@@ -1,7 +1,7 @@
 import type { HostBuild } from './host';
 
 /** The Keybard Host release this Keybard offers; a connected host on another release is told about it. */
-export const HOST_RELEASE_TAG = 'vLaunch2.2';
+export const HOST_RELEASE_TAG = 'vLaunch2.3';
 export const HOST_RELEASE = `https://github.com/svalboard/keybard/releases/tag/${HOST_RELEASE_TAG}`;
 export const HOST_DOWNLOAD = HOST_RELEASE.replace('/tag/', '/download/') + '/KeybardHost-Windows.zip';
 
