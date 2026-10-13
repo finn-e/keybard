@@ -5,6 +5,7 @@ import * as React from "react";
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { PanelsProvider, usePanels } from "@/contexts/PanelsContext";
 import { DragProvider, useDrag } from "@/contexts/DragContext";
+import { blankKeyOnDrop } from "./blank-key-drop";
 import { DragOverlay } from "@/components/DragOverlay";
 import SecondarySidebar, { DETAIL_SIDEBAR_WIDTH, getDetailPanelHeight } from "./SecondarySidebar/SecondarySidebar";
 import { BOTTOM_PANEL_HEIGHT } from "./BottomPanel";
@@ -55,12 +56,15 @@ import {
 } from "./layer-scene";
 
 const EditorLayout = () => {
+    const { assignKeycodeTo } = useKeyBinding();
+    const handleUnhandledDrop = React.useMemo(() => blankKeyOnDrop(assignKeycodeTo), [assignKeycodeTo]);
+
     return (
         <SidebarProvider defaultOpen={false}>
             <PanelsProvider>
                 <LayoutSettingsProvider>
                     <LayerProvider>
-                        <DragProvider>
+                        <DragProvider onUnhandledDrop={handleUnhandledDrop}>
                             <EditorLayoutInner />
                             <DragOverlay />
                         </DragProvider>
