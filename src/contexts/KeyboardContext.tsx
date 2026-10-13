@@ -12,6 +12,7 @@ import type { KeyboardInfo } from "../types/keyboard.types";
 import { PARANOID, userIsLooking } from "../lib/paranoid";
 import { LinuxHidAccessError } from "../utils/linux-hid-access";
 import { UnsupportedFirmwareError, type UnsupportedFirmwareInfo } from "../utils/unsupported-firmware";
+import { RAW_HID_USAGES } from "../services/hid-report";
 
 interface KeyboardContextType {
     keyboard: KeyboardInfo | null;
@@ -56,11 +57,8 @@ const serializeDraft = (value: unknown) => JSON.stringify(value, (_key, item) =>
 
 const KeyboardContext = createContext<KeyboardContextType | undefined>(undefined);
 
-export const DEFAULT_HID_FILTERS: HIDDeviceFilter[] = [
-    { usagePage: 0xff61, usage: 0x62 },  // Svil keyboards
-    { usagePage: 0xff60, usage: 0x61 },  // Raw HID interface used by some Sval firmware builds
-    { usagePage: 0xff60, usage: 0x62 },  // Alternate Raw HID interface
-];
+// The raw HID interfaces Svalboard firmware exposes (also where the report length is read)
+export const DEFAULT_HID_FILTERS: HIDDeviceFilter[] = RAW_HID_USAGES.map((u) => ({ ...u }));
 
 /**
  * Keyboards this origin may open without the chooser: devices the user has

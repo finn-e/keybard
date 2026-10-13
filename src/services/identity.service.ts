@@ -1,6 +1,7 @@
 // Board identity: the persistent USB serial and the user-chosen board name.
 // Wire format: sval-qmk keyboards/svalboard/identity.c (VIA custom values, channel 0x49).
 import { SvilUSB, usbInstance } from "./usb.service";
+import { WRAPPER_HEADER_BYTES, payloadCapacity } from "./hid-report";
 
 export const IDENTITY_CHANNEL = 0x49;
 export const NAME_MAX_CHARS = 32;
@@ -9,8 +10,10 @@ const OP_INFO = 0;
 const OP_NAME = 1;
 const OP_COMMIT = 2;
 const OP_REBOOT = 3;
-// 32-byte report minus 6 wrapper bytes and 5 identity header bytes.
-const NAME_CHUNK = 21;
+// A name chunk is the report minus 6 wrapper bytes and 5 identity header bytes
+// ([cmd][channel][op][offset][length]): 21 bytes at 32, 53 at 64. The firmware
+// derives its limit from the report length the same way.
+const NAME_HEADER_BYTES = WRAPPER_HEADER_BYTES + 5;
 
 export enum IdentityStatus {
     Ok = 0,
@@ -104,8 +107,9 @@ export class IdentityService {
     /** Store a new name (empty clears it). It reaches the OS on the next restart. */
     async setName(name: string): Promise<IdentityStatus> {
         const bytes = new TextEncoder().encode(name);
-        for (let off = 0; off < bytes.length; off += NAME_CHUNK) {
-            const chunk = Array.from(bytes.slice(off, off + NAME_CHUNK));
+        const chunkSize = payloadCapacity(this.usb, NAME_HEADER_BYTES);
+        for (let off = 0; off < bytes.length; off += chunkSize) {
+            const chunk = Array.from(bytes.slice(off, off + chunkSize));
             const v = await this.request(SvilUSB.CMD_VIA_LIGHTING_SET_VALUE, OP_NAME, [off, chunk.length, ...chunk]);
             if (v[0] !== IdentityStatus.Ok) return v[0] as IdentityStatus;
         }

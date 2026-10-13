@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  MSG_LEN,
   endianFrom,
   LE16,
   LE32,
@@ -12,14 +11,6 @@ import {
 } from '../../src/services/utils';
 
 describe('Utils - Byte Manipulation', () => {
-  describe('MSG_LEN constant', () => {
-    it('should have the correct value of 32', () => {
-      // Arrange & Act - constant is already defined
-      // Assert
-      expect(MSG_LEN).toBe(32);
-    });
-  });
-
   describe('endianFrom', () => {
     it('should convert number to little-endian 2-byte array', () => {
       // Arrange

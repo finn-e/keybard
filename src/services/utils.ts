@@ -1,7 +1,5 @@
 // Utility functions for byte manipulation and data handling
 
-export const MSG_LEN = 32;
-
 export function endianFrom(num: number, bytes: number, little: boolean): number[] {
     const ab = new ArrayBuffer(bytes);
     const dv = new DataView(ab);

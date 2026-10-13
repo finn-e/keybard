@@ -2,8 +2,9 @@ import { LabelService } from "./label.service";
 import { KleService } from "./kle.service";
 import { keyService } from "./key.service";
 import { activeKeycodeVersion, applyKeycodeNumbering, UNREPORTED_KEYCODE_VERSION } from '@/constants/keycode-numbering';
-import { SVIL_TABLE_ALT_REPEAT_KEY, SVIL_TABLE_LEADER, SvilUSB, checkSvilStatus, readSvilTable, svilHasMacroBuffer, svilIndexArgs, usbInstance } from "./usb.service";
+import { SVIL_DEFINITION_HEADER_BYTES, SVIL_TABLE_ALT_REPEAT_KEY, SVIL_TABLE_LEADER, SvilUSB, checkSvilStatus, readSvilTable, svilHasMacroBuffer, svilIndexArgs, usbInstance } from "./usb.service";
 import { LE16 } from "./utils";
+import { payloadCapacity } from "./hid-report";
 
 import LZMA from "js-lzma";
 import { assertSupportedSvilProto } from "@/utils/unsupported-firmware";
@@ -271,9 +272,10 @@ export class KeyboardService {
             throw new Error(`Invalid payload size: ${payload_size}`);
         }
 
-        // Fetch definition in chunks using Svil protocol
-        // firmware definition chunk size = 22 (32 total - 6 wrapper - 4 response header)
-        const chunkSize = 22;
+        // Fetch definition in chunks using Svil protocol, as large as the report
+        // allows (22 bytes at 32, 54 at 64). The firmware may clamp a chunk below
+        // what was asked, so a short chunk is not the end of the definition.
+        const chunkSize = payloadCapacity(this.usb, SVIL_DEFINITION_HEADER_BYTES);
         const payload = new ArrayBuffer(payload_size);
         const pdv = new DataView(payload);
         let offset = 0;
@@ -288,13 +290,13 @@ export class KeyboardService {
 
             const data = resp as Uint8Array;
             // Response format after wrapper stripped: [cmd_echo][offset_lo][offset_hi][actual_size][data...]
-            const actualSize = data[3];
+            const actualSize = Math.min(data[3], requestSize);
             for (let i = 0; i < actualSize && offset < payload_size; i++) {
                 pdv.setInt8(offset, data[4 + i]);
                 offset++;
             }
 
-            if (actualSize < requestSize) break; // End of data
+            if (actualSize === 0) break; // End of data
         }
 
         // Decompress and parse JSON
