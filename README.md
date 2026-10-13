@@ -118,7 +118,7 @@ function MyComponent() {
 
 ## Configuration and the overlay
 
-The editor includes keymaps, macros, combos, tap dances, overrides, leaders and pointing settings. The Overlay page installs and connects the separate native Keybard Host overlay. See [the companion README](companion/overlay-host/README.md) for setup.
+The editor includes keymaps, macros, combos, tap dances, overrides, leaders and pointing settings. The Overlay item installs and connects the separate native Keybard Host overlay. See [the companion README](companion/overlay-host/README.md) for setup.
 
 ## Theming
 
@@ -219,8 +219,8 @@ Tests run automatically on:
 
 See [VITE_SETUP.md](./VITE_SETUP.md) for detailed setup and development documentation.
 
-## Overlay page and Keybard Host
+## Overlay dialog and Keybard Host
 
-The Overlay page is in the left navigation panel, or directly at `/#overlay` (or `/#trainer`) when serving with a root base path. It offers the Keybard Host download and connects Keybard to a running Host, so the overlay refreshes after edits and uses Keybard's keyboard language. The overlay's settings live in Keybard Host's own menus.
+The Overlay item in the left navigation panel opens a small dialog, as do `/#overlay` and `/#trainer` links. It offers the Keybard Host download and connects Keybard to a running Host, so the overlay refreshes after edits and uses Keybard's keyboard language. The overlay's settings live in Keybard Host's own menus.
 
 The [native Keybard Host](companion/overlay-host/README.md) serves this same web UI and runs its renderer as a transparent tray-managed desktop overlay. It has an isolated Windows runtime and read-only Svalboard device worker. Host mode supports live active/default layers, optional held-key feedback, remembered-board reconnect, and settings in its overlay and tray menus. Keybard keeps its standard WebHID connection flow; the native overlay uses a separate read-only client.

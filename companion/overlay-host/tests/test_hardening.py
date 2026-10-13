@@ -180,6 +180,11 @@ class QtHardeningTest(unittest.TestCase):
         self.assertTrue(host.icon_light_background)
         self.assertEqual(host.tray.setIcon.call_count, 1)
 
+    def test_keybard_can_open_the_colors_panel(self):
+        host = SimpleNamespace(state=self.state, open_colors=mock.Mock(), publish_state=mock.Mock())
+        Host.command(host, {'op': 'colors'})
+        host.open_colors.assert_called_once_with()
+
     def test_showing_the_overlay_expands_it(self):
         host = SimpleNamespace(state=self.state, surface=mock.Mock(), controls=mock.Mock(), show_action=mock.Mock(), publish_state=mock.Mock())
         Host.command(host, {'op': 'show', 'value': True})

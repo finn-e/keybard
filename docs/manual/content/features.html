@@ -134,12 +134,12 @@
   <p class="eyebrow">Learn your layout</p>
   <h2>The desktop overlay</h2>
   <p class="path">Overlay, directly below Layouts</p>
-  <p>The desktop overlay is <strong>Keybard Host</strong>, a small app that shows your layout above your other windows and follows your board as you type. It reads the board itself, read-only, and keeps its own settings. The Overlay page installs it and connects Keybard to it.</p>
+  <p>The desktop overlay is <strong>Keybard Host</strong>, a small app that shows your layout above your other windows and follows your board as you type. It reads the board itself, read-only, and keeps its own settings. Keybard’s <strong>Overlay</strong> item opens a small dialog that offers it and connects Keybard to it.</p>
   <figure id="demo-overlay-layers" data-animation="assets/overlay-layers.webp" data-poster="assets/overlay-layers-still.png"><img src="assets/overlay-layers-still.png" alt="See the overlay respond to layer changes" loading="lazy"><figcaption><strong>See the overlay respond to layer changes.</strong> The actual shared native renderer receives controlled reports: base, symbols, function keys, then base with held-key highlighting. This demonstrates rendering; it is not a Windows desktop recording or a hardware latency test.</figcaption></figure>
   <ol>
-    <li>On the Overlay page, select <strong>Download for Windows</strong>. Extract the ZIP and run <strong>Start-Windows.cmd</strong>.</li>
+    <li>Select <strong>Overlay</strong> in Keybard’s sidebar, then <strong>Download for Windows</strong>. Extract the ZIP and run <strong>Start-Windows.cmd</strong>.</li>
     <li>Allow the first launch to download its private runtime. It needs internet, but no administrator rights, system Python, or PATH changes.</li>
-    <li>The app opens Keybard’s Overlay page. Select <strong>Connect to Keybard Host</strong> and allow the browser’s local-device access request. Keybard then tells the overlay when you edit the layout, and the overlay uses Keybard’s keyboard language.</li>
+    <li>The app opens Keybard with the Overlay dialog. Select <strong>Connect</strong> and allow the browser’s local-device access request. Keybard then tells the overlay when you edit the layout, and the overlay uses Keybard’s keyboard language.</li>
     <li>If you have more than one Svalboard, choose yours from <strong>Board</strong> in the overlay’s <strong>⋯</strong> menu or the tray icon. Host remembers it.</li>
     <li>Drag the overlay into place by the move grip above its corner, and resize it with the grip beside it: up or right grows it, down or left shrinks it. The collapse button beside them hides the overlay and leaves just the grips; click it again to bring it back. Clicks anywhere else, keys included, pass through to the window underneath.</li>
   </ol>
@@ -158,6 +158,6 @@
   </ul>
   <p>Shifted legends follow Shift, Caps Lock and Caps Word on the board the overlay follows, as current firmware reports them; other keyboards don’t change them.</p>
   <p>The companion stays in the system tray when you close the browser. To get the overlay out of the way, collapse it with the collapse button beside its grips, or turn off <strong>Show overlay</strong> in the tray menu, which also brings it back. Once Keybard is connected to Keybard Host, the overlay refreshes automatically about a second after edits reach the keyboard. In Manual Updates, apply the queue first. For changes made elsewhere, or if the display looks stale, choose <strong>Reload board layout</strong> from the overlay’s menu or the tray. If reconnection fails, check the board selection and USB connection.</p>
-  <p>The Overlay page shows the connected <strong>Keybard Host</strong> version and, when available, its Keybard commit. If it reports an older Host, follow the offered download link for the current release. Updating the website does not replace the Host app you extracted.</p>
+  <p>The Overlay dialog shows the connected <strong>Keybard Host</strong> version and, when available, its Keybard commit. If it reports an older Host, follow the offered download link for the current release. Updating the website does not replace the Host app you extracted.</p>
   <p class="callout">The Windows download is a portable preview, not a signed installer. Linux source launch is available, with Wayland limitations for placement, stacking and click-through. macOS remains unverified; equivalent validated packages for all platforms are not promised.</p>
 </section>

@@ -68,6 +68,7 @@ export function useHost() {
         function receive(data: HostSnapshot) {
             if (!alive || data.apiVersion !== 1) return;
             lastReceived = Date.now();
+            setError(''); // updates are arriving again
             if (current.current?.session !== data.session) current.current = null;
             if (current.current && data.revision < current.current.revision) { data.revision = current.current.revision; data.config = current.current.config; }
             if (data.layoutRevision === current.current?.layoutRevision && !data.board) data.board = current.current.board;

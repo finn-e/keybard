@@ -9,21 +9,21 @@ You choose what the overlay looks like in the **Overlay** panel of [Keybard](htt
 1. Download `KeybardHost-Windows.zip` from [Releases](https://github.com/svalboard/keybard/releases) and extract the whole ZIP to a folder you'll keep.
 2. Run `Start-Windows.cmd`. The first launch downloads its own copy of Python and Qt, so you need to be online. No admin rights or system changes are needed.
 
-Keybard Host is now in your system tray, and it opens Keybard's Overlay page on [keybard.svalboard.com](https://keybard.svalboard.com) in your browser.
+Keybard Host is now in your system tray, and it opens Keybard's Overlay dialog on [keybard.svalboard.com](https://keybard.svalboard.com) in your browser.
 
 ## Set up the overlay
 
-1. On the Overlay page, connect your keyboard if it isn't already, and click **Connect to Keybard Host**. If the browser asks whether the site can access apps on this device, allow it. Next time it reconnects on its own.
+1. In the Overlay dialog, click **Connect**. If the browser asks whether the site can access apps on this device, allow it. Next time it reconnects on its own.
 2. If you have more than one Svalboard, pick yours from **Board** in the overlay's ⋯ menu or the tray icon. Settings are saved on this computer.
 
-Use Chrome or Edge. **Open Keybard** in the tray menu takes you back to the Overlay page. Offline, the Host's built-in copy of Keybard at `http://127.0.0.1:5178/` works the same way.
+Use Chrome or Edge. **Open Keybard** in the tray menu takes you back to the Overlay dialog. Offline, the Host's built-in copy of Keybard at `http://127.0.0.1:5178/` works the same way.
 
 ## Using it
 
 - **Place it:** drag the move grip above the overlay's top-right corner. **Size it:** drag the resize grip next to it, up or right to grow, down or left to shrink. **Collapse it:** the collapse button beside the grips hides the overlay and leaves just the grips; click it again to bring it back. Clicks anywhere else, keys included, pass through to the window underneath.
 - **Overlay menu** (⋯ beside the grips, and the same items in the tray menu): **Board** picks the Svalboard to follow; **Style** picks a look (Dark, Subtle, Outline only, Light, High contrast); **Outline shadow** adds a contrasting shadow around legends and outlines (on by default); **Colors…** opens a small panel for every color, opacity, the outline width and the highlight colors; **Layer highlight** is Off, Flash or Fade; **Highlight held keys**; **Hands**; **Capital letters** shows letter keys in capitals; **Adaptive contrast** (Windows, off by default) restyles each key for the background behind it; **Place at bottom**; **Reload board layout**.
-- **Tray menu:** show or hide the overlay, drag or place it at the bottom of the screen, reload the layout, open Keybard's Overlay page, or quit. Closing the browser leaves the overlay running.
-- **After you edit your layout in Keybard**, the overlay updates by itself about a second after the change reaches the keyboard, as long as Keybard is connected to Keybard Host (the Overlay page's **Connect to Keybard Host**, once). For changes made elsewhere, choose **Reload layout** from the tray.
+- **Tray menu:** show or hide the overlay, drag or place it at the bottom of the screen, reload the layout, open Keybard, or quit. Closing the browser leaves the overlay running.
+- **After you edit your layout in Keybard**, the overlay updates by itself about a second after the change reaches the keyboard, as long as Keybard is connected to Keybard Host (the Overlay dialog's **Connect**, once). For changes made elsewhere, choose **Reload layout** from the tray.
 - **Held keys:** the keys you're holding are highlighted. Turn this off with **Highlight held keys** in the overlay's menu. Very short taps can be missed.
 - **Shift and Caps Lock** on your Svalboard change the letters and symbols shown, using the keyboard language chosen in Keybard. Other keyboards on the computer don't. The board reports them itself, so this needs Svalboard firmware that does; older firmware shows plain legends.
 
@@ -95,7 +95,7 @@ Chrome needs the board too. Keybard and the Host should both be able to have it 
 #### What a Mac tester should check
 
 1. `bash start-macos.sh` installs and starts with no errors, and the menu bar icon appears with no Dock icon.
-2. The Overlay page opens in your browser, **Connect to Keybard Host** works, and the overlay shows your layout.
+2. Keybard opens in your browser with the Overlay dialog, **Connect** works, and the overlay shows your layout.
 3. The overlay is see-through between the keys, stays above other windows, and clicks pass through it to the window underneath.
 4. Clicking the overlay or its controls doesn't take focus from the app you're typing in.
 5. The move grip drags the overlay and the resize grip resizes it; the collapse button hides the overlay but keeps the grips, and brings it back; clicks anywhere else on the overlay, keys included, pass through.
@@ -136,6 +136,6 @@ These don't cover moving the window, focus, click-through, fullscreen, or live l
 3. Build with `npm run build:svalboard`, then run `python3 companion/overlay-host/scripts/package.py`.
 4. In `dist`, run `sha256sum KeybardHost-Windows.zip > SHA256SUMS.txt`.
 5. Tag the commit (`keybard-host-vX.Y.Z-preview.N`, or a launch tag shared with the firmware such as `vLaunch2`) and publish a GitHub prerelease with the ZIP and the checksum. Set `KEYBARD_HOST_VERSION` to the tag when packaging, so the host reports it.
-6. Set `HOST_RELEASE_TAG` in `src/features/trainer/HostInstall.tsx` to the new tag, so the Overlay page's install link finds it. Link the tag itself, not GitHub's `latest` redirect, which skips prereleases.
+6. Set `HOST_RELEASE_TAG` in `src/features/trainer/HostInstall.tsx` to the new tag, so the Overlay dialog's download link finds it. Link the tag itself, not GitHub's `latest` redirect, which skips prereleases.
 
 Instead of steps 3–5, you can run the **Package Keybard Host preview** workflow with an existing tag. It builds a draft prerelease with both files, stamps the release and the bundled Keybard commit into the host and the release notes; test the ZIP before you publish it.

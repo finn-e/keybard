@@ -150,7 +150,7 @@ def make_server(state, assets, dispatch, port=0, remote_origins=REMOTE_ORIGINS, 
                     return self.reply({'revision': revision})
                 if self.path != '/api/host/command': return self.reply({'error': 'Unknown API'}, 404)
                 op = value.get('op')
-                if op not in ('show', 'place', 'connect', 'disconnect', 'reload', 'refresh', 'scan', 'practice'):
+                if op not in ('show', 'place', 'connect', 'disconnect', 'reload', 'refresh', 'scan', 'practice', 'colors'):
                     raise ValueError('Unknown command')
                 if op == 'show' and type(value.get('value')) is not bool: raise ValueError('Expected boolean')
                 if op == 'practice':

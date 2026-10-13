@@ -4,7 +4,8 @@ import PointingDeviceBall01Icon from "@/components/icons/PointingDeviceBall01Ico
 import LayoutLayersIcon from "@/components/icons/LayoutLayersIcon";
 import AltRepeatArrowsIcon from "@/components/icons/AltRepeatArrowsIcon";
 import GraduationCapIcon from "@/components/icons/GraduationCapIcon";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { OverlayDialog, overlayRequested } from "@/features/trainer/OverlayDialog";
 
 import ComboIcon from "@/components/ComboIcon";
 import { isExcludedMenu, getIconForMenu } from "@/constants/custom-ui-exclusions";
@@ -160,6 +161,7 @@ const SidebarNavItem = ({
 // --- Main Component ---
 
 const AppSidebar = () => {
+    const [overlayOpen, setOverlayOpen] = useState(() => overlayRequested());
     const { state, toggleSidebar, setOpen: setNavigationOpen } = useSidebar("primary-nav", { defaultOpen: false });
     const isCollapsed = state === "collapsed";
     const {
@@ -185,7 +187,9 @@ const AppSidebar = () => {
             // Labels can be expanded to choose a destination; return the narrow
             // viewport to its icon rail so the chosen panel remains usable.
             if (window.innerWidth < 900) setNavigationOpen(false);
-            if (item.url === "matrixtester" || item.url === "trainer") {
+            // The desktop overlay is a separate app: a small dialog, not a panel.
+            if (item.url === "trainer") { setOverlayOpen(true); return; }
+            if (item.url === "matrixtester") {
                 if (activePanel === item.url) {
                     setActivePanel(null);
                     return;
@@ -279,6 +283,7 @@ const AppSidebar = () => {
 
     return (
         <>
+            <OverlayDialog open={overlayOpen} onOpenChange={setOverlayOpen} />
             {/* Hidden file input for import */}
 
 

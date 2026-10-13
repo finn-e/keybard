@@ -625,6 +625,7 @@ class Host(QObject):
             if value['value']: self.controls.set_collapsed(False)
             self.state.visible = value['value']; self.surface.setVisible(value['value']); self.show_action.setChecked(value['value']); self.controls.setVisible(value['value'])
         elif op == 'place': self.place()
+        elif op == 'colors': self.open_colors()  # Keybard's Overlay settings button
         elif op == 'practice':
             with self.state.lock:
                 self.state.practice_hidden = value['hidden']; self.state.practice_target = value['target']; self.state.practice_at = time.monotonic()
