@@ -56,6 +56,14 @@ export const DragProvider: React.FC<DragProviderProps> = ({ children, onUnhandle
     const dragItemRef = useRef<DragItem | null>(null);
     const isDraggingRef = useRef(false);
     const dropConsumedRef = useRef(false);
+    // Read the drop handler through a ref so handleMouseUp keeps a stable
+    // identity. EditorLayout rebuilds onUnhandledDrop whenever the keymap
+    // changes, and a new handleMouseUp re-ran the effect below, whose cleanup
+    // removed the window listeners mid-drag. A drop onto a key changes the
+    // keymap during the same mouseup, so the provider never saw the release
+    // and the drag overlay stayed on screen.
+    const onUnhandledDropRef = useRef(onUnhandledDrop);
+    onUnhandledDropRef.current = onUnhandledDrop;
 
     const markDropConsumed = useCallback(() => {
         dropConsumedRef.current = true;
@@ -72,8 +80,9 @@ export const DragProvider: React.FC<DragProviderProps> = ({ children, onUnhandle
 
     const handleMouseUp = useCallback((e: MouseEvent) => {
         if (isDraggingRef.current) {
-            if (!dropConsumedRef.current && onUnhandledDrop && dragItemRef.current) {
-                onUnhandledDrop(dragItemRef.current, e);
+            const onDrop = onUnhandledDropRef.current;
+            if (!dropConsumedRef.current && onDrop && dragItemRef.current) {
+                onDrop(dragItemRef.current, e);
             }
 
             setIsDragging(false);
@@ -86,7 +95,7 @@ export const DragProvider: React.FC<DragProviderProps> = ({ children, onUnhandle
 
         window.removeEventListener("mousemove", handleMouseMove);
         window.removeEventListener("mouseup", handleMouseUp);
-    }, [handleMouseMove, onUnhandledDrop]);
+    }, [handleMouseMove]);
 
     useEffect(() => {
         const cancel = () => {

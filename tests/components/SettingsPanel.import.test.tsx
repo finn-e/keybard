@@ -45,13 +45,23 @@ describe('import review', () => {
         expect(await screen.findByRole('button', { name: 'Apply import' })).toBeDisabled();
         expect(mocks.sync).not.toHaveBeenCalled();
     });
+    it('shows no status text after a successful instant import', async () => {
+        const { container } = render(<SettingsPanel />);
+        chooseFile(container);
+        fireEvent.click(await screen.findByRole('button', { name: 'Apply import' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(mocks.commit).toHaveBeenCalledTimes(1);
+        expect(screen.queryByRole('status')).toBeNull();
+    });
     it('stages the entire import without committing in Manual mode', async () => {
         mocks.instant = false;
         const { container } = render(<SettingsPanel />);
         chooseFile(container);
         fireEvent.click(await screen.findByRole('button', { name: 'Stage import' }));
-        await screen.findByText('Import staged. Use Apply to save it to the keyboard.');
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
         expect(mocks.sync).toHaveBeenCalledTimes(1);
+        // The Apply button's pending count shows the staged state; no status text.
+        expect(screen.queryByRole('status')).toBeNull();
         expect(mocks.commit).not.toHaveBeenCalled();
     });
     it('uses the provider offline-loading path and does not claim success if cancelled', async () => {
@@ -63,7 +73,7 @@ describe('import review', () => {
         await waitFor(() => expect(mocks.loadFromFile).toHaveBeenCalledTimes(1));
         expect(mocks.setKeyboard).not.toHaveBeenCalled();
         expect(mocks.sync).not.toHaveBeenCalled();
-        expect(screen.queryByText('Layout opened offline. No keyboard was changed.')).toBeNull();
+        expect(screen.queryByRole('status')).toBeNull();
     });
     it('requires pending edits to be resolved before reading another file', async () => {
         mocks.pending = { key: {} };
