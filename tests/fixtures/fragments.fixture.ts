@@ -11,9 +11,12 @@ import type {
     FragmentOption,
     FragmentInstance,
     FragmentComposition,
-    FragmentState
+    FragmentState,
+    FragmentWidget
 } from '../../src/types/keyboard.types';
 import { createTestKeyboardInfo } from './keyboard-info.fixture';
+import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 
 // Fragment IDs (protocol uses numeric IDs)
 export const FRAGMENT_IDS = {
@@ -492,3 +495,73 @@ export const SVIL_FILE_FRAGMENTS = {
     // Composition as stored in .svil file
     composition: createTestComposition(),
 };
+
+// ============================================================================
+// Pointing slots (zero-key widget fragments), as in the firmware's sval.json.
+// ============================================================================
+
+export const POINTING_FRAGMENT_IDS = {
+    pointing_none: 4,
+    pointing_trackball_pmw3360: 5,
+    pointing_trackball_pmw3389: 6,
+    pointing_touchpad_azoteq: 7,
+    pointing_trackpoint: 8,
+    pointing_unknown: 9,
+} as const;
+
+export const POINTING_INSTANCE_IDX = { left: 10, right: 11 } as const;
+
+export function createPointingFragments(): Record<string, FragmentDefinition> {
+    const w = (module: FragmentWidget['module'], sensor?: FragmentWidget['sensor']): FragmentWidget =>
+        ({ kind: 'pointing', module, ...(sensor ? { sensor } : {}), w: 2.5, h: 2.5 });
+    return {
+        pointing_none: { id: 4, description: 'No pointing module', kle: [], widget: w('none') },
+        pointing_trackball_pmw3360: { id: 5, description: 'PMW3360 trackball', kle: [], widget: w('trackball', 'pmw3360') },
+        pointing_trackball_pmw3389: { id: 6, description: 'PMW3389 trackball', kle: [], widget: w('trackball', 'pmw3389') },
+        pointing_touchpad_azoteq: { id: 7, description: 'Azoteq touchpad', kle: [], widget: w('touchpad', 'azoteq') },
+        pointing_trackpoint: { id: 8, description: 'TrackPoint', kle: [], widget: w('trackpoint', 'trackpoint') },
+        pointing_unknown: { id: 9, description: 'Unknown pointing module', kle: [], widget: w('unknown') },
+    };
+}
+
+export function createPointingInstance(side: 'left' | 'right'): FragmentInstance {
+    const placement = side === 'left' ? { x: 4.2, y: 5.25 } : { x: 18.3, y: 5.25 };
+    return {
+        id: `${side}_pointing`,
+        hardware_detect: true,
+        fragment_options: Object.keys(POINTING_FRAGMENT_IDS).map((fragment, i) => ({
+            fragment,
+            placement,
+            matrix_map: [],
+            allow_override: false,
+            ...(i === 0 ? { default: true } : {}),
+        })),
+    } as FragmentInstance;
+}
+
+/**
+ * The shipped Svalboard definition (fragments + composition from the default
+ * layout) with the two pointing instances appended at indices 10 and 11.
+ */
+export function createSvalboardPointingKbinfo(options?: {
+    sixKey?: boolean;
+    hwDetection?: [number, number][];
+    withPointing?: boolean;
+}): KeyboardInfo {
+    const svil = JSON.parse(readFileSync(resolvePath(__dirname, '../../src/default-layouts/sval-default.svil'), 'utf8'));
+    const kbinfo = createTestKeyboardInfo({ rows: 10, cols: 6, layers: 2, kbid: '5a5a5a5a5a5a5a5a' });
+    kbinfo.fragments = { ...svil.fragments, ...(options?.withPointing === false ? {} : createPointingFragments()) };
+    kbinfo.composition = {
+        instances: [
+            ...svil.composition.instances,
+            ...(options?.withPointing === false ? [] : [createPointingInstance('left'), createPointingInstance('right')]),
+        ],
+    };
+    const finger = options?.sixKey ? 'finger_6' : 'finger_5';
+    kbinfo.fragmentState = createFragmentState({
+        hwDetection: options?.hwDetection ?? [],
+        userSelections: ['left_pinky', 'left_ring', 'left_middle', 'left_index', 'right_index', 'right_middle', 'right_ring', 'right_pinky']
+            .map((id) => [id, finger] as [string, string]),
+    });
+    return kbinfo;
+}

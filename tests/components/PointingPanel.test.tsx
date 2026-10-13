@@ -22,7 +22,6 @@ vi.mock('../../src/layout/SecondarySidebar/Panels/MouseKeysSection', () => ({
 vi.mock('../../src/layout/SecondarySidebar/Panels/DynamicMenuPanel', () => ({
     default: () => <div data-testid="dynamic-menu" />,
 }));
-vi.mock('@/components/PointingHardwareSummary', () => ({ default: () => null }));
 vi.mock('@/layout/SecondarySidebar/components/DescriptionBlock', () => ({
     default: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
 }));
@@ -49,5 +48,12 @@ describe('PointingPanel: all keys come from the shared MouseKeysSection', () => 
         render(<PointingPanel isPicker />);
         expect(screen.getByTestId('mouse-keys-section')).toBeInTheDocument();
         expect(screen.queryByTestId('stray-key')).not.toBeInTheDocument();
+    });
+
+    it.each(['sidebar', 'bottombar'] as const)('%s mode no longer shows the pointing hardware summary (it lives in the layout slots)', (mode) => {
+        layoutSettings.layoutMode = mode;
+        render(<PointingPanel />);
+        expect(screen.queryByTestId('pointing-hardware-summary')).not.toBeInTheDocument();
+        expect(screen.queryByText(/trackball|TrackPoint|Checking/i)).not.toBeInTheDocument();
     });
 });

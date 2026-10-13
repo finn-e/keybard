@@ -28,6 +28,8 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useChanges } from "@/hooks/useChanges";
 import { useIsDark } from "@/lib/theme";
 import { dark3DLabelColor, needsDarkIndicatorOutline, screenedBackdropHex } from "./layer3DColors";
+import { PointingSlot } from "./pointing-viz/PointingSlot";
+import { usePointingSlots } from "@/hooks/usePointingSlots";
 
 const TEXT_CLASS_TO_HEX: Record<string, string> = {
     "text-white": "#ffffff",
@@ -51,6 +53,8 @@ interface KeyboardProps {
     isToggling3D?: boolean;
     showDropTargetHighlight?: boolean;
     isLayerDragActive?: boolean;
+    /** Draw each hand's pointing slot (live module animation). Thumbnails and print pass false. */
+    showPointingSlots?: boolean;
 }
 
 /**
@@ -70,6 +74,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
     isToggling3D = false,
     showDropTargetHighlight = false,
     isLayerDragActive = false,
+    showPointingSlots = true,
 }) => {
     const {
         selectKeyboardKey,
@@ -79,6 +84,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
     } = useKeyBinding();
 
     const { activePanel, itemToEdit } = usePanels();
+    const pointingSlots = usePointingSlots();
     const { hasPendingChangeForKey } = useChanges();
 
     // Use dynamic keylayout from fragments if available, otherwise fallback to hardcoded layout
@@ -737,6 +743,24 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                         }}
                     />
                 )}
+                {/* Pointing slots: the pocket between each hand's fingers and thumb. Placed and moved like thumb keys. */}
+                {showPointingSlots && !(!is3DMode && isThumb3DOffsetActive) && pointingSlots.map((slot) => {
+                    const xPos = slot.x - (fingerClusterSqueeze > 0 ? fingerClusterSqueeze : 0) + layoutOffsets.offsetX;
+                    const yPos = getYPos(slot.y) + layoutOffsets.offsetY;
+                    return (
+                        <PointingSlot
+                            key={`pointing-${slot.side}`}
+                            slot={slot}
+                            unitPx={currentUnitSize}
+                            style={{
+                                left: xPos * currentUnitSize,
+                                top: yPos * currentUnitSize,
+                                transform: (is3DMode && isThumb3DOffsetActive) ? "translateY(900px)" : undefined,
+                                transition: is3DMode ? KEY_3D_MOTION_TRANSITION : undefined,
+                            }}
+                        />
+                    );
+                })}
                 {/* Keys */}
                 {Object.entries(keyboardLayout).map(([matrixPos, layout]) => {
                     const pos = Number(matrixPos);

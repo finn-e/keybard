@@ -292,7 +292,21 @@ export interface SvilAPI extends KeyboardAPI {
 export interface FragmentDefinition {
     id: number;                 // Numeric fragment ID (0-254), used in protocol
     description?: string;       // Human-readable name (e.g., "5-key finger cluster")
-    kle: unknown[];            // KLE layout data for visual rendering
+    kle: unknown[];            // KLE layout data for visual rendering ([] for a zero-key widget fragment)
+    widget?: FragmentWidget;    // Zero-key fragment drawn as a widget (pointing module slot)
+}
+
+/**
+ * A zero-key fragment drawn as a widget instead of keys. An instance whose every
+ * option is a widget fragment is a widget instance: it never adds keys to the
+ * layout, and only hardware detection (0x18) decides which option it shows.
+ */
+export interface FragmentWidget {
+    kind: "pointing";
+    module: "none" | "unknown" | "trackball" | "touchpad" | "trackpoint";
+    sensor?: "pmw3360" | "pmw3389" | "azoteq" | "trackpoint";
+    w: number;                  // Size in key units
+    h: number;
 }
 
 /**
@@ -326,6 +340,7 @@ export interface FragmentInstance {
     // Selectable instance (user can choose):
     fragment_options?: FragmentOption[];  // Available fragments for this position
     allow_override?: boolean;   // Whether user can override hardware detection (default: true)
+    hardware_detect?: boolean;  // Firmware reports this position via 0x18
 }
 
 /**

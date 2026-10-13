@@ -1,7 +1,7 @@
 import type { CustomValueEntry, KeyboardInfo } from "../types/keyboard.types";
 import { ComboOptions } from "../types/keyboard.types";
 import { getClosestPresetColor } from "../utils/color-conversion";
-import { FragmentComposerService } from "./fragment-composer.service";
+import { FragmentComposerService, isWidgetInstance } from "./fragment-composer.service";
 import { FragmentService } from "./fragment.service";
 import { keyService } from "./key.service";
 import { activeKeycodeVersion } from '@/constants/keycode-numbering';
@@ -435,7 +435,8 @@ export class FileService {
             };
 
             kbinfo.composition.instances.forEach((instance, idx) => {
-                if (instance.fragment_options) {
+                // Widget instances (pointing slots) follow detection; they are not a selection.
+                if (instance.fragment_options && !isWidgetInstance(kbinfo, instance)) {
                     const userSelection = getUserSelection(instance.id);
                     const hasUserSelection = userSelection
                         ? instance.fragment_options.some((opt) => opt.fragment === userSelection)
