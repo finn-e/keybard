@@ -12,6 +12,9 @@ Sign conventions everywhere: dx +right, dy +down (HID). v +up, h +right (HID whe
 
 ---
 
+
+> **Feature flag.** The pointing slots and the live `0x2D` poll are off unless `src/features/pointing-viz-flag.ts` turns them on: a build with `VITE_POINTING_VIZ=1` (the dev server's `.env.development`), a browser that opened Keybard once with `?pointingViz=1` (`?pointingViz=0` clears it), or a demo page (`?pointingDemo=...`). Fragment support itself (widget instances skipped when laying out keys, left out of the Fragments panel and `.svil` selections) is always on, so a board whose definition has pointing slots lays out correctly with the flag off.
+
 ## A. Board definition (sval.json)
 
 The firmware builder edits `keyboards/svalboard/keymaps/sval/sval.json` and adds the same fragments and composition to `keyboards/svalboard/keymaps/blank/sval.json`, converting blank to the fragment schema. If converting blank is impractical, the builder leaves blank alone, says so, and tests with `:sval`.

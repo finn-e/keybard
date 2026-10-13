@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointingModuleKind, PointingSensor } from "@/components/pointing-viz/types";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { pointingDemoTourModule, POINTING_DEMO_TOUR_MS } from "@/components/pointing-viz/simulate";
+import { pointingVizEnabled } from "@/features/pointing-viz-flag";
 import { readPointingDemo } from "@/hooks/usePointingLive";
 import { widgetInstanceIndices, type ComposedWidget } from "@/services/fragment-composer.service";
 import { keyboardService } from "@/services/keyboard.service";
@@ -55,10 +56,12 @@ const isSettled = (slots: ComposedWidget[]) => slots.every((s) => s.widget !== n
  * right_pointing), with the module hardware detection (0x18) reports for it.
  * Empty when disconnected or when the definition has no pointing instances,
  * except in demo mode (?pointingDemo=...), which always shows both hands.
+ * Always empty while the pointing-viz flag is off (features/pointing-viz-flag.ts).
  */
 export function usePointingSlots(): PointingSlotState[] {
     const { keyboard, isConnected, connectionSessionId } = useKeyboard();
-    const demo = useMemo(readPointingDemo, []);
+    const enabled = useMemo(pointingVizEnabled, []);
+    const demo = useMemo(() => (enabled ? readPointingDemo() : null), [enabled]);
     const [polled, setPolled] = useState<{ session: number; hw: Map<number, number>; done: boolean }>();
     const keyboardRef = useRef(keyboard);
     keyboardRef.current = keyboard;
@@ -75,7 +78,7 @@ export function usePointingSlots(): PointingSlotState[] {
     const atConnect = keyboard?.fragmentState?.hwDetection;
 
     useEffect(() => {
-        if (demo || !isConnected || !hasWidgets) return;
+        if (!enabled || demo || !isConnected || !hasWidgets) return;
         const kb = keyboardRef.current;
         if (!kb || isSettled(composeSlots(kb, toMap(atConnect)))) {
             setPolled({ session: connectionSessionId, hw: toMap(atConnect), done: true });
@@ -101,13 +104,14 @@ export function usePointingSlots(): PointingSlotState[] {
             window.clearTimeout(timer);
         };
         // Once per connection: keyboard changes with every edit.
-    }, [demo, isConnected, connectionSessionId, hasWidgets]);
+    }, [enabled, demo, isConnected, connectionSessionId, hasWidgets]);
 
     const current = polled?.session === connectionSessionId ? polled : undefined;
     const hw = current?.hw ?? atConnect;
     const done = current?.done ?? false;
 
     return useMemo(() => {
+        if (!enabled) return [];
         if (demo) {
             const step = demo.tour
                 ? { ...demo, left: pointingDemoTourModule("left", tourStep), right: pointingDemoTourModule("right", tourStep) }
@@ -117,7 +121,7 @@ export function usePointingSlots(): PointingSlotState[] {
         if (!isConnected || !keyboard || !hasWidgets) return [];
         return composeSlots(keyboard, toMap(hw)).map((slot) => toSlotState(keyboard, slot, done));
         // keyboard identity changes on every edit; the parts used here are listed.
-    }, [demo, tourStep, isConnected, hasWidgets, hw, done, keyboard?.composition, keyboard?.fragments, keyboard?.fragmentState, keyboard?.cols]);
+    }, [enabled, demo, tourStep, isConnected, hasWidgets, hw, done, keyboard?.composition, keyboard?.fragments, keyboard?.fragmentState, keyboard?.cols]);
 }
 
 function toSlotState(kb: KeyboardInfo, slot: ComposedWidget, done: boolean): PointingSlotState {

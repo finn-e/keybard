@@ -3,6 +3,7 @@ import { act, renderHook } from '@testing-library/react';
 
 import { POINTING_SLOT_MAX_READS, POINTING_SLOT_RETRY_MS, POINTING_SLOT_FALLBACK, usePointingSlots } from '../../src/hooks/usePointingSlots';
 import { POINTING_DEMO_TOUR_MS } from '../../src/components/pointing-viz/simulate';
+import { _setPointingVizEnabledForTest } from '../../src/features/pointing-viz-flag';
 import { FragmentComposerService } from '../../src/services/fragment-composer.service';
 import { FragmentService } from '../../src/services/fragment.service';
 import { KleService } from '../../src/services/kle.service';
@@ -34,10 +35,23 @@ describe('usePointingSlots', () => {
         ctx.connectionSessionId = 1;
         ctx.keyboard = createSvalboardPointingKbinfo({ sixKey: true });
         setSearch('');
+        _setPointingVizEnabledForTest(true);
     });
     afterEach(() => {
         vi.useRealTimers();
         setSearch('');
+        _setPointingVizEnabledForTest(undefined);
+    });
+
+    it('shows nothing and reads nothing while the pointing-viz flag is off, even in demo mode', async () => {
+        _setPointingVizEnabledForTest(false);
+        ctx.keyboard = createSvalboardPointingKbinfo({ sixKey: true, hwDetection: [[IDX.left, ID.pointing_trackpoint]] });
+        setSearch('?pointingDemo=tour');
+        const { result } = renderHook(() => usePointingSlots());
+        expect(result.current).toEqual([]);
+        await act(async () => { await vi.advanceTimersByTimeAsync(POINTING_SLOT_RETRY_MS * (POINTING_SLOT_MAX_READS + 1)); });
+        expect(getFragmentHardware).not.toHaveBeenCalled();
+        expect(result.current).toEqual([]);
     });
 
     it('uses the detection read at connect without reading again once both slots have settled', async () => {
