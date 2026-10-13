@@ -7,8 +7,8 @@ name: Deploy Keybard (keybard.svalboard.com)
 #
 # Production is promoted, not deployed on every merge: merges to main go to the
 # bleeding-edge site (next-deploy.yml). Promote with the launch tag shared with
-# the firmware and Keybard Host releases (e.g. vLaunch2), so one name means the
-# same release everywhere. The tag must be on main:
+# Keybard Host release (e.g. vLaunch2.3). Only a vLaunch tag on main deploys;
+# vLaunch<N>.<M> tags are Keybard and Keybard Host releases, not firmware:
 #
 #   gh workflow run svalboard-deploy.yml -R svalboard/keybard -f ref=<launch tag>
 
@@ -16,9 +16,8 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Launch tag (or commit) on main to deploy, e.g. vLaunch2"
+        description: "Launch tag on main to deploy, e.g. vLaunch2.3"
         required: true
-        default: main
 
 permissions:
   contents: read
@@ -32,14 +31,20 @@ jobs:
     if: github.repository == 'svalboard/keybard'
     runs-on: ubuntu-latest
     steps:
+      - name: Only a launch tag
+        env:
+          REF: ${{ inputs.ref }}
+        run: '[[ "$REF" =~ ^vLaunch[0-9]+(\.[0-9]+)*$ ]] || { echo "::error::$REF is not a launch tag (vLaunch<N> or vLaunch<N>.<M>)"; exit 1; }'
       - uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.ref }}
+          ref: refs/tags/${{ inputs.ref }}
           fetch-depth: 0
       - name: Only deploy what is already on main
+        env:
+          REF: ${{ inputs.ref }}
         run: |
           git fetch -q origin main
-          git merge-base --is-ancestor HEAD origin/main || { echo "::error::${{ inputs.ref }} is not on main"; exit 1; }
+          git merge-base --is-ancestor HEAD origin/main || { echo "::error::$REF is not on main"; exit 1; }
           echo "Deploying $(git log -1 --format='%h %s')"
       - id: meta
         run: |

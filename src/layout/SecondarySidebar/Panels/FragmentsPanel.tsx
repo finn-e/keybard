@@ -76,6 +76,7 @@ const FragmentsPanel: React.FC = () => {
             hwDetection: newHwDetection,
             eepromSelections: newEepromSelections,
             userSelections: newUserSelections,
+            selectionsRead: oldState?.selectionsRead,
         };
 
         selections.forEach(({ instanceId, fragmentName }) => {

@@ -54,6 +54,13 @@ function describe(problem: PointingProblem): ReactNode {
                     and didn't start. Check its cable.
                 </>
             );
+        case "not-picked-up":
+            return (
+                <>
+                    {halfName(problem.half)} didn't pick up its {MODULE_NAMES[problem.actual]} at startup. Check its
+                    cable, then unplug and replug that half.
+                </>
+            );
     }
 }
 
@@ -67,13 +74,15 @@ export const TrackballMismatchDialog: FC = () => {
     const kbid = keyboard?.kbid ?? "";
     const problems = isConnected ? findPointingProblems(keyboard?.pointing_hardware) : [];
     const open = problems.length > 0 && acknowledged !== kbid;
+    // Only builds made for one module can be fixed by flashing another .uf2.
+    const needsFirmware = problems.some((p) => p.kind !== "not-picked-up");
     const acknowledge = () => setAcknowledged(kbid);
 
     return (
         <Dialog open={open} onOpenChange={(next) => !next && acknowledge()}>
             <DialogContent className="sm:max-w-[520px]">
                 <DialogHeader>
-                    <DialogTitle>Wrong pointing-device firmware</DialogTitle>
+                    <DialogTitle>{needsFirmware ? "Wrong pointing-device firmware" : "Pointing device not picked up"}</DialogTitle>
                     <DialogDescription asChild>
                         <div className="space-y-2 text-sm">
                             <ul className="list-disc space-y-2 pl-5">
@@ -81,11 +90,11 @@ export const TrackballMismatchDialog: FC = () => {
                                     <li key={i}>{describe(p)}</li>
                                 ))}
                             </ul>
-                            <p>
+                            {needsFirmware && <p>
                                 Download it from <FirmwareLink />; <span className="font-mono">&lt;release&gt;</span> is
                                 that release's version. To flash a half, double-tap its reset button so it shows up as a
                                 drive named <span className="font-mono">RPI-RP2</span>, then copy the .uf2 onto that drive.
-                            </p>
+                            </p>}
                         </div>
                     </DialogDescription>
                 </DialogHeader>

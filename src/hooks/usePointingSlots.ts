@@ -125,7 +125,9 @@ export function usePointingSlots(): PointingSlotState[] {
 }
 
 function toSlotState(kb: KeyboardInfo, slot: ComposedWidget, done: boolean): PointingSlotState {
-    if (!slot.widget) return { ...slot, kind: done ? "none" : "pending" };
+    // A hand that never reported is unknown, not empty: its half may be on older
+    // firmware, disconnected, or still starting.
+    if (!slot.widget) return { ...slot, kind: done ? "unknown" : "pending" };
     return {
         ...slot,
         kind: slot.widget.module,

@@ -86,13 +86,13 @@ describe('usePointingSlots', () => {
         expect(getFragmentHardware).toHaveBeenCalledTimes(2);
     });
 
-    it('gives up after six reads and shows "none" for a slot that never settles', async () => {
+    it('gives up after six reads and shows "unknown", not "none", for a slot that never settles', async () => {
         replies.push(new Map([[IDX.left, ID.pointing_unknown]]));
         const { result } = renderHook(() => usePointingSlots());
         for (let i = 0; i < POINTING_SLOT_MAX_READS - 1; i++) await tick();
         expect(kinds(result.current)).toEqual(['left:unknown', 'right:pending']);
         await tick();
-        expect(kinds(result.current)).toEqual(['left:unknown', 'right:none']);
+        expect(kinds(result.current)).toEqual(['left:unknown', 'right:unknown']);
         for (let i = 0; i < 3; i++) await tick();
         expect(getFragmentHardware).toHaveBeenCalledTimes(POINTING_SLOT_MAX_READS);
     });

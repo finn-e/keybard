@@ -144,6 +144,7 @@ function restoreFragments(file: KeyboardInfo, current: KeyboardInfo, next: Keybo
         hwDetection: copy<number, number>(was.hwDetection, Number),
         eepromSelections: copy<number, number>(was.eepromSelections, Number),
         userSelections: copy<string, string>(was.userSelections, String),
+        selectionsRead: was.selectionsRead,
     };
     let changed = false;
     for (const { idx, instance } of fragments.getSelectableInstances(current)) {

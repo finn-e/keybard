@@ -125,6 +125,7 @@ export class FragmentService {
             const count = data[1];
             const state = kbinfo.fragmentState!;
             state.eepromSelections.clear();
+            state.selectionsRead = true;
             const instances = kbinfo.composition?.instances ?? [];
 
             // Parse option indices for each instance position
@@ -152,7 +153,9 @@ export class FragmentService {
      * @returns true on success, false on failure
      */
     async setSelection(kbinfo: KeyboardInfo, instanceIdx: number, optionIdx: number): Promise<boolean> {
-        if (!kbinfo.fragmentState) {
+        // 0x1A replaces every instance's selection: without the board's current ones
+        // (0x19 failed at connect), writing one would reset the others.
+        if (!kbinfo.fragmentState?.selectionsRead) {
             return false;
         }
 
