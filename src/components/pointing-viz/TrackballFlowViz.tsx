@@ -1,17 +1,18 @@
-// Trackball pointing slot: a flow field inside a circle (the ball seen from above).
-// Particles are advected by a vector field = smoothed ball velocity, shaped like the
-// projected surface motion of a rotating sphere (fastest at the centre, slower toward
-// the rim), plus a gentle curl noise. The ball "pushes" the field and it relaxes back
-// through the exponential smoothing. See docs/pointing-fragments-spec.md section D.
+// Trackball pointing slot: a glossy ball in its socket, seen from above. Dots fixed
+// to the ball's surface turn with it: the ball's motion (dx, dy) rolls the near face
+// in that direction, so the dots sweep across the middle and foreshorten and fade
+// as they wrap round the edge. Lit from the upper left, with a specular highlight
+// and a rim bounce. Scroll locks the roll to the scroll axis and shows its
+// direction; precision rolls slower under a fine reticle; boost rolls faster with
+// motion blur and a pulse. See docs/pointing-fragments-spec.md section D.
 //
-// Pure step/math helpers are exported with a `_test` prefix for unit tests; the
-// component keeps all animation state in refs and never calls setState per frame.
+// The component keeps all animation state in refs and never calls setState per
+// frame. Pure helpers are exported as _testTrackball for unit tests.
 
 import { useEffect, useRef, useState, type JSX } from "react";
 import {
     normalizeSpeed,
     setupPointingCanvas,
-    POINTING_IDLE_MS,
     POINTING_SMOOTHING_MS,
     type PointingLiveSample,
     type PointingMode,
@@ -24,27 +25,29 @@ import {
 // Tunables
 // ---------------------------------------------------------------------------
 
-const MAX_PARTICLES = 60;
-/** Ease between active and idle, ms. */
-const IDLE_EASE_MS = 400;
-/** Idle still-image alpha. */
-const IDLE_ALPHA = 0.35;
-/** Boost entry pulse duration, ms. */
-const PULSE_MS = 600;
-/** Button flash duration, ms. */
-const FLASH_MS = 150;
-/** Reduced-motion redraw throttle, ms. */
-const STATIC_THROTTLE_MS = 250;
-/** Disk radii per second at full magnitude. */
-const FLOW_GAIN = 1.5;
-/** Disk radii per second for scroll conveyor at full magnitude. */
-const SCROLL_GAIN = 1.3;
+/** Dots on the ball's surface (spread evenly, a Fibonacci sphere). */
+const DOT_COUNT = 150;
+/** Dot radius as a fraction of the ball's radius. */
+const DOT_RADIUS = 0.05;
+/** Ball radius as a fraction of the smaller side of the slot. */
+const BALL_RADIUS = 0.36;
+/** Ball radii of surface travel per second at full speed, per mode. */
+const ROLL_GAIN: Record<PointingMode, number> = { pointer: 3.2, scroll: 2.6, precision: 1.3, boost: 5 };
 /** Wheel units are much coarser than counts; scale them to counts for speed. */
 const WHEEL_TO_COUNTS = 8;
-/** A sample counts as the current target for at most this long, ms. */
+/** A sample drives the ball for at most this long after it arrives, ms. */
 const MIN_FRESH_MS = 100;
 /** Frame dt clamp, ms (tab switches, debugger pauses). */
 const MAX_FRAME_DT = 100;
+/** Below this surface speed (radii/s) with nothing else animating, the loop stops. */
+const SETTLED_SPEED = 0.01;
+/** Boost entry pulse, button flash, ms. */
+const PULSE_MS = 600;
+const FLASH_MS = 150;
+/** Reduced-motion redraw throttle, ms. */
+const STATIC_THROTTLE_MS = 250;
+/** Re-orthonormalize the orientation this often (frames) so rounding can't skew it. */
+const ORTHO_EVERY = 120;
 
 // ---------------------------------------------------------------------------
 // State
@@ -52,90 +55,55 @@ const MAX_FRAME_DT = 100;
 
 export type ScrollAxis = "vertical" | "horizontal";
 
-export interface FlowState {
-    /** Smoothed ball rate, counts/ms (screen axes: +x right, +y down). */
+export interface BallState {
+    /** Orientation: row-major 3x3 rotation taking the ball's own frame to the view. */
+    rot: Float64Array;
+    /** Dots in the ball's own frame, unit vectors (x, y, z per dot). */
+    dots: Float32Array;
+    /** Smoothed surface velocity, counts/ms, screen axes (+x right, +y down). */
     vx: number;
     vy: number;
-    /** Smoothed scroll rate along `axis`, counts/ms, signed in drawn direction. */
-    scroll: number;
-    /** 0..1 visual magnitude. */
-    mag: number;
-    /** 0 = idle still image, 1 = fully animated. */
-    activity: number;
     mode: PointingMode;
     axis: ScrollAxis;
-    lastSample: PointingLiveSample | null;
-    /** Local clock (performance.now) when lastSample was first seen. */
-    sampleSeenAt: number;
-    /** Local clock of the last sample with any motion. */
-    lastMotionAt: number;
-    /** Remaining boost-entry pulse, ms. */
+    /** Remaining boost pulse and button flash, ms. */
     pulseMs: number;
-    /** Remaining button flash, ms. */
     flashMs: number;
-    /** Noise clock, seconds (runs slower in precision). */
-    noiseT: number;
-    /** Particle positions in unit-disk coordinates. */
-    px: Float32Array;
-    py: Float32Array;
-    /** Last field velocity per particle (disk radii / s), for trail drawing. */
-    fx: Float32Array;
-    fy: Float32Array;
-    /** Age and lifetime, seconds. */
-    life: Float32Array;
-    maxLife: Float32Array;
-    rng: number;
+    lastSample: PointingLiveSample | null;
+    sampleSeenAt: number;
+    frames: number;
 }
 
-function nextRand(s: FlowState): number {
-    // xorshift32, deterministic per state.
-    let x = s.rng | 0;
-    x ^= x << 13;
-    x ^= x >>> 17;
-    x ^= x << 5;
-    s.rng = x | 0;
-    return (x >>> 0) / 4294967296;
+function fibonacciSphere(n: number): Float32Array {
+    const out = new Float32Array(n * 3);
+    const golden = Math.PI * (3 - Math.sqrt(5));
+    for (let i = 0; i < n; i++) {
+        const y = 1 - (2 * (i + 0.5)) / n;
+        const r = Math.sqrt(1 - y * y);
+        const a = golden * i;
+        out[i * 3] = Math.cos(a) * r;
+        out[i * 3 + 1] = y;
+        out[i * 3 + 2] = Math.sin(a) * r;
+    }
+    return out;
 }
 
-function spawnRandom(s: FlowState, i: number): void {
-    // Uniform in the disk.
-    const r = Math.sqrt(nextRand(s)) * 0.97;
-    const a = nextRand(s) * Math.PI * 2;
-    s.px[i] = r * Math.cos(a);
-    s.py[i] = r * Math.sin(a);
-    s.life[i] = 0;
-    s.maxLife[i] = 1.6 + nextRand(s) * 2.4;
-}
-
-function createFlowState(seed = 1): FlowState {
-    const s: FlowState = {
+function createBallState(side: "left" | "right" = "left"): BallState {
+    const rot = new Float64Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+    // Start the two hands at different orientations so they don't look cloned.
+    rotate(rot, 0.6, 0.8, 0, side === "right" ? 1.1 : 0.4);
+    return {
+        rot,
+        dots: fibonacciSphere(DOT_COUNT),
         vx: 0,
         vy: 0,
-        scroll: 0,
-        mag: 0,
-        activity: 0,
         mode: "pointer",
         axis: "vertical",
-        lastSample: null,
-        sampleSeenAt: -Infinity,
-        lastMotionAt: -Infinity,
         pulseMs: 0,
         flashMs: 0,
-        noiseT: 0,
-        px: new Float32Array(MAX_PARTICLES),
-        py: new Float32Array(MAX_PARTICLES),
-        fx: new Float32Array(MAX_PARTICLES),
-        fy: new Float32Array(MAX_PARTICLES),
-        life: new Float32Array(MAX_PARTICLES),
-        maxLife: new Float32Array(MAX_PARTICLES),
-        rng: (seed * 2654435761) | 0 || 1,
+        lastSample: null,
+        sampleSeenAt: -Infinity,
+        frames: 0,
     };
-    for (let i = 0; i < MAX_PARTICLES; i++) {
-        spawnRandom(s, i);
-        // Stagger ages so respawns don't happen in lockstep.
-        s.life[i] = nextRand(s) * s.maxLife[i];
-    }
-    return s;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +114,7 @@ function hasMotion(s: PointingLiveSample): boolean {
     return s.dx !== 0 || s.dy !== 0 || s.h !== 0 || s.v !== 0;
 }
 
-/** Which axis the scroll conveyor runs along for this sample (null = keep previous). */
+/** Which axis a scroll runs along for this sample (null = keep the previous one). */
 function scrollAxisOf(s: PointingLiveSample): ScrollAxis | null {
     if (s.axisLock === "horizontal") return "horizontal";
     if (s.axisLock === "vertical") return "vertical";
@@ -155,181 +123,115 @@ function scrollAxisOf(s: PointingLiveSample): ScrollAxis | null {
     return null;
 }
 
-/**
- * Scroll rate along `axis`, counts/ms, signed in drawn screen direction
- * (+ = right / down). Uses the driver's wheel units when present, else dx/dy.
- * naturalScroll flips it so the user sees content direction.
- */
-function scrollRateOf(s: PointingLiveSample, axis: ScrollAxis): number {
-    const dt = s.dtMs > 0 ? s.dtMs : 33;
-    let r: number;
-    if (axis === "vertical") r = s.v !== 0 ? (-s.v * WHEEL_TO_COUNTS) / dt : s.dy / dt;
-    else r = s.h !== 0 ? (s.h * WHEEL_TO_COUNTS) / dt : s.dx / dt;
-    return s.naturalScroll ? -r : r;
-}
-
-/** Exponential smoothing factor for a frame of `frameDtMs`. */
+/** Exponential smoothing factor for a frame of frameDtMs. */
 function smoothingAlpha(frameDtMs: number, tauMs = POINTING_SMOOTHING_MS): number {
     if (!(frameDtMs > 0)) return 0;
     return 1 - Math.exp(-frameDtMs / tauMs);
 }
 
-/** Fold a newly seen sample into the state (mode, pulse, flash, idle clock). */
-function ingestSample(s: FlowState, sample: PointingLiveSample, now: number): void {
-    const prevMode = s.lastSample ? s.mode : "pointer";
+/**
+ * The surface velocity a sample asks for, counts/ms in screen axes. Scroll rolls
+ * along its axis only, from the driver's wheel units when it sent any, drawn the
+ * way the content moves (naturalScroll flips it).
+ */
+function targetVelocity(sample: PointingLiveSample, axis: ScrollAxis): { x: number; y: number } {
+    const dt = sample.dtMs > 0 ? sample.dtMs : 33;
+    if (sample.mode !== "scroll") return { x: sample.dx / dt, y: sample.dy / dt };
+    const flip = sample.naturalScroll ? -1 : 1;
+    if (axis === "vertical") return { x: 0, y: (flip * (sample.v !== 0 ? -sample.v * WHEEL_TO_COUNTS : sample.dy)) / dt };
+    return { x: (flip * (sample.h !== 0 ? sample.h * WHEEL_TO_COUNTS : sample.dx)) / dt, y: 0 };
+}
+
+/** Fold a newly seen sample into the state (mode, axis, pulse, flash). */
+function ingestSample(s: BallState, sample: PointingLiveSample, now: number): void {
+    const wasBoost = s.lastSample !== null && s.mode === "boost";
     s.lastSample = sample;
     s.sampleSeenAt = now;
-    if (hasMotion(sample)) s.lastMotionAt = now;
     s.mode = sample.mode;
-    if (sample.mode === "boost" && prevMode !== "boost") s.pulseMs = PULSE_MS;
-    if (sample.buttons !== 0) {
-        s.flashMs = FLASH_MS;
-        s.lastMotionAt = now;
-    }
+    if (sample.mode === "boost" && !wasBoost) s.pulseMs = PULSE_MS;
+    if (sample.buttons !== 0) s.flashMs = FLASH_MS;
     if (sample.mode === "scroll") {
-        const ax = scrollAxisOf(sample);
-        if (ax) s.axis = ax;
+        const axis = scrollAxisOf(sample);
+        if (axis) s.axis = axis;
     }
+}
+
+/** rot = R(axis, angle) * rot, axis (ax, ay, az) normalized here. */
+function rotate(rot: Float64Array, ax: number, ay: number, az: number, angle: number): void {
+    const len = Math.hypot(ax, ay, az);
+    if (!(len > 0) || angle === 0) return;
+    const x = ax / len, y = ay / len, z = az / len;
+    const c = Math.cos(angle), sn = Math.sin(angle), t = 1 - c;
+    const m00 = t * x * x + c, m01 = t * x * y - sn * z, m02 = t * x * z + sn * y;
+    const m10 = t * x * y + sn * z, m11 = t * y * y + c, m12 = t * y * z - sn * x;
+    const m20 = t * x * z - sn * y, m21 = t * y * z + sn * x, m22 = t * z * z + c;
+    for (let col = 0; col < 3; col++) {
+        const r0 = rot[col], r1 = rot[3 + col], r2 = rot[6 + col];
+        rot[col] = m00 * r0 + m01 * r1 + m02 * r2;
+        rot[3 + col] = m10 * r0 + m11 * r1 + m12 * r2;
+        rot[6 + col] = m20 * r0 + m21 * r1 + m22 * r2;
+    }
+}
+
+/** Gram-Schmidt on the rows, so the orientation stays a rotation. */
+function orthonormalize(rot: Float64Array): void {
+    let l = Math.hypot(rot[0], rot[1], rot[2]);
+    rot[0] /= l; rot[1] /= l; rot[2] /= l;
+    const d = rot[0] * rot[3] + rot[1] * rot[4] + rot[2] * rot[5];
+    rot[3] -= d * rot[0]; rot[4] -= d * rot[1]; rot[5] -= d * rot[2];
+    l = Math.hypot(rot[3], rot[4], rot[5]);
+    rot[3] /= l; rot[4] /= l; rot[5] /= l;
+    rot[6] = rot[1] * rot[5] - rot[2] * rot[4];
+    rot[7] = rot[2] * rot[3] - rot[0] * rot[5];
+    rot[8] = rot[0] * rot[4] - rot[1] * rot[3];
+}
+
+/** Surface speed in ball radii per second for the smoothed velocity. */
+function rollSpeed(s: BallState): number {
+    return normalizeSpeed(Math.hypot(s.vx, s.vy)) * ROLL_GAIN[s.mode];
 }
 
 /**
- * Field velocity at disk point (x, y) in disk radii per second, written into out.
- * Pointer-like modes: sphere-surface projection of the smoothed ball velocity plus
- * curl noise. Scroll: a uniform conveyor along the scroll axis.
+ * Advance one frame: ease the velocity toward the current sample (or to rest once
+ * it is stale), then roll the ball. View axes: +x right, +y down, +z toward the
+ * viewer. Rolling about (-uy, ux, 0) carries the near face along (ux, uy).
  */
-function fieldAt(s: FlowState, x: number, y: number, out: { x: number; y: number }): void {
-    if (s.mode === "scroll") {
-        const v = Math.sign(s.scroll) * normalizeSpeed(s.scroll) * SCROLL_GAIN * s.activity;
-        out.x = s.axis === "horizontal" ? v : 0;
-        out.y = s.axis === "vertical" ? v : 0;
-        return;
-    }
-    const speed = Math.hypot(s.vx, s.vy);
-    const precision = s.mode === "precision" ? 0.5 : 1;
-    let bx = 0;
-    let by = 0;
-    if (speed > 1e-6) {
-        const r2 = x * x + y * y;
-        // Projected surface speed of a sphere rotating under the finger.
-        const surface = 0.5 + 0.5 * Math.sqrt(Math.max(0, 1 - r2));
-        const k = (FLOW_GAIN * s.mag * surface * precision) / speed;
-        bx = s.vx * k;
-        by = s.vy * k;
-    }
-    // Curl noise from stream function psi = sin(a x + t) cos(b y - t) + 0.5 sin(c (x + y) + 0.9 t).
-    const t = s.noiseT;
-    const a = 2.1;
-    const b = 1.7;
-    const c = 1.3;
-    const sa = Math.sin(a * x + 0.7 * t);
-    const ca = Math.cos(a * x + 0.7 * t);
-    const sb = Math.sin(b * y - 0.5 * t);
-    const cb = Math.cos(b * y - 0.5 * t);
-    const cc = Math.cos(c * (x + y) + 0.9 * t);
-    const dPsiDx = a * ca * cb + 0.5 * c * cc;
-    const dPsiDy = -b * sa * sb + 0.5 * c * cc;
-    const amp = 0.09 * s.activity * (0.4 + s.mag) * precision;
-    out.x = bx + amp * dPsiDy;
-    out.y = by - amp * dPsiDx;
-}
-
-const scratch = { x: 0, y: 0 };
-
-/** Number of particles drawn and advected in the current mode. */
-function activeParticleCount(mode: PointingMode): number {
-    return mode === "precision" ? MAX_PARTICLES / 2 : MAX_PARTICLES;
-}
-
-/** Re-enter a particle that left the disk on the upstream side of the flow. */
-function wrapParticle(s: FlowState, i: number): void {
-    const x = s.px[i];
-    const y = s.py[i];
-    let dx = s.fx[i];
-    let dy = s.fy[i];
-    const dl = Math.hypot(dx, dy);
-    let nx: number;
-    let ny: number;
-    if (dl > 1e-4) {
-        dx /= dl;
-        dy /= dl;
-        // Reflect across the line through the centre perpendicular to the flow:
-        // keeps the cross-stream lane, moves to the upstream rim (conveyor).
-        const d = x * dx + y * dy;
-        nx = x - 2 * d * dx;
-        ny = y - 2 * d * dy;
-    } else {
-        nx = -x;
-        ny = -y;
-    }
-    const r = Math.hypot(nx, ny) || 1;
-    const k = (0.96 - nextRand(s) * 0.04) / r;
-    s.px[i] = nx * k;
-    s.py[i] = ny * k;
-    s.life[i] = 0;
-}
-
-/**
- * One animation step: smooth toward the latest sample, ease activity, tick timers,
- * advect particles. `now` is the local clock, `frameDtMs` the time since the last step.
- */
-function stepFlow(s: FlowState, now: number, frameDtMs: number): void {
-    const dt = Math.min(MAX_FRAME_DT, Math.max(0, frameDtMs));
+/** The latest sample still drives the ball. */
+function isFresh(s: BallState, now: number): boolean {
     const sample = s.lastSample;
-    const fresh = sample !== null && now - s.sampleSeenAt < Math.max(MIN_FRESH_MS, 3 * (sample.dtMs || 33));
-    const sdt = sample && sample.dtMs > 0 ? sample.dtMs : 33;
-    const tvx = fresh && sample ? sample.dx / sdt : 0;
-    const tvy = fresh && sample ? sample.dy / sdt : 0;
-    const tScroll = fresh && sample && s.mode === "scroll" ? scrollRateOf(sample, s.axis) : 0;
+    return sample !== null && now - s.sampleSeenAt <= Math.max(MIN_FRESH_MS, sample.dtMs * 1.5);
+}
 
-    const al = smoothingAlpha(dt);
-    s.vx += (tvx - s.vx) * al;
-    s.vy += (tvy - s.vy) * al;
-    s.scroll += (tScroll - s.scroll) * al;
-
-    const rate = s.mode === "scroll" ? Math.abs(s.scroll) : Math.hypot(s.vx, s.vy);
-    s.mag = fresh && sample?.saturated ? 1 : normalizeSpeed(rate);
-
-    const idle = now - s.lastMotionAt > POINTING_IDLE_MS;
-    const step = dt / IDLE_EASE_MS;
-    s.activity = idle ? Math.max(0, s.activity - step) : Math.min(1, s.activity + step);
-
+function stepBall(s: BallState, now: number, frameDtMs: number): void {
+    const dt = Math.min(Math.max(frameDtMs, 0), MAX_FRAME_DT);
+    const sample = s.lastSample;
+    const target = sample && isFresh(s, now) ? targetVelocity(sample, s.axis) : { x: 0, y: 0 };
+    const a = smoothingAlpha(dt);
+    s.vx += (target.x - s.vx) * a;
+    s.vy += (target.y - s.vy) * a;
     s.pulseMs = Math.max(0, s.pulseMs - dt);
     s.flashMs = Math.max(0, s.flashMs - dt);
-    const sec = dt / 1000;
-    s.noiseT += sec * (s.mode === "precision" ? 0.5 : 1);
 
-    if (s.activity <= 0) return;
-    const n = activeParticleCount(s.mode);
-    for (let i = 0; i < n; i++) {
-        fieldAt(s, s.px[i], s.py[i], scratch);
-        s.fx[i] = scratch.x;
-        s.fy[i] = scratch.y;
-        s.px[i] += scratch.x * sec;
-        s.py[i] += scratch.y * sec;
-        s.life[i] += sec;
-        if (s.px[i] * s.px[i] + s.py[i] * s.py[i] > 1) wrapParticle(s, i);
-        else if (s.life[i] > s.maxLife[i]) spawnRandom(s, i);
+    const speed = Math.hypot(s.vx, s.vy);
+    if (speed > 0) {
+        const ux = s.vx / speed, uy = s.vy / speed;
+        rotate(s.rot, -uy, ux, 0, (rollSpeed(s) * dt) / 1000);
     }
+    if (++s.frames % ORTHO_EVERY === 0) orthonormalize(s.rot);
 }
 
-/** True when the loop can sleep: fully idle and no transient effects running. */
-function isSettled(s: FlowState, now: number): boolean {
-    return s.activity <= 0 && s.pulseMs <= 0 && s.flashMs <= 0 && now - s.lastMotionAt > POINTING_IDLE_MS;
+/** Nothing left to animate: no fresh motion to follow, the ball at rest, no pulse or flash. */
+function isSettled(s: BallState, now: number): boolean {
+    if (s.lastSample && hasMotion(s.lastSample) && isFresh(s, now)) return false;
+    return rollSpeed(s) < SETTLED_SPEED && s.pulseMs <= 0 && s.flashMs <= 0;
 }
 
-/** Trail length as a fraction of the radius for a particle moving at `speed` radii/s. */
-function trailLength(mode: PointingMode, speed: number, mag: number): number {
-    if (mode === "scroll") return 0.08 + 0.22 * mag;
-    const k = mode === "boost" ? 2 : mode === "precision" ? 0.6 : 1;
-    // Trail ∝ magnitude, with a floor so slow particles still read as dots.
-    return Math.min(0.7, 0.04 + k * 0.16 * speed * (0.4 + mag));
-}
-
-/** Particle alpha from age (fade in after spawn/wrap, fade out before respawn). */
-function particleAlpha(life: number, maxLife: number): number {
-    const fadeIn = Math.min(1, life / 0.25);
-    const fadeOut = Math.min(1, Math.max(0, (maxLife - life) / 0.35));
-    return fadeIn * fadeOut;
+/** A dot in view space. */
+function dotInView(s: BallState, i: number, out: { x: number; y: number; z: number }): void {
+    const r = s.rot, d = s.dots, p = i * 3;
+    out.x = r[0] * d[p] + r[1] * d[p + 1] + r[2] * d[p + 2];
+    out.y = r[3] * d[p] + r[4] * d[p + 1] + r[5] * d[p + 2];
+    out.z = r[6] * d[p] + r[7] * d[p + 1] + r[8] * d[p + 2];
 }
 
 // ---------------------------------------------------------------------------
@@ -340,281 +242,238 @@ interface Geometry {
     cx: number;
     cy: number;
     r: number;
-    lw: number;
 }
 
 function geometry(width: number, height: number): Geometry {
-    const size = Math.max(1, Math.min(width, height));
-    const lw = Math.min(2, Math.max(0.75, size / 75));
-    return { cx: width / 2, cy: height / 2, r: Math.max(4, size / 2 - lw * 2 - 1), lw };
+    return { cx: width / 2, cy: height / 2, r: Math.min(width, height) * BALL_RADIUS };
 }
 
-const IDLE_RINGS = [0.32, 0.58, 0.84];
-const IDLE_DASH_FRACTION = 0.55;
+const view = { x: 0, y: 0, z: 0 };
+/** Dots are batched into fills by how far they face the viewer. */
+const DEPTH_BUCKETS = [0.25, 0.55, 1.01];
+const DEPTH_ALPHA = [0.22, 0.45, 0.7];
 
-function drawOutline(ctx: CanvasRenderingContext2D, g: Geometry, theme: PointingVizTheme, flash: number): void {
-    ctx.globalAlpha = 0.7;
-    ctx.strokeStyle = theme.muted;
-    ctx.lineWidth = g.lw;
+function drawSocket(ctx: CanvasRenderingContext2D, g: Geometry, theme: PointingVizTheme, flash: number): void {
+    const { cx, cy, r } = g;
+    // Shadow the ball throws into the socket, offset away from the light.
+    const sx = cx + r * 0.08, sy = cy + r * 0.12;
+    const shadow = ctx.createRadialGradient(sx, sy, r * 0.7, sx, sy, r * 1.18);
+    shadow.addColorStop(0, "rgba(0,0,0,0.3)");
+    shadow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = shadow;
     ctx.beginPath();
-    ctx.arc(g.cx, g.cy, g.r, 0, Math.PI * 2);
+    ctx.arc(sx, sy, r * 1.18, 0, Math.PI * 2);
+    ctx.fill();
+    // The socket's lip.
+    ctx.lineWidth = Math.max(1, r * 0.06);
+    ctx.strokeStyle = flash > 0 ? theme.accent : theme.border;
+    ctx.globalAlpha = flash > 0 ? 0.6 + 0.4 * flash : 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 1.14, 0, Math.PI * 2);
     ctx.stroke();
-    if (flash > 0) {
-        ctx.globalAlpha = flash;
-        ctx.strokeStyle = theme.accent;
-        ctx.lineWidth = g.lw * 2.5;
+    ctx.globalAlpha = 1;
+}
+
+function drawBody(ctx: CanvasRenderingContext2D, g: Geometry, theme: PointingVizTheme): void {
+    const { cx, cy, r } = g;
+    ctx.fillStyle = theme.accent;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Diffuse light from the upper left, falling off to the lower right.
+    const light = ctx.createRadialGradient(cx - r * 0.4, cy - r * 0.45, r * 0.05, cx - r * 0.2, cy - r * 0.2, r * 1.35);
+    light.addColorStop(0, "rgba(255,255,255,0.45)");
+    light.addColorStop(0.45, "rgba(255,255,255,0.06)");
+    light.addColorStop(0.75, "rgba(0,0,0,0.12)");
+    light.addColorStop(1, "rgba(0,0,0,0.5)");
+    ctx.fillStyle = light;
+    ctx.fill();
+}
+
+/** The dot fills, one per depth bucket, offset back along the roll by `back` (ball radii at the near face). */
+function fillDots(ctx: CanvasRenderingContext2D, s: BallState, g: Geometry, dotR: number, back: { x: number; y: number }, alphaScale: number): void {
+    const { cx, cy, r } = g;
+    let lo = -0.02;
+    for (let b = 0; b < DEPTH_BUCKETS.length; b++) {
+        const hi = DEPTH_BUCKETS[b];
+        ctx.globalAlpha = DEPTH_ALPHA[b] * alphaScale;
         ctx.beginPath();
-        ctx.arc(g.cx, g.cy, g.r, 0, Math.PI * 2);
-        ctx.stroke();
+        let any = false;
+        for (let i = 0; i < DOT_COUNT; i++) {
+            dotInView(s, i, view);
+            if (view.z <= lo || view.z > hi) continue;
+            any = true;
+            // The near face moves fastest; a ghost falls back less toward the edge.
+            const x = cx + (view.x - back.x * view.z) * r, y = cy + (view.y - back.y * view.z) * r;
+            // A round mark on a sphere projects to an ellipse squashed toward the centre.
+            const angle = Math.atan2(view.y, view.x);
+            const squash = Math.max(0.12, view.z);
+            ctx.moveTo(x + dotR * squash * Math.cos(angle), y + dotR * squash * Math.sin(angle));
+            ctx.ellipse(x, y, dotR * squash, dotR, angle, 0, Math.PI * 2);
+        }
+        if (any) ctx.fill();
+        lo = hi;
     }
 }
 
-/** Faint static field lines circling the centre: arcs with a small chevron each. */
-function drawIdle(ctx: CanvasRenderingContext2D, g: Geometry, theme: PointingVizTheme, alpha: number, cw: boolean): void {
-    if (alpha <= 0.001) return;
-    ctx.globalAlpha = alpha;
-    ctx.strokeStyle = theme.muted;
-    ctx.lineWidth = g.lw;
-    ctx.lineCap = "round";
-    const dir = cw ? 1 : -1;
-    for (let k = 0; k < IDLE_RINGS.length; k++) {
-        const rr = IDLE_RINGS[k] * g.r;
-        const start = k * 2.1 + 0.4;
-        const span = Math.PI * 2 * IDLE_DASH_FRACTION;
-        for (let half = 0; half < 2; half++) {
-            const a0 = start + half * Math.PI;
-            const a1 = a0 + span / 2;
-            ctx.beginPath();
-            ctx.arc(g.cx, g.cy, rr, a0, a1);
-            ctx.stroke();
-            // Chevron at the leading end pointing along the circulation.
-            const ae = cw ? a1 : a0;
-            const ex = g.cx + rr * Math.cos(ae);
-            const ey = g.cy + rr * Math.sin(ae);
-            const tx = -Math.sin(ae) * dir;
-            const ty = Math.cos(ae) * dir;
-            const hs = Math.max(2, g.r * 0.09);
-            ctx.beginPath();
-            ctx.moveTo(ex - tx * hs + ty * hs * 0.6, ey - ty * hs - tx * hs * 0.6);
-            ctx.lineTo(ex, ey);
-            ctx.lineTo(ex - tx * hs - ty * hs * 0.6, ey - ty * hs + tx * hs * 0.6);
-            ctx.stroke();
+const GHOSTS = 3;
+
+function drawDots(ctx: CanvasRenderingContext2D, s: BallState, g: Geometry, blur: number): void {
+    const dotR = g.r * DOT_RADIUS * (s.mode === "precision" ? 0.75 : 1);
+    ctx.fillStyle = "rgba(10,14,24,1)";
+    // Motion blur: fading ghosts of each dot where it was a moment ago.
+    const speed = Math.hypot(s.vx, s.vy);
+    const reach = blur * rollSpeed(s) * 0.045;
+    if (speed > 0 && reach > 0.01) {
+        const ux = s.vx / speed, uy = s.vy / speed;
+        for (let k = GHOSTS; k >= 1; k--) {
+            const f = (k / GHOSTS) * reach;
+            fillDots(ctx, s, g, dotR, { x: ux * f, y: uy * f }, 0.35 * (1 - k / (GHOSTS + 1)));
         }
     }
+    fillDots(ctx, s, g, dotR, { x: 0, y: 0 }, 1);
+    ctx.globalAlpha = 1;
 }
 
-function drawPrecisionRings(ctx: CanvasRenderingContext2D, g: Geometry, theme: PointingVizTheme, alpha: number): void {
-    ctx.globalAlpha = alpha;
-    ctx.strokeStyle = theme.muted;
-    ctx.lineWidth = Math.max(0.5, g.lw * 0.5);
+function drawGloss(ctx: CanvasRenderingContext2D, g: Geometry): void {
+    const { cx, cy, r } = g;
+    ctx.save();
     ctx.beginPath();
-    for (let k = 1; k <= 3; k++) {
-        const rr = (k / 4) * g.r;
-        ctx.moveTo(g.cx + rr, g.cy);
-        ctx.arc(g.cx, g.cy, rr, 0, Math.PI * 2);
-    }
-    // Fine reticle ticks at the quadrant points.
-    const t0 = g.r * 0.88;
-    const t1 = g.r * 0.98;
-    ctx.moveTo(g.cx + t0, g.cy);
-    ctx.lineTo(g.cx + t1, g.cy);
-    ctx.moveTo(g.cx - t0, g.cy);
-    ctx.lineTo(g.cx - t1, g.cy);
-    ctx.moveTo(g.cx, g.cy + t0);
-    ctx.lineTo(g.cx, g.cy + t1);
-    ctx.moveTo(g.cx, g.cy - t0);
-    ctx.lineTo(g.cx, g.cy - t1);
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.clip();
+    // Limb darkening over the dots, so they sink into the edge.
+    const limb = ctx.createRadialGradient(cx, cy, r * 0.62, cx, cy, r);
+    limb.addColorStop(0, "rgba(0,0,0,0)");
+    limb.addColorStop(1, "rgba(0,0,0,0.38)");
+    ctx.fillStyle = limb;
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    // Soft window reflection, then the hot spot.
+    const hx = cx - r * 0.38, hy = cy - r * 0.42;
+    const soft = ctx.createRadialGradient(hx, hy, 0, hx, hy, r * 0.55);
+    soft.addColorStop(0, "rgba(255,255,255,0.55)");
+    soft.addColorStop(0.5, "rgba(255,255,255,0.14)");
+    soft.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = soft;
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.beginPath();
+    ctx.ellipse(hx, hy, r * 0.13, r * 0.08, -Math.PI / 4, 0, Math.PI * 2);
+    ctx.fill();
+    // Light bounced back from the socket along the lower right edge.
+    ctx.lineWidth = r * 0.07;
+    ctx.strokeStyle = "rgba(255,255,255,0.22)";
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.9, Math.PI * 0.05, Math.PI * 0.55);
     ctx.stroke();
+    ctx.restore();
 }
 
-/** Small grab marker at the centre for scroll (drag-scroll pins the field under it). */
-function drawGrabPoint(ctx: CanvasRenderingContext2D, g: Geometry, theme: PointingVizTheme, alpha: number, axis: ScrollAxis): void {
-    ctx.globalAlpha = alpha;
+/** Scroll: chevrons outside the ball along the axis, pointing the way the content moves. */
+function drawScrollGuides(ctx: CanvasRenderingContext2D, s: BallState, g: Geometry, theme: PointingVizTheme, now: number): void {
+    const { cx, cy, r } = g;
+    const along = s.axis === "vertical" ? s.vy : s.vx;
+    const dir = along >= 0 ? 1 : -1;
+    const strength = normalizeSpeed(along);
+    const size = r * 0.14;
+    const gap = r * 1.24;
     ctx.strokeStyle = theme.accent;
-    ctx.lineWidth = g.lw;
-    const rr = Math.max(2.5, g.r * 0.1);
-    ctx.beginPath();
-    ctx.arc(g.cx, g.cy, rr, 0, Math.PI * 2);
-    ctx.stroke();
-    // Track rails along the scroll axis.
-    ctx.globalAlpha = alpha * 0.45;
-    ctx.lineWidth = Math.max(0.5, g.lw * 0.6);
-    ctx.beginPath();
-    const e = g.r * 0.92;
-    if (axis === "vertical") {
-        ctx.moveTo(g.cx, g.cy - e);
-        ctx.lineTo(g.cx, g.cy - rr * 1.6);
-        ctx.moveTo(g.cx, g.cy + rr * 1.6);
-        ctx.lineTo(g.cx, g.cy + e);
-    } else {
-        ctx.moveTo(g.cx - e, g.cy);
-        ctx.lineTo(g.cx - rr * 1.6, g.cy);
-        ctx.moveTo(g.cx + rr * 1.6, g.cy);
-        ctx.lineTo(g.cx + e, g.cy);
-    }
-    ctx.stroke();
-}
-
-const ALPHA_BUCKETS = [0.33, 0.66, 1];
-
-/** Full animated frame from the state. */
-function drawFlowFrame(ctx: CanvasRenderingContext2D, s: FlowState, width: number, height: number, theme: PointingVizTheme): void {
-    ctx.clearRect(0, 0, width, height);
-    const g = geometry(width, height);
-    const act = s.activity;
+    ctx.lineWidth = Math.max(1.2, r * 0.07);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-
-    drawIdle(ctx, g, theme, IDLE_ALPHA * (1 - act), true);
-
-    if (act > 0) {
-        if (s.mode === "precision") drawPrecisionRings(ctx, g, theme, 0.55 * act);
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(g.cx, g.cy, g.r - g.lw * 0.5, 0, Math.PI * 2);
-        ctx.clip();
-
-        const scroll = s.mode === "scroll";
-        const boost = s.mode === "boost";
-        const precision = s.mode === "precision";
-        ctx.strokeStyle = scroll ? theme.accent : theme.foreground;
-        ctx.lineWidth = g.lw * (precision ? 0.7 : boost ? 1.35 : scroll ? 1.3 : 1.1);
-        const base = act * (boost ? 1 : precision ? 0.75 : 0.85);
-        const n = activeParticleCount(s.mode);
-        for (let b = 0; b < ALPHA_BUCKETS.length; b++) {
-            const lo = b === 0 ? 0 : ALPHA_BUCKETS[b - 1];
-            const hi = ALPHA_BUCKETS[b];
-            ctx.globalAlpha = base * hi;
+    // Two chevrons at each end; when scrolling, the leading ones brighten in turn.
+    const phase = strength > 0.02 ? (now / 400) % 1 : 0;
+    for (const end of [-1, 1]) {
+        for (let k = 0; k < 2; k++) {
+            const offset = gap + k * size * 0.6;
+            const lead = end === dir;
+            const pulse = lead && strength > 0.02 ? 0.35 + 0.65 * Math.abs(Math.sin((phase + k * 0.5) * Math.PI)) : 0.3;
+            ctx.globalAlpha = pulse;
+            const pointing = end; // chevrons point outward
             ctx.beginPath();
-            let any = false;
-            for (let i = 0; i < n; i++) {
-                const a = particleAlpha(s.life[i], s.maxLife[i]);
-                if (a <= lo || a > hi) continue;
-                const fx = s.fx[i];
-                const fy = s.fy[i];
-                const sp = Math.hypot(fx, fy);
-                const len = trailLength(s.mode, sp, s.mag) * g.r;
-                const x = g.cx + s.px[i] * g.r;
-                const y = g.cy + s.py[i] * g.r;
-                ctx.moveTo(x, y);
-                if (sp > 1e-4) ctx.lineTo(x - (fx / sp) * len, y - (fy / sp) * len);
-                else ctx.lineTo(x + 0.01, y);
-                any = true;
+            if (s.axis === "vertical") {
+                const y = cy + end * offset;
+                ctx.moveTo(cx - size, y - pointing * size * 0.55);
+                ctx.lineTo(cx, y);
+                ctx.lineTo(cx + size, y - pointing * size * 0.55);
+            } else {
+                const x = cx + end * offset;
+                ctx.moveTo(x - pointing * size * 0.55, cy - size);
+                ctx.lineTo(x, cy);
+                ctx.lineTo(x - pointing * size * 0.55, cy + size);
             }
-            if (any) ctx.stroke();
-        }
-        ctx.restore();
-
-        if (scroll) drawGrabPoint(ctx, g, theme, act, s.axis);
-    }
-
-    if (s.pulseMs > 0) {
-        const p = 1 - s.pulseMs / PULSE_MS;
-        ctx.globalAlpha = (1 - p) * 0.9;
-        ctx.strokeStyle = theme.accent;
-        ctx.lineWidth = g.lw * 1.5;
-        ctx.beginPath();
-        ctx.arc(g.cx, g.cy, Math.max(1, g.r * (0.15 + 0.85 * p)), 0, Math.PI * 2);
-        ctx.stroke();
-    }
-
-    drawOutline(ctx, g, theme, s.flashMs / FLASH_MS);
-    ctx.globalAlpha = 1;
-}
-
-function drawArrow(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, head: number): void {
-    const dx = x1 - x0;
-    const dy = y1 - y0;
-    const l = Math.hypot(dx, dy);
-    if (l < 0.5) return;
-    const ux = dx / l;
-    const uy = dy / l;
-    ctx.moveTo(x0, y0);
-    ctx.lineTo(x1, y1);
-    ctx.moveTo(x1 - ux * head + uy * head * 0.6, y1 - uy * head - ux * head * 0.6);
-    ctx.lineTo(x1, y1);
-    ctx.lineTo(x1 - ux * head - uy * head * 0.6, y1 - uy * head + ux * head * 0.6);
-}
-
-/** Direction and 0..1 magnitude a single still frame shows for a sample. */
-function staticGlyph(sample: PointingLiveSample | null): { mode: PointingMode | "idle"; ux: number; uy: number; mag: number; axis: ScrollAxis } {
-    if (!sample || (!hasMotion(sample) && sample.buttons === 0)) return { mode: "idle", ux: 0, uy: 0, mag: 0, axis: "vertical" };
-    const dt = sample.dtMs > 0 ? sample.dtMs : 33;
-    if (sample.mode === "scroll") {
-        const axis = scrollAxisOf(sample) ?? "vertical";
-        const r = scrollRateOf(sample, axis);
-        const sign = r < 0 ? -1 : 1;
-        return {
-            mode: "scroll",
-            ux: axis === "horizontal" ? sign : 0,
-            uy: axis === "vertical" ? sign : 0,
-            mag: sample.saturated ? 1 : normalizeSpeed(r),
-            axis,
-        };
-    }
-    const vx = sample.dx / dt;
-    const vy = sample.dy / dt;
-    const sp = Math.hypot(vx, vy);
-    if (sp < 1e-6) return { mode: "idle", ux: 0, uy: 0, mag: 0, axis: "vertical" };
-    return { mode: sample.mode, ux: vx / sp, uy: vy / sp, mag: sample.saturated ? 1 : normalizeSpeed(sp), axis: "vertical" };
-}
-
-/** Reduced-motion still frame: direction and magnitude as a glyph, no particles. */
-function drawStaticFrame(ctx: CanvasRenderingContext2D, sample: PointingLiveSample | null, width: number, height: number, theme: PointingVizTheme): void {
-    ctx.clearRect(0, 0, width, height);
-    const g = geometry(width, height);
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    const glyph = staticGlyph(sample);
-    if (glyph.mode === "idle") {
-        drawIdle(ctx, g, theme, IDLE_ALPHA, true);
-        drawOutline(ctx, g, theme, sample && sample.buttons !== 0 ? 1 : 0);
-        ctx.globalAlpha = 1;
-        return;
-    }
-    const head = Math.max(2.5, g.r * 0.16);
-    const len = g.r * (0.35 + 0.55 * glyph.mag);
-    // Perpendicular for parallel streamlines.
-    const nx = -glyph.uy;
-    const ny = glyph.ux;
-    if (glyph.mode === "scroll") {
-        drawGrabPoint(ctx, g, theme, 1, glyph.axis);
-        ctx.globalAlpha = 1;
-        ctx.strokeStyle = theme.accent;
-        ctx.lineWidth = g.lw * 1.3;
-        ctx.beginPath();
-        for (const off of [-0.45, 0.45]) {
-            const ox = g.cx + nx * off * g.r;
-            const oy = g.cy + ny * off * g.r;
-            drawArrow(ctx, ox - glyph.ux * len * 0.5, oy - glyph.uy * len * 0.5, ox + glyph.ux * len * 0.5, oy + glyph.uy * len * 0.5, head);
-        }
-        ctx.stroke();
-    } else {
-        if (glyph.mode === "precision") drawPrecisionRings(ctx, g, theme, 0.55);
-        ctx.globalAlpha = glyph.mode === "boost" ? 1 : 0.85;
-        ctx.strokeStyle = theme.foreground;
-        ctx.lineWidth = g.lw * (glyph.mode === "precision" ? 0.6 : glyph.mode === "boost" ? 1.6 : 1.1);
-        ctx.beginPath();
-        for (const off of [-0.42, 0, 0.42]) {
-            // Sphere falloff: outer streamlines are shorter.
-            const l = len * (off === 0 ? 1 : 0.7);
-            const ox = g.cx + nx * off * g.r;
-            const oy = g.cy + ny * off * g.r;
-            drawArrow(ctx, ox - glyph.ux * l * 0.5, oy - glyph.uy * l * 0.5, ox + glyph.ux * l * 0.5, oy + glyph.uy * l * 0.5, head * (off === 0 ? 1 : 0.75));
-        }
-        ctx.stroke();
-        if (glyph.mode === "boost") {
-            ctx.globalAlpha = 0.7;
-            ctx.strokeStyle = theme.accent;
-            ctx.lineWidth = g.lw * 1.2;
-            ctx.beginPath();
-            ctx.arc(g.cx, g.cy, g.r * 0.93, 0, Math.PI * 2);
             ctx.stroke();
         }
     }
-    drawOutline(ctx, g, theme, sample && sample.buttons !== 0 ? 1 : 0);
     ctx.globalAlpha = 1;
+}
+
+/** Precision: a fine reticle over the ball. */
+function drawReticle(ctx: CanvasRenderingContext2D, g: Geometry, theme: PointingVizTheme): void {
+    const { cx, cy, r } = g;
+    ctx.strokeStyle = theme.foreground;
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        ctx.moveTo(cx + dx * r * 0.3, cy + dy * r * 0.3);
+        ctx.lineTo(cx + dx * r * 1.25, cy + dy * r * 1.25);
+    }
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.3, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+}
+
+/** Boost: a ring expanding from the ball as boost starts. */
+function drawPulse(ctx: CanvasRenderingContext2D, g: Geometry, theme: PointingVizTheme, pulseMs: number): void {
+    if (pulseMs <= 0) return;
+    const t = 1 - pulseMs / PULSE_MS;
+    ctx.strokeStyle = theme.accent;
+    ctx.globalAlpha = 0.7 * (1 - t);
+    ctx.lineWidth = Math.max(1, g.r * 0.08 * (1 - t));
+    ctx.beginPath();
+    ctx.arc(g.cx, g.cy, g.r * (1.05 + 0.25 * t), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+}
+
+function drawBallFrame(ctx: CanvasRenderingContext2D, s: BallState, width: number, height: number, theme: PointingVizTheme, now: number): void {
+    ctx.clearRect(0, 0, width, height);
+    const g = geometry(width, height);
+    drawSocket(ctx, g, theme, s.flashMs / FLASH_MS);
+    drawBody(ctx, g, theme);
+    drawDots(ctx, s, g, s.mode === "boost" ? 2 : 1);
+    drawGloss(ctx, g);
+    if (s.mode === "scroll") drawScrollGuides(ctx, s, g, theme, now);
+    if (s.mode === "precision") drawReticle(ctx, g, theme);
+    drawPulse(ctx, g, theme, s.pulseMs);
+}
+
+/**
+ * Reduced motion: the ball as it is, plus the mode's still marks. The ball turns
+ * by a fixed step toward each sample's motion, so a moving ball still reads.
+ */
+function drawStaticFrame(ctx: CanvasRenderingContext2D, s: BallState, sample: PointingLiveSample | null, width: number, height: number, theme: PointingVizTheme): void {
+    if (sample && sample !== s.lastSample) {
+        ingestSample(s, sample, 0);
+        const v = targetVelocity(sample, s.axis);
+        const speed = Math.hypot(v.x, v.y);
+        if (speed > 0) rotate(s.rot, -v.y / speed, v.x / speed, 0, 0.35);
+        s.vx = v.x;
+        s.vy = v.y;
+    }
+    s.pulseMs = 0;
+    s.flashMs = 0;
+    const blur = 0;
+    ctx.clearRect(0, 0, width, height);
+    const g = geometry(width, height);
+    drawSocket(ctx, g, theme, 0);
+    drawBody(ctx, g, theme);
+    drawDots(ctx, s, g, blur);
+    drawGloss(ctx, g);
+    if (s.mode === "scroll") drawScrollGuides(ctx, s, g, theme, 0);
+    if (s.mode === "precision") drawReticle(ctx, g, theme);
 }
 
 // ---------------------------------------------------------------------------
@@ -654,7 +513,7 @@ function useDevicePixelRatio(): number {
     return dpr;
 }
 
-function wakes(s: FlowState, sample: PointingLiveSample): boolean {
+function wakes(s: BallState, sample: PointingLiveSample): boolean {
     return hasMotion(sample) || sample.buttons !== 0 || sample.mode !== s.mode;
 }
 
@@ -664,8 +523,8 @@ export function TrackballFlowViz(props: PointingVizProps): JSX.Element {
     const wrapRef = useRef<HTMLDivElement>(null);
     const themeRef = useRef(theme);
     themeRef.current = theme;
-    const stateRef = useRef<FlowState | null>(null);
-    if (stateRef.current === null) stateRef.current = createFlowState(side === "right" ? 7 : 3);
+    const stateRef = useRef<BallState | null>(null);
+    if (stateRef.current === null) stateRef.current = createBallState(side);
     const redrawRef = useRef<(() => void) | null>(null);
     const dpr = useDevicePixelRatio();
 
@@ -673,7 +532,7 @@ export function TrackballFlowViz(props: PointingVizProps): JSX.Element {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = setupPointingCanvas(canvas, width, height);
-        const state = stateRef.current as FlowState;
+        const state = stateRef.current as BallState;
         const src: PointingSampleSource = source;
 
         if (reducedMotion) {
@@ -682,7 +541,7 @@ export function TrackballFlowViz(props: PointingVizProps): JSX.Element {
             const draw = () => {
                 timer = undefined;
                 lastDraw = now();
-                if (ctx) drawStaticFrame(ctx, src.latest(), width, height, themeRef.current);
+                if (ctx) drawStaticFrame(ctx, state, src.latest(), width, height, themeRef.current);
             };
             redrawRef.current = draw;
             draw();
@@ -710,8 +569,8 @@ export function TrackballFlowViz(props: PointingVizProps): JSX.Element {
             lastFrame = t;
             const latest = src.latest();
             if (latest && latest !== state.lastSample) ingestSample(state, latest, t);
-            stepFlow(state, t, dt);
-            if (ctx) drawFlowFrame(ctx, state, width, height, themeRef.current);
+            stepBall(state, t, dt);
+            if (ctx) drawBallFrame(ctx, state, width, height, themeRef.current, t);
             if (isSettled(state, t)) {
                 running = false;
                 return;
@@ -730,7 +589,7 @@ export function TrackballFlowViz(props: PointingVizProps): JSX.Element {
             running = false;
         };
         redrawRef.current = () => {
-            if (!running && ctx) drawFlowFrame(ctx, state, width, height, themeRef.current);
+            if (!running && ctx) drawBallFrame(ctx, state, width, height, themeRef.current, now());
         };
 
         const unsub = src.subscribe((sample) => {
@@ -776,23 +635,22 @@ export function TrackballFlowViz(props: PointingVizProps): JSX.Element {
 
 /** Pure helpers, exported for unit tests only. */
 export const _testTrackball = {
-    MAX_PARTICLES,
+    DOT_COUNT,
     PULSE_MS,
     FLASH_MS,
-    IDLE_EASE_MS,
-    createFlowState,
+    fibonacciSphere,
+    createBallState,
     hasMotion,
     scrollAxisOf,
-    scrollRateOf,
     smoothingAlpha,
+    targetVelocity,
     ingestSample,
-    fieldAt,
-    activeParticleCount,
-    stepFlow,
+    rotate,
+    orthonormalize,
+    rollSpeed,
+    stepBall,
     isSettled,
-    trailLength,
-    particleAlpha,
-    staticGlyph,
-    drawFlowFrame,
+    dotInView,
+    drawBallFrame,
     drawStaticFrame,
 };

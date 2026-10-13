@@ -56,6 +56,49 @@ export interface ThumbCorrections {
 
 const NO_DETECTION = 0xff;
 
+/** Space kept between a pointing slot and the keys around its pocket, in key units. */
+export const POINTING_POCKET_MARGIN = 0.15;
+
+/**
+ * The rectangle of a hand's pointing pocket, less a margin all round. On the left
+ * hand (QWERTY labels) it runs from the inner corner of X (the ring cluster's
+ * bottom key) across to the inner corner of Enter (the outer key of the thumb's top
+ * row), and from the bottom of X and C (the middle cluster's bottom key) down to
+ * the top of the thumb; the right hand mirrors it with ".", "," and Space. Null
+ * when the composition doesn't name those clusters.
+ */
+export function fitPointingPocket(
+    kbinfo: KeyboardInfo,
+    keys: Record<number, ComposedKeyLayout>,
+    side: "left" | "right",
+): { x: number; y: number; w: number; h: number } | null {
+    const instances = kbinfo.composition?.instances ?? [];
+    const clusterKeys = (id: string) => {
+        const instance = instances.find((i) => i.id === id);
+        if (!instance) return [];
+        const cells = new Set<string>();
+        for (const opt of instance.fragment_options ?? []) for (const [r, c] of opt.matrix_map ?? []) cells.add(`${r},${c}`);
+        for (const [r, c] of instance.matrix_map ?? []) cells.add(`${r},${c}`);
+        return Object.values(keys).filter((k) => cells.has(`${k.row},${k.col}`));
+    };
+    const bottomKey = (cluster: ComposedKeyLayout[]) =>
+        cluster.reduce<ComposedKeyLayout | null>((low, k) => (!low || k.y + k.h > low.y + low.h ? k : low), null);
+    const ring = bottomKey(clusterKeys(`${side}_ring`));
+    const middle = bottomKey(clusterKeys(`${side}_middle`));
+    const thumb = clusterKeys(`${side}_thumb`);
+    if (!ring || !middle || thumb.length === 0) return null;
+
+    const thumbTop = Math.min(...thumb.map((k) => k.y));
+    const topRow = thumb.filter((k) => k.y - thumbTop < 0.25);
+    const left = side === "left" ? ring.x + ring.w : Math.max(...topRow.map((k) => k.x + k.w));
+    const right = side === "left" ? Math.min(...topRow.map((k) => k.x)) : ring.x;
+    const top = Math.max(ring.y + ring.h, middle.y + middle.h);
+    const w = right - left - 2 * POINTING_POCKET_MARGIN;
+    const h = thumbTop - top - 2 * POINTING_POCKET_MARGIN;
+    if (!(w > 0.5 && h > 0.5)) return null;
+    return { x: left + POINTING_POCKET_MARGIN, y: top + POINTING_POCKET_MARGIN, w, h };
+}
+
 function mapGet<K extends string | number, V>(m: Map<K, V> | Record<string, V> | undefined, k: K): V | undefined {
     if (!m) return undefined;
     return m instanceof Map ? m.get(k) : (m as Record<string, V>)[String(k)];
@@ -131,6 +174,7 @@ export class FragmentComposerService {
         if (widgetIdx.size === 0) return [];
 
         const corrections = this.computeThumbCorrections(this.composeRawLayout(kbinfo));
+        const keys = this.composeLayout(kbinfo);
         const out: ComposedWidget[] = [];
         for (const idx of widgetIdx) {
             const instance = instances[idx];
@@ -148,16 +192,14 @@ export class FragmentComposerService {
             const sizeFrom = fragments[options[0].fragment]?.widget;
             const placement = options[0].placement;
             const { dx, dy } = corrections[side];
+            const fitted = fitPointingPocket(kbinfo, keys, side);
             out.push({
                 instanceIdx: idx,
                 instanceId: instance.id,
                 side,
                 fragmentName: detected?.fragment ?? null,
                 widget: detected ? fragments[detected.fragment]?.widget ?? null : null,
-                x: placement.x + dx,
-                y: placement.y + dy,
-                w: sizeFrom?.w ?? 0,
-                h: sizeFrom?.h ?? 0,
+                ...(fitted ?? { x: placement.x + dx, y: placement.y + dy, w: sizeFrom?.w ?? 0, h: sizeFrom?.h ?? 0 }),
             });
         }
         return out;

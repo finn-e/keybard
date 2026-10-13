@@ -61,9 +61,11 @@ describe('usePointingSlots', () => {
         });
         const { result } = renderHook(() => usePointingSlots());
         expect(kinds(result.current)).toEqual(['left:trackball', 'right:touchpad']);
-        expect(result.current[0]).toMatchObject({ sensor: 'pmw3360', description: 'PMW3360 trackball', w: 2.5, h: 2.5 });
-        expect(result.current[0].x).toBeCloseTo(4.5, 5);
-        expect(result.current[0].y).toBeCloseTo(4.75, 5);
+        expect(result.current[0]).toMatchObject({ sensor: 'pmw3360', description: 'PMW3360 trackball' });
+        expect(result.current[0].w).toBeCloseTo(3.5, 5);
+        expect(result.current[0].h).toBeCloseTo(2.2, 5);
+        expect(result.current[0].x).toBeCloseTo(4.65, 5);
+        expect(result.current[0].y).toBeCloseTo(4.15, 5);
         await tick();
         expect(getFragmentHardware).not.toHaveBeenCalled();
     });
@@ -127,17 +129,29 @@ describe('usePointingSlots', () => {
             const { result } = renderHook(() => usePointingSlots());
             expect(kinds(result.current)).toEqual(['left:trackball', 'right:touchpad']);
             expect(result.current[1]).toMatchObject({ demo: true });
-            expect(result.current[1].x).toBeCloseTo(18, 5);
-            expect(result.current[1].y).toBeCloseTo(4.75, 5);
+            expect(result.current[1].x).toBeCloseTo(16.85, 5);
+            expect(result.current[1].y).toBeCloseTo(4.15, 5);
             await tick();
             expect(getFragmentHardware).not.toHaveBeenCalled();
         });
 
-        it('falls back to the fixed positions when the definition has thumbs but no pointing instances', () => {
+        it('fits the pocket when the definition has fingers and thumbs but no pointing instances', () => {
             setSearch('?pointingDemo=trackpoint');
             ctx.keyboard = createSvalboardPointingKbinfo({ withPointing: false });
             const { result } = renderHook(() => usePointingSlots());
             expect(kinds(result.current)).toEqual(['left:trackpoint', 'right:trackpoint']);
+            expect(result.current[0].w).toBeCloseTo(3.5, 5);
+            expect(result.current[0].h).toBeCloseTo(2.2, 5);
+            expect(result.current[0].x).toBeCloseTo(4.65, 5);
+            expect(result.current[1].x).toBeCloseTo(16.85, 5);
+        });
+
+        it("falls back to the fixed positions when the pocket can't be found", () => {
+            setSearch('?pointingDemo=trackpoint');
+            const kb = createSvalboardPointingKbinfo({ withPointing: false });
+            kb.composition = { instances: kb.composition!.instances.filter((i) => !/_(ring|middle)$/.test(i.id)) };
+            ctx.keyboard = kb;
+            const { result } = renderHook(() => usePointingSlots());
             expect(result.current[0]).toMatchObject(POINTING_SLOT_FALLBACK.left);
             expect(result.current[1]).toMatchObject(POINTING_SLOT_FALLBACK.right);
         });

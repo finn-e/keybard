@@ -5,7 +5,7 @@ import { useKeyboard } from "@/contexts/KeyboardContext";
 import { pointingDemoTourModule, POINTING_DEMO_TOUR_MS } from "@/components/pointing-viz/simulate";
 import { pointingVizEnabled } from "@/features/pointing-viz-flag";
 import { readPointingDemo } from "@/hooks/usePointingLive";
-import { widgetInstanceIndices, type ComposedWidget } from "@/services/fragment-composer.service";
+import { fitPointingPocket, widgetInstanceIndices, type ComposedWidget } from "@/services/fragment-composer.service";
 import { keyboardService } from "@/services/keyboard.service";
 import type { FragmentWidget, KeyboardInfo } from "@/types/keyboard.types";
 
@@ -17,7 +17,7 @@ import type { FragmentWidget, KeyboardInfo } from "@/types/keyboard.types";
 export const POINTING_SLOT_RETRY_MS = 1000;
 export const POINTING_SLOT_MAX_READS = 6;
 
-/** Demo-mode positions (composed key units) when the definition has no pointing instances. */
+/** Demo-mode positions (composed key units) when the definition has no pointing instances and its pocket can't be found. */
 export const POINTING_SLOT_FALLBACK = {
     left: { x: 4.5, y: 4.75, w: 2.5, h: 2.5 },
     right: { x: 18, y: 4.75, w: 2.5, h: 2.5 },
@@ -134,6 +134,14 @@ function toSlotState(kb: KeyboardInfo, slot: ComposedWidget, done: boolean): Poi
     };
 }
 
+function fitPocket(kb: KeyboardInfo, side: "left" | "right") {
+    try {
+        return fitPointingPocket(kb, keyboardService.getFragmentComposer().composeLayout(kb), side);
+    } catch {
+        return null;
+    }
+}
+
 function demoSlots(kb: KeyboardInfo | null, demo: NonNullable<ReturnType<typeof readPointingDemo>>): PointingSlotState[] {
     const fromDefinition = kb && widgetInstanceIndices(kb).size > 0 ? composeSlots(kb, new Map()) : [];
     const instanceIds = new Set((kb?.composition?.instances ?? []).map((i) => i.id));
@@ -143,7 +151,8 @@ function demoSlots(kb: KeyboardInfo | null, demo: NonNullable<ReturnType<typeof 
     return (["left", "right"] as const).flatMap((side, i) => {
         const composed = fromDefinition.find((s) => s.side === side);
         if (fromDefinition.length > 0 && !composed) return [];
-        const pos = composed ?? { ...POINTING_SLOT_FALLBACK[side], instanceIdx: -1 - i, instanceId: `${side}_pointing` };
+        const pocket = composed || !kb ? null : fitPocket(kb, side);
+        const pos = composed ?? { ...(pocket ?? POINTING_SLOT_FALLBACK[side]), instanceIdx: -1 - i, instanceId: `${side}_pointing` };
         const module = demo[side];
         const widget: FragmentWidget = { kind: "pointing", module, w: pos.w || DEMO_SIZE, h: pos.h || DEMO_SIZE };
         return [{

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { FragmentComposerService, isWidgetInstance, widgetInstanceIndices } from '../../src/services/fragment-composer.service';
+import { FragmentComposerService, isWidgetInstance, POINTING_POCKET_MARGIN, widgetInstanceIndices } from '../../src/services/fragment-composer.service';
 import { FragmentService } from '../../src/services/fragment.service';
 import { KleService } from '../../src/services/kle.service';
 import { fileService } from '../../src/services/file.service';
@@ -32,24 +32,34 @@ describe('widget fragments (pointing slots)', () => {
         expect(withPointing).toEqual(without);
     });
 
-    it('places the slots with the thumb correction: (4.5, 4.75) and (18, 4.75) with 6-key fingers, mirrored about 12.5', () => {
-        const slots = composer().composeWidgets(createSvalboardPointingKbinfo({ sixKey: true }), new Map());
-        const left = slots.find((s) => s.side === 'left')!;
-        const right = slots.find((s) => s.side === 'right')!;
-        expect(left.x).toBeCloseTo(4.5, 5);
-        expect(left.y).toBeCloseTo(4.75, 5);
-        expect(right.x).toBeCloseTo(18, 5);
-        expect(right.y).toBeCloseTo(4.75, 5);
-        expect([left.w, left.h, right.w, right.h]).toEqual([2.5, 2.5, 2.5, 2.5]);
-        expect((left.x + left.w / 2 + right.x + right.w / 2) / 2).toBeCloseTo(12.5, 5);
-    });
-
-    it('moves the slots with the thumbs for 5-key fingers, and keeps them clear of every key', () => {
+    it('fits each slot to the pocket from X to Enter and from X and C down to the thumb, mirrored about 12.5', () => {
         for (const sixKey of [false, true]) {
             const kb = createSvalboardPointingKbinfo({ sixKey });
             const keys = Object.values(composer().composeLayout(kb));
             const slots = composer().composeWidgets(kb, new Map());
-            if (!sixKey) slots.forEach((s) => expect(s.y).toBeCloseTo(3.75, 5));
+            const left = slots.find((s) => s.side === 'left')!;
+            const right = slots.find((s) => s.side === 'right')!;
+            for (const s of [left, right]) {
+                expect(s.w).toBeGreaterThan(s.h); // wider than tall: X to Enter is longer than X to the thumb
+                expect(s.h).toBeGreaterThan(1.5);
+                // Keys directly above end at least a margin above it; the thumb starts at least a margin below.
+                const above = keys.filter((k) => k.x < s.x + s.w && s.x < k.x + k.w && k.y + k.h <= s.y + 1e-6);
+                const below = keys.filter((k) => k.x < s.x + s.w + 1 && s.x - 1 < k.x + k.w && k.y >= s.y + s.h - 1e-6);
+                expect(above.length, `${s.side} has finger keys above (${sixKey ? 6 : 5}-key)`).toBeGreaterThan(0);
+                expect(s.y - Math.max(...above.map((k) => k.y + k.h))).toBeGreaterThanOrEqual(POINTING_POCKET_MARGIN - 1e-6);
+                expect(below.length, `${s.side} has thumb keys below`).toBeGreaterThan(0);
+                expect(Math.min(...below.map((k) => k.y)) - (s.y + s.h)).toBeGreaterThanOrEqual(POINTING_POCKET_MARGIN - 1e-6);
+            }
+            expect((left.x + left.w / 2 + right.x + right.w / 2) / 2).toBeCloseTo(12.5, 5);
+            expect(left.y).toBeCloseTo(right.y, 5);
+        }
+    });
+
+    it('keeps the slots clear of every key, with 5- and 6-key fingers', () => {
+        for (const sixKey of [false, true]) {
+            const kb = createSvalboardPointingKbinfo({ sixKey });
+            const keys = Object.values(composer().composeLayout(kb));
+            const slots = composer().composeWidgets(kb, new Map());
             for (const s of slots) {
                 for (const k of keys) {
                     const overlaps = k.x < s.x + s.w && s.x < k.x + k.w && k.y < s.y + s.h && s.y < k.y + k.h;

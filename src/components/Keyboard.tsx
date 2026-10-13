@@ -743,9 +743,11 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                         }}
                     />
                 )}
-                {/* Pointing slots: the pocket between each hand's fingers and thumb. Placed and moved like thumb keys. */}
+                {/* Pointing slots: the pocket between each hand's fingers and thumb. Squeezed with the finger
+                    clusters that frame it, and moved like thumb keys in 3D. */}
                 {showPointingSlots && !(!is3DMode && isThumb3DOffsetActive) && pointingSlots.map((slot) => {
-                    const xPos = slot.x - (fingerClusterSqueeze > 0 ? fingerClusterSqueeze : 0) + layoutOffsets.offsetX;
+                    const squeeze = fingerClusterSqueeze > 0 ? fingerClusterSqueeze : 0;
+                    const xPos = slot.x + (slot.side === "left" ? squeeze : -squeeze) - squeeze + layoutOffsets.offsetX;
                     const yPos = getYPos(slot.y) + layoutOffsets.offsetY;
                     return (
                         <PointingSlot
