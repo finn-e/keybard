@@ -13,7 +13,8 @@ import { Key } from "@/components/Key";
 import { getKeyContents } from "@/utils/keys";
 import { keyService } from "@/services/key.service";
 import { CODEMAP } from "@/constants/keygen";
-import { MATRIX_COLS } from "@/constants/svalboard-layout";
+import ModifierSideToggle from "@/components/ModifierSideToggle";
+import { getSelectedKeymapKeycode, useModifierSide } from "@/hooks/useModifierSide";
 
 import { BUTTON_TO_KEYCODE_MAP, LAYOUTS } from "@/components/Keyboards/layouts";
 
@@ -30,7 +31,8 @@ import {
     modifierOptions,
     decomposeKeycode,
     getOsmKeycode,
-    applyModifiers
+    applyModifiers,
+    PLAIN_MODIFIER_KEYCODES
 } from "@/utils/modifierUtils";
 
 interface Props {
@@ -39,6 +41,7 @@ interface Props {
 
 const BasicKeyboards = ({ isPicker }: Props) => {
     const [activeModifiers, setActiveModifiers] = useState<Modifier[]>([]);
+    const [modifierSide, setModifierSide] = useModifierSide();
     const { assignKeycode, isBinding, selectedTarget } = useKeyBinding();
     const { keyboard } = useKeyboard();
     const { selectedLayer } = useLayer();
@@ -55,12 +58,7 @@ const BasicKeyboards = ({ isPicker }: Props) => {
 
     // Compute the base keycode (inner key stripped of modifiers) from the selected key
     const getBaseKeycode = (): string => {
-        if (!keyboard?.keymap || !selectedTarget || selectedTarget.type !== "keyboard") return "KC_NO";
-        const { layer, row, col } = selectedTarget;
-        if (layer === undefined || row === undefined || col === undefined) return "KC_NO";
-        const matrixCols = keyboard.cols || MATRIX_COLS;
-        const matrixPos = row * matrixCols + col;
-        const numericKeycode = keyboard.keymap[layer]?.[matrixPos];
+        const numericKeycode = getSelectedKeymapKeycode(keyboard, selectedTarget);
         if (numericKeycode === undefined) return "KC_NO";
 
         const decomposed = decomposeKeycode(numericKeycode);
@@ -75,18 +73,18 @@ const BasicKeyboards = ({ isPicker }: Props) => {
     const hasModifiers = activeModifiers.length > 0;
 
     // Three constructed keycodes: plain modifier, mod-tap, one-shot
-    const modifierKeycode = hasModifiers ? applyModifiers(baseKeycode, activeModifiers, false) : baseKeycode;
+    const modifierKeycode = hasModifiers ? applyModifiers(baseKeycode, activeModifiers, false, modifierSide) : baseKeycode;
     const modifierContents = keyboard ? getKeyContents(keyboard, modifierKeycode) : undefined;
 
-    const standaloneModifierKeycode = hasModifiers ? applyModifiers("KC_NO", activeModifiers, false) : "KC_NO";
+    const standaloneModifierKeycode = hasModifiers ? applyModifiers("KC_NO", activeModifiers, false, modifierSide) : "KC_NO";
     const standaloneModifierLabel = hasModifiers
         ? standaloneModifierKeycode.replace(/\(.*\)$/, "")
         : "MOD";
 
-    const modTapKeycode = hasModifiers ? applyModifiers(baseKeycode, activeModifiers, true) : null;
+    const modTapKeycode = hasModifiers ? applyModifiers(baseKeycode, activeModifiers, true, modifierSide) : null;
     const modTapContents = modTapKeycode && keyboard ? getKeyContents(keyboard, modTapKeycode) : undefined;
 
-    const osmKeycode = getOsmKeycode(activeModifiers);
+    const osmKeycode = getOsmKeycode(activeModifiers, modifierSide);
     const osmContents = osmKeycode && keyboard ? getKeyContents(keyboard, osmKeycode) : undefined;
 
     const handleClearModifiers = () => {
@@ -108,9 +106,9 @@ const BasicKeyboards = ({ isPicker }: Props) => {
 
         // Ensure we translate names like 'SV_...' to actual keycodes if needed
         const mappedKeycode = getKeyCodeForButton(keyboard, keycode) || keycode;
-        // Blank and Transparent keys are never modified
-        const isBlank = keycode === "KC_NO" || keycode === "KC_TRNS";
-        const finalKeycode = isBlank ? mappedKeycode : applyModifiers(mappedKeycode, activeModifiers, false);
+        // Blank, Transparent and plain modifier keys are never modified
+        const isBlank = keycode === "KC_NO" || keycode === "KC_TRNS" || PLAIN_MODIFIER_KEYCODES.has(mappedKeycode);
+        const finalKeycode = isBlank ? mappedKeycode : applyModifiers(mappedKeycode, activeModifiers, false, modifierSide);
         assignKeycode(finalKeycode);
 
     };
@@ -171,7 +169,7 @@ const BasicKeyboards = ({ isPicker }: Props) => {
 
                     const finalKeycode = (k.keycode === "BLANK" || k.keycode === "KC_NO" || k.keycode === "KC_TRNS")
                         ? k.keycode
-                        : applyModifiers(k.keycode, activeModifiers, false);
+                        : applyModifiers(k.keycode, activeModifiers, false, modifierSide);
 
                     const keyContents = keyboard ? getKeyContents(keyboard, finalKeycode) : undefined;
                     // Use custom label for numpad keys, otherwise fall back to keyService
@@ -229,7 +227,10 @@ const BasicKeyboards = ({ isPicker }: Props) => {
                     </select>
 
                     {/* Modifiers section */}
-                    <span className="text-[9px] font-bold text-slate-500 dark:text-neutral-400 uppercase">Modifiers</span>
+                    <div className="flex items-center justify-between gap-1">
+                        <span className="text-[9px] font-bold text-slate-500 dark:text-neutral-400 uppercase">Modifiers</span>
+                        <ModifierSideToggle side={modifierSide} onChange={setModifierSide} compact />
+                    </div>
                     <Button
                         type="button"
                         variant={activeModifiers.length === 0 ? "default" : "secondary"}
@@ -348,7 +349,7 @@ const BasicKeyboards = ({ isPicker }: Props) => {
 
                 {/* Fit the complete keyboard to the available panel column. */}
                 <div className="w-[520px] max-w-full min-w-0">
-                    <QwertyKeyboard onKeyPress={handleKeyboardInput} activeModifiers={activeModifiers} hideLanguageSelector disableTooltip={true} />
+                    <QwertyKeyboard onKeyPress={handleKeyboardInput} activeModifiers={activeModifiers} modifierSide={modifierSide} hideLanguageSelector disableTooltip={true} />
                 </div>
 
                 {/* Blank/Transparent keys */}
@@ -466,11 +467,14 @@ const BasicKeyboards = ({ isPicker }: Props) => {
                         ))}
                     </select>
                 </div>
-                <QwertyKeyboard onKeyPress={handleKeyboardInput} activeModifiers={activeModifiers} hideLanguageSelector disableTooltip={true} />
+                <QwertyKeyboard onKeyPress={handleKeyboardInput} activeModifiers={activeModifiers} modifierSide={modifierSide} hideLanguageSelector disableTooltip={true} />
             </div>
 
             <section className="flex flex-col gap-2">
-                <span className="font-semibold text-lg text-kb-ink">Modifiers</span>
+                <div className="flex items-center gap-3">
+                    <span className="font-semibold text-lg text-kb-ink">Modifiers</span>
+                    <ModifierSideToggle side={modifierSide} onChange={setModifierSide} />
+                </div>
                 <div className="flex flex-wrap items-center gap-1">
                     <Button
                         type="button"

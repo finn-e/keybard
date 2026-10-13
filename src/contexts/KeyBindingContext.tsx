@@ -778,13 +778,14 @@ export const KeyBindingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     CS: "RSC",
                     CA: "RCA",
                     CG: "RCG",
+                    SA: "RSA",
                     SG: "RSG",
                     AG: "RAG",
                     CSA: "RSCA",
                     CSG: "RSCG",
                     CAG: "RCAG",
                     SAG: "RSAG",
-                    CSAG: "HYPR",
+                    CSAG: "RSCAG",
                 };
 
                 const mods = modifierStateRef.current;

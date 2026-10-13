@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 import { Modifier, modifierOptions, applyModifiers } from "@/utils/modifierUtils";
 import { getKeyContents } from "@/utils/keys";
 import { KeyContent } from "@/types/keyboard.types";
+import ModifierSideToggle from "@/components/ModifierSideToggle";
+import { useModifierSide } from "@/hooks/useModifierSide";
 
 interface Props {
     compact?: boolean;
@@ -23,6 +25,7 @@ const MouseKeysSection = ({ compact, variant: variantOverride }: Props) => {
     const { selectedLayer } = useLayer();
     const { keyVariant } = useLayoutSettings();
     const [activeModifiers, setActiveModifiers] = useState<Modifier[]>([]);
+    const [modifierSide, setModifierSide] = useModifierSide();
 
     const layerColorName = keyboard?.cosmetic?.layer_colors?.[selectedLayer] || "primary";
     const hoverBorderColor = hoverBorderClasses[layerColorName] || hoverBorderClasses["primary"];
@@ -80,7 +83,7 @@ const MouseKeysSection = ({ compact, variant: variantOverride }: Props) => {
     // same effectiveVariant / keySizeClass. Do not render <Key> directly in the
     // panels that embed this section (see CLAUDE.md: key sizing consistency).
     const renderKey = (k: { keycode: string; label: string }, withModifiers: boolean = false) => {
-        const finalKeycode = withModifiers ? applyModifiers(k.keycode, activeModifiers, false) : k.keycode;
+        const finalKeycode = withModifiers ? applyModifiers(k.keycode, activeModifiers, false, modifierSide) : k.keycode;
         const keyContents = keyboard ? getKeyContents(keyboard, finalKeycode) : undefined;
 
         // Force label usage "Mouse 1" so getHeaderIcons sees "Mouse" and adds the icon
@@ -127,9 +130,12 @@ const MouseKeysSection = ({ compact, variant: variantOverride }: Props) => {
 
             {/* Modifiers section */}
             <div className="flex flex-col gap-2">
-                <span className={compact ? "text-[9px] font-bold text-slate-500 dark:text-neutral-400 uppercase" : "font-semibold text-lg text-kb-ink"}>
-                    Modifiers
-                </span>
+                <div className={compact ? "flex items-center gap-2" : "flex items-center gap-3"}>
+                    <span className={compact ? "text-[9px] font-bold text-slate-500 dark:text-neutral-400 uppercase" : "font-semibold text-lg text-kb-ink"}>
+                        Modifiers
+                    </span>
+                    <ModifierSideToggle side={modifierSide} onChange={setModifierSide} compact={compact} />
+                </div>
                 {compact ? (
                     // Compact modifier choices wrap with the available panel width.
                     <div className="flex flex-wrap gap-1">
