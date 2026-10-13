@@ -114,7 +114,7 @@ describe('SvilUSB openDevice on Linux', () => {
             const usb = new SvilUSB();
             const failure = await usb.openDevice(device as unknown as HIDDevice).catch((e: unknown) => e);
             expect(failure).toBeInstanceOf(LinuxHidAccessError);
-            expect((failure as LinuxHidAccessError).udevCommand).toContain('ATTRS{idProduct}=="4044"');
+            expect((failure as LinuxHidAccessError).udevCommand).toContain('ATTRS{idProduct}=="404[4-9a-d]"');
         } finally {
             ua.mockRestore();
         }
