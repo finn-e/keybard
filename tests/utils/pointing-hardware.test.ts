@@ -52,12 +52,4 @@ describe('findPointingProblems', () => {
     it('ignores halves without trackball firmware', () => {
         expect(problems([LEFT, 0, 0, 0, 0], [RIGHT, 0, 0, 0, 0])).toEqual([]);
     });
-
-    it('flags both halves claiming the same side, naming the other side’s file', () => {
-        const found = problems([LEFT | INIT_OK, 2, 2, 0x47, 0xb8], [LEFT | INIT_OK, 2, 2, 0x47, 0xb8]);
-        expect(found).toEqual([{ kind: 'same-side', side: 'left', otherSide: 'right', files: [trackballFirmwareFile('pmw3389', 'right')] }]);
-        const mixed = problems([RIGHT | INIT_OK, 1, 1, 0x42, 0xbd], [RIGHT | INIT_OK, 2, 2, 0x47, 0xb8]);
-        expect(mixed[0]).toMatchObject({ kind: 'same-side', otherSide: 'left', files: [trackballFirmwareFile('pmw3360', 'left'), trackballFirmwareFile('pmw3389', 'left')] });
-        expect(problems([LEFT, 0, 0, 0, 0], [LEFT, 0, 0, 0, 0])).toMatchObject([{ kind: 'same-side', files: [] }]);
-    });
 });

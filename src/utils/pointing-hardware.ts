@@ -78,14 +78,7 @@ export function trackballFirmwareFile(sensor: TrackballSensor, side: Side): stri
 export type PointingProblem =
     | { kind: "wrong-sensor"; half: PointingHalfReport; builtFor: TrackballSensor; actual: TrackballSensor; file: string }
     | { kind: "no-sensor"; half: PointingHalfReport; builtFor: TrackballSensor }
-    | { kind: "unknown-sensor"; half: PointingHalfReport; builtFor: TrackballSensor }
-    | { kind: "same-side"; side: Side; otherSide: Side; files: string[] };
-
-/** The sensor a half really has, as far as we know. */
-function sensorOf(half: PointingHalfReport): TrackballSensor | null {
-    if (half.detected === "pmw3360" || half.detected === "pmw3389") return half.detected;
-    return half.builtFor;
-}
+    | { kind: "unknown-sensor"; half: PointingHalfReport; builtFor: TrackballSensor };
 
 /** What's wrong with the firmware on each half, if anything. */
 export function findPointingProblems(report: PointingHardwareReport | null | undefined): PointingProblem[] {
@@ -101,12 +94,6 @@ export function findPointingProblems(report: PointingHardwareReport | null | und
         } else if (half.detected !== builtFor) {
             problems.push({ kind: "wrong-sensor", half, builtFor, actual: half.detected, file: trackballFirmwareFile(half.detected, half.side) });
         }
-    }
-    const [a, b] = report.halves;
-    if (a && b && a.side === b.side) {
-        const otherSide: Side = a.side === "left" ? "right" : "left";
-        const sensors = [...new Set([sensorOf(a), sensorOf(b)].filter((s): s is TrackballSensor => s !== null))];
-        problems.push({ kind: "same-side", side: a.side, otherSide, files: sensors.map((s) => trackballFirmwareFile(s, otherSide)) });
     }
     return problems;
 }

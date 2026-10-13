@@ -25,14 +25,6 @@ describe('TrackballMismatchDialog', () => {
         await waitFor(() => expect(screen.queryByText('Wrong trackball firmware')).toBeNull());
     });
 
-    it('explains two halves on the same side', () => {
-        keyboardContext.keyboard = { kbid: 'abc', pointing_hardware: report([0x07, 2, 2, 0x47, 0xb8], [0x07, 2, 2, 0x47, 0xb8]) };
-        render(<TrackballMismatchDialog />);
-        expect(screen.getByText('Wrong firmware on one half')).toBeTruthy();
-        expect(screen.getByText(/Both halves are set up as the left half/)).toBeTruthy();
-        expect(screen.getByText('svalboard_trackball_pmw3389_right_sval_<release>.uf2')).toBeTruthy();
-    });
-
     it('stays hidden when everything matches, nothing was reported, or the board is disconnected', () => {
         keyboardContext.keyboard = { kbid: 'abc', pointing_hardware: report([0x07, 2, 2, 0x47, 0xb8], [0x05, 2, 2, 0x47, 0xb8]) };
         const { rerender } = render(<TrackballMismatchDialog />);
