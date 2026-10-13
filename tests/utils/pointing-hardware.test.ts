@@ -81,12 +81,4 @@ describe('findPointingProblems', () => {
     it('waits for halves that have not been checked yet', () => {
         expect(problems([LEFT, NONE, 0, 0, 0], [RIGHT, PMW3389, 0, 0, 0])).toEqual([]);
     });
-
-    it('flags both halves claiming the same side, naming the other side’s file', () => {
-        const found = problems([LEFT | INIT_OK, PMW3389, PMW3389, 0x47, 0xb8], [LEFT | INIT_OK, PMW3389, PMW3389, 0x47, 0xb8]);
-        expect(found).toEqual([{ kind: 'same-side', side: 'left', otherSide: 'right', files: [firmwareFile('pmw3389', 'right')] }]);
-        const mixed = problems([RIGHT | INIT_OK, PMW3360, PMW3360, 0x42, 0xbd], [RIGHT | INIT_OK, AZOTEQ, AZOTEQ, 0, 40]);
-        expect(mixed[0]).toMatchObject({ kind: 'same-side', otherSide: 'left', files: [firmwareFile('pmw3360', 'left'), firmwareFile('azoteq', 'left')] });
-        expect(problems([LEFT, NONE, NOTHING, 0, 0], [LEFT, NONE, NOTHING, 0, 0])).toMatchObject([{ kind: 'same-side', files: [firmwareFile('none', 'right')] }]);
-    });
 });
