@@ -212,7 +212,7 @@ SCALE_MIN, SCALE_MAX = 50, 150
 
 class OverlayControls(QWidget):
     """A separate input window: the handle moves the overlay while the keyboard passes clicks through."""
-    def __init__(self, surface, open_controls, get_scale=lambda: 100, set_scale=lambda scale, final: None, set_capitals=lambda value: None, set_adaptive=lambda value: None):
+    def __init__(self, surface, open_controls, get_scale=lambda: 100, set_scale=lambda scale, final: None, set_capitals=lambda value: None, set_adaptive=lambda value: None, place=lambda: None, reload=lambda: None):
         super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus)
         self.surface = surface
         self.setWindowTitle('Keybard · Overlay controls')
@@ -236,6 +236,10 @@ class OverlayControls(QWidget):
         self.adaptive.setToolTip('Restyle each key for the background around it')
         self.adaptive.triggered.connect(set_adaptive)
         self.adaptive.setVisible(backdrop.supported())
+        menu.addSeparator()
+        # Also in the tray menu; here too for desktops without a tray.
+        menu.addAction('Place at bottom', place)
+        menu.addAction('Reload board layout', reload)
         self.more.setMenu(menu)
         for button in (self.handle, self.resizer, self.collapser, self.more):
             button.setFixedSize(24, 24); layout.addWidget(button)
@@ -297,7 +301,8 @@ class Host(QObject):
         self.surface.pass_clicks_through()
         self.place()
         self.controls = OverlayControls(self.surface, self.open_controls,
-            lambda: self.state.config['scale'], self.resize_overlay, self.set_capitals, self.set_adaptive)
+            lambda: self.state.config['scale'], self.resize_overlay, self.set_capitals, self.set_adaptive,
+            self.place, lambda: self.command(dict(op='reload')))
         self.controls.capitals.setChecked(self.state.config['capitalAlphas'])
         self.controls.adaptive.setChecked(self.state.config['adaptiveContrast'])
         # Expanding shows the overlay's adapted colors at once rather than at the next sample.

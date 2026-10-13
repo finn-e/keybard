@@ -36,7 +36,7 @@ class OverlayControlsTest(unittest.TestCase):
 
     def test_control_menu_has_open_and_capital_letters(self):
         actions = [a for a in self.controls.more.menu().actions() if not a.isSeparator()]
-        self.assertEqual([a.text() for a in actions], ['Open Keybard', 'Capital letters', 'Adaptive contrast'])
+        self.assertEqual([a.text() for a in actions], ['Open Keybard', 'Capital letters', 'Adaptive contrast', 'Place at bottom', 'Reload board layout'])
         from keybard_host import backdrop
         self.assertEqual(self.controls.adaptive.isVisible(), backdrop.supported())
         actions[0].trigger()
