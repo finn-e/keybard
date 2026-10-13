@@ -61,7 +61,7 @@ def geometry_from_definition(definition, hardware=(), selections=()):
         if not isinstance(name, str) or not isinstance(fragments.get(name), dict):
             raise ValueError("Unknown selected fragment")
         matrix_map = option.get("matrix_map")
-        if not isinstance(matrix_map, list) or not matrix_map:
+        if not isinstance(matrix_map, list):  # [] is a zero-key fragment, e.g. a pointing module
             raise ValueError("Missing selected fragment matrix map")
         for position in matrix_map:
             if (not isinstance(position, list) or len(position) != 2 or
