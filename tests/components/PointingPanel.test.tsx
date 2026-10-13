@@ -22,6 +22,7 @@ vi.mock('../../src/layout/SecondarySidebar/Panels/MouseKeysSection', () => ({
 vi.mock('../../src/layout/SecondarySidebar/Panels/DynamicMenuPanel', () => ({
     default: () => <div data-testid="dynamic-menu" />,
 }));
+vi.mock('@/components/PointingHardwareSummary', () => ({ default: () => null }));
 vi.mock('@/layout/SecondarySidebar/components/DescriptionBlock', () => ({
     default: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
 }));

@@ -3,6 +3,7 @@ import MouseKeysSection from "./MouseKeysSection";
 import { useLayoutSettings } from "@/contexts/LayoutSettingsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import DescriptionBlock from "@/layout/SecondarySidebar/components/DescriptionBlock";
+import PointingHardwareSummary from "@/components/PointingHardwareSummary";
 
 /**
  * Unified Pointing Devices panel
@@ -54,6 +55,7 @@ const PointingPanel = ({ isPicker }: Props) => {
     if (isHorizontal) {
         return (
             <div className="flex flex-row gap-3 items-start flex-wrap content-start">
+                {!isPicker && <PointingHardwareSummary compact />}
                 <MouseKeysSection compact variant="medium" />
                 {pointingMenuIndex !== -1 && (
                     <DynamicMenuPanel menuIndex={pointingMenuIndex} horizontal embedded section="pointing" />
@@ -69,6 +71,7 @@ const PointingPanel = ({ isPicker }: Props) => {
                 <DescriptionBlock>
                     Emulate a mouse using the Mouse Button keys, adjust the Track Ball speed with the Sniper and Boost keys, and adjust the settings for your pointing devices.
                 </DescriptionBlock>
+                {!isPicker && <PointingHardwareSummary />}
                 {/* Mouse Keys section at top: mouse buttons, sniper, boost */}
                 <div className="pb-4">
                     <MouseKeysSection />

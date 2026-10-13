@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findPointingProblems, firmwareFile, parsePointingHardware } from '../../src/utils/pointing-hardware';
+import { findPointingProblems, firmwareFile, isPointingReportSettled, parsePointingHardware, summarizePointingHardware } from '../../src/utils/pointing-hardware';
 
 // One half's block: [flags] [built_for] [detected] [id0] [id1]
 const LEFT = 0x03, RIGHT = 0x01, INIT_OK = 0x04;
@@ -88,5 +88,41 @@ describe('findPointingProblems', () => {
         const mixed = problems([RIGHT | INIT_OK, PMW3360, PMW3360, 0x42, 0xbd], [RIGHT | INIT_OK, AZOTEQ, AZOTEQ, 0, 40]);
         expect(mixed[0]).toMatchObject({ kind: 'same-side', otherSide: 'left', files: [firmwareFile('pmw3360', 'left'), firmwareFile('azoteq', 'left')] });
         expect(problems([LEFT, NONE, NOTHING, 0, 0], [LEFT, NONE, NOTHING, 0, 0])).toMatchObject([{ kind: 'same-side', files: [firmwareFile('none', 'right')] }]);
+    });
+});
+
+describe('isPointingReportSettled / summarizePointingHardware', () => {
+    const both = (usb: number[], other: number[]) => parsePointingHardware(reply(usb, other));
+
+    it('settles only when both halves have reported and finished checking', () => {
+        expect(isPointingReportSettled(null)).toBe(false);
+        expect(isPointingReportSettled(parsePointingHardware(reply([LEFT, TRACKPOINT, TRACKPOINT, 0, 0])))).toBe(false);
+        expect(isPointingReportSettled(both([LEFT, NONE, 0, 0, 0], [RIGHT, AZOTEQ, AZOTEQ, 0, 40]))).toBe(false);
+        expect(isPointingReportSettled(both([LEFT, NONE, NOTHING, 0, 0], [RIGHT, AZOTEQ, AZOTEQ, 0, 40]))).toBe(true);
+    });
+
+    it('lists left then right, whichever half is on USB', () => {
+        const summary = summarizePointingHardware(both([RIGHT, PMW3389, PMW3389, 0x47, 0xb8], [LEFT, TRACKPOINT, TRACKPOINT, 0, 0]));
+        expect(summary).toEqual([
+            { side: 'left', module: 'trackpoint', usb: false, firmwareMatches: true },
+            { side: 'right', module: 'pmw3389', usb: true, firmwareMatches: true },
+        ]);
+    });
+
+    it('names what is attached, not what the firmware is for, and flags the difference', () => {
+        const [left, right] = summarizePointingHardware(both([LEFT, NONE, AZOTEQ, 0, 40], [RIGHT, PMW3360, NOTHING, 0, 0]));
+        expect(left).toMatchObject({ module: 'azoteq', firmwareMatches: false });
+        expect(right).toMatchObject({ module: 'none', firmwareMatches: false });
+    });
+
+    it('shows a half that has not checked or reported yet', () => {
+        const [left, right] = summarizePointingHardware(parsePointingHardware(reply([LEFT, NONE, 0, 0, 0])));
+        expect(left).toMatchObject({ module: 'checking', firmwareMatches: true });
+        expect(right).toMatchObject({ side: 'right', module: 'silent' });
+    });
+
+    it('lists both halves when they claim the same side', () => {
+        const summary = summarizePointingHardware(both([LEFT, TRACKPOINT, TRACKPOINT, 0, 0], [LEFT, NONE, NOTHING, 0, 0]));
+        expect(summary.map((h) => [h.side, h.usb])).toEqual([['left', true], ['left', false]]);
     });
 });
