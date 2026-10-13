@@ -5,6 +5,7 @@ import sys
 import types
 from unittest import mock
 from keybard_host.device.protocol import SvalReader, ProtocolError, candidates, hid_backend, READ_COMMANDS, LayerSnapshot, DEFAULT_LAYER_STATE_FLAG, MODIFIER_STATE_FLAG2
+from keybard_host.device.protocol import report_size_from_descriptor, device_report_size
 
 
 class FakeDevice:
@@ -35,10 +36,17 @@ class FakeDevice:
         self.change_keymap = False
         self.matrix_rows = [0] * 10
         self.matrix_unsupported = False
+        # The board's raw HID report length, and the firmware's definition chunk cap
+        self.size = 32
+        self.chunk_cap = 22
+        # Ignore writes of another length (as hidraw does) rather than pad them (as Windows does)
+        self.strict_size = False
 
     def write(self, packet):
         self.writes.append(packet)
-        reply = bytearray(packet[1:])
+        if self.strict_size and len(packet) - 1 != self.size:
+            return len(packet)
+        reply = bytearray(packet[1:]).ljust(self.size, b"\0")[:self.size]
         if reply[1:5] == bytes(4):
             self.client += 1
             reply[25:29] = self.client.to_bytes(4, "little")
@@ -65,7 +73,7 @@ class FakeDevice:
                 if command == 0x0D:
                     data = len(self.compressed).to_bytes(4, "little")
                 else:
-                    offset, count = int.from_bytes(args[:2], "little"), args[2]
+                    offset, count = int.from_bytes(args[:2], "little"), min(args[2], self.chunk_cap)
                     chunk = self.compressed[offset:offset + count]
                     data = args[:2] + bytes((len(chunk) - int(self.corrupt_chunk),)) + chunk
             elif protocol == 0xDF and command in (0x18, 0x19):
@@ -95,7 +103,7 @@ class FakeDevice:
                 data = args[:2] + b"".join(c.to_bytes(2, "little") for c in self.dances[index])
             else:
                 raise AssertionError(f"Unexpected command {protocol:02X}:{command:02X}")
-            reply[7:] = data.ljust(25, b"\0")
+            reply[7:] = data.ljust(self.size - 7, b"\0")
         if self.foreign:
             other = bytearray(reply)
             other[1:5] = (9999).to_bytes(4, "little")
@@ -259,6 +267,107 @@ class ProtocolTests(unittest.TestCase):
             self.assertIs(hid_backend("linux"), hidraw)
             self.assertIs(hid_backend("win32"), hid)
             self.assertIs(hid_backend("darwin"), hid)
+
+
+def raw_hid_descriptor(size):
+    """QMK's raw HID report descriptor, with `size`-byte input and output reports."""
+    return bytes([0x06, 0x60, 0xFF, 0x09, 0x61, 0xA1, 0x01,
+                  0x09, 0x62, 0x15, 0x00, 0x26, 0xFF, 0x00, 0x95, size, 0x75, 0x08, 0x81, 0x02,
+                  0x09, 0x63, 0x15, 0x00, 0x26, 0xFF, 0x00, 0x95, size, 0x75, 0x08, 0x91, 0x02,
+                  0xC0])
+
+
+class DescribedDevice(FakeDevice):
+    """A fake board whose binding exposes hidapi >= 0.14's get_report_descriptor."""
+
+    def __init__(self, size):
+        super().__init__()
+        self.size = size
+        self.strict_size = True
+
+    def get_report_descriptor(self):
+        return raw_hid_descriptor(self.size)
+
+
+class ReportSizeTests(unittest.TestCase):
+    def test_descriptor_gives_32_or_64(self):
+        self.assertEqual(report_size_from_descriptor(raw_hid_descriptor(32)), 32)
+        self.assertEqual(report_size_from_descriptor(raw_hid_descriptor(64)), 64)
+        self.assertEqual(report_size_from_descriptor(list(raw_hid_descriptor(64))), 64)
+
+    def test_unusable_descriptor_gives_none(self):
+        self.assertIsNone(report_size_from_descriptor(b""))
+        self.assertIsNone(report_size_from_descriptor(None))
+        # No output report
+        self.assertIsNone(report_size_from_descriptor(raw_hid_descriptor(32)[:-3]))
+        # Too small for the protocol
+        self.assertIsNone(report_size_from_descriptor(raw_hid_descriptor(8)))
+
+    def test_binding_without_descriptor_support(self):
+        self.assertIsNone(device_report_size(FakeDevice()))
+        device = FakeDevice()
+        def broken():
+            raise OSError("not supported")
+        device.get_report_descriptor = broken
+        self.assertIsNone(device_report_size(device))
+        self.assertEqual(device_report_size(DescribedDevice(64)), 64)
+
+    def test_64_byte_board_from_descriptor_reads_whole_profile(self):
+        for cap in (22, 54):
+            device = DescribedDevice(64)
+            device.chunk_cap = cap
+            reader = SvalReader(device)
+            self.assertEqual(reader.report_size, 64)
+            _, uid = reader.info()
+            profile = reader.read_profile(uid)
+            self.assertEqual(len(profile.layers), 32)
+            self.assertTrue(all(len(packet) == 65 for packet in device.writes))
+            keymap = [p for p in device.writes if p[6:8] == b"\xfe\x12"]
+            # 32 layers x 120 bytes in 54-byte chunks, read twice to check it is stable
+            self.assertEqual(len(keymap), 2 * -(-32 * 120 // 54))
+            self.assertEqual(keymap[0][10], 54)
+            self.assertEqual(int.from_bytes(keymap[1][8:10], "big"), 54)
+            chunks = [p for p in device.writes if p[6:8] == b"\xdf\x0e"]
+            self.assertEqual(chunks[0][10], 54)
+            self.assertEqual(len(chunks), -(-len(device.compressed) // cap))
+
+    def test_32_byte_board_from_descriptor(self):
+        device = DescribedDevice(32)
+        reader = SvalReader(device)
+        _, uid = reader.info()
+        reader.read_profile(uid)
+        self.assertTrue(all(len(packet) == 33 for packet in device.writes))
+        keymap = [p for p in device.writes if p[6:8] == b"\xfe\x12"]
+        self.assertEqual(keymap[0][10], 22)
+
+    def test_probe_finds_64_without_descriptor(self):
+        device = FakeDevice()
+        device.size, device.strict_size = 64, True
+        reader = SvalReader(device)
+        self.assertIsNone(reader.report_size)
+        reader.info()
+        self.assertEqual(reader.report_size, 64)
+        # The 32-byte bootstrap went unanswered; the 64-byte one was answered
+        self.assertEqual([len(p) for p in device.writes[:2]], [33, 65])
+        self.assertTrue(all(len(p) == 65 for p in device.writes[1:]))
+        reader.layer_state()
+        self.assertEqual(len(device.writes[-1]), 65)
+
+    def test_probe_keeps_32_and_padding_boards_answer_at_32(self):
+        for size in (32, 64):
+            device = FakeDevice()
+            device.size = size  # Windows pads a 32-byte write to the report length
+            reader = SvalReader(device)
+            reader.info()
+            self.assertEqual(reader.report_size, size)
+            self.assertEqual(len(device.writes[0]), 33)
+            self.assertTrue(all(len(p) == size + 1 for p in device.writes[1:]))
+
+    def test_reply_of_the_wrong_length_rejected(self):
+        device = FakeDevice()
+        device.size = 64
+        with self.assertRaisesRegex(ProtocolError, "length"):
+            SvalReader(device, report_size=32).info()
 
 
 if __name__ == "__main__":

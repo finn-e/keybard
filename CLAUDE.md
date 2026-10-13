@@ -82,7 +82,7 @@ UI Components → React Contexts → Services → SvilUSB → WebHID API → Phy
 
 **Service Layer:** Each feature has a dedicated service class that encapsulates protocol details:
 - `KeyboardService` - Sval protocol service (keyboard loading, keymap read/write)
-- `SvilUSB` - WebHID API abstraction with 32-byte message protocol
+- `SvilUSB` - WebHID API abstraction; reports are 32 or 64 bytes, read per device from its HID descriptor (`src/services/hid-report.ts`)
 - `KeyService` - Keycode parsing and stringification
 - `QMKService` - QMK settings management
 - `SvalService` - Svalboard-specific features

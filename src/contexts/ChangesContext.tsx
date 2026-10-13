@@ -1,4 +1,4 @@
-import { PendingChange, changesUtils, ChangeQueue } from "@/services/changes.service";
+import { PendingChange, changesUtils, ChangeQueue, type KeyBlockWriter } from "@/services/changes.service";
 import React, { ReactNode, createContext, useCallback, useContext, useState, useEffect, useRef } from "react";
 import { useSettings } from "@/contexts/SettingsContext";
 
@@ -33,9 +33,11 @@ interface ChangesProviderProps {
     canWrite?: boolean;
     sessionKey?: string | number;
     registerTargetChangeGuard?: (guard: () => Promise<(discardPending?: boolean) => void>) => (() => void);
+    /** Writes key changes a block at a time; without it each key change runs its own callback. */
+    keyBlockWriter?: () => KeyBlockWriter | null;
 }
 
-export const ChangesProvider: React.FC<ChangesProviderProps> = ({ children, onPush, captureSave, canWrite = true, sessionKey, registerTargetChangeGuard }) => {
+export const ChangesProvider: React.FC<ChangesProviderProps> = ({ children, onPush, captureSave, canWrite = true, sessionKey, registerTargetChangeGuard, keyBlockWriter }) => {
     const [, render] = useState(0);
     const [undoLabel, setUndoLabel] = useState<string | null>(null);
     const undoRef = useRef<(() => Promise<void> | void) | null>(null);
@@ -51,8 +53,10 @@ export const ChangesProvider: React.FC<ChangesProviderProps> = ({ children, onPu
     onPushRef.current = onPush;
     const captureRef = useRef(captureSave);
     captureRef.current = captureSave;
+    const keyWriterRef = useRef(keyBlockWriter);
+    keyWriterRef.current = keyBlockWriter;
     const engineRef = useRef<ChangeQueue | null>(null);
-    if (!engineRef.current) engineRef.current = new ChangeQueue(() => render(n => n + 1), () => writable.current, () => captureRef.current?.() || (() => onPushRef.current?.()));
+    if (!engineRef.current) engineRef.current = new ChangeQueue(() => render(n => n + 1), () => writable.current, () => captureRef.current?.() || (() => onPushRef.current?.()), () => keyWriterRef.current?.() ?? null);
     const engine = engineRef.current;
     const { getSetting, updateSetting } = useSettings();
     const [isInstant, setInstantState] = useState(getSetting("live-updating") === true);
