@@ -58,6 +58,23 @@ class BoardLayoutTests(unittest.TestCase):
             instance['allow_override'] = False
         self.assertEqual(len(geometry_from_definition(definition, (40,) * 10, (1,) * 10)), 52)
 
+    def test_zero_key_pointing_instances(self):
+        # Firmware with pointing fragments (svalboard/qmk#23): zero-key instances per hand.
+        definition = fragment_definition()
+        definition['fragments'].update({"pointing_none": {"id": 4}, "pmw3389": {"id": 6}})
+        pointing = {"hardware_detect": True, "fragment_options": [
+            {"fragment": "pointing_none", "matrix_map": [], "default": True, "allow_override": False},
+            {"fragment": "pmw3389", "matrix_map": [], "allow_override": False}]}
+        definition['composition']['instances'] += [copy.deepcopy(pointing), copy.deepcopy(pointing)]
+        for hardware in ((255, 255), (6, 6), (6, 4)):
+            with self.subTest(hardware=hardware):
+                keys = geometry_from_definition(definition, (255,) * 10 + hardware, (255,) * 12)
+                self.assertEqual(len(keys), 60)
+        missing = copy.deepcopy(definition)
+        del missing['composition']['instances'][10]['fragment_options'][0]['matrix_map']
+        with self.assertRaisesRegex(ValueError, 'matrix map'):
+            geometry_from_definition(missing, (255,) * 12, (255,) * 12)
+
     def test_bad_fragment_metadata_never_produces_partial_geometry(self):
         cases = []
         original = fragment_definition()
