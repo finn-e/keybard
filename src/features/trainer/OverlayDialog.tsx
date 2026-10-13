@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Download, PlugZap, SlidersHorizontal, Unplug } from 'lucide-react';
+import { Download, PlugZap, Unplug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useLayoutSettings } from '@/contexts/LayoutSettingsContext';
@@ -42,10 +42,8 @@ function OverlayDialogBody() {
         {host.error && !host.state && <p role="alert" className="text-sm text-destructive">{host.error}</p>}
         <HostVersion build={host.build} />
         <DialogFooter>
-            {host.state ? <>
-                {board && <Button variant="outline" onClick={() => void host.command({ op: 'disconnect' })}><Unplug /> Disconnect</Button>}
-                <Button onClick={() => void host.command({ op: 'colors' })}><SlidersHorizontal /> Overlay settings</Button>
-            </> : !PARANOID && <>
+            {host.state ? board && <Button variant="outline" onClick={() => void host.command({ op: 'disconnect' })}><Unplug /> Disconnect</Button>
+            : !PARANOID && <>
                 {!host.local && <Button variant="outline" onClick={host.connect}><PlugZap /> Connect</Button>}
                 <Button asChild><a href={HOST_DOWNLOAD}><Download /> Download for Windows</a></Button>
             </>}

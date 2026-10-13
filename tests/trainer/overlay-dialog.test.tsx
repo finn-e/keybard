@@ -28,12 +28,11 @@ describe('Desktop overlay dialog', () => {
         expect(host.connect).toHaveBeenCalled();
     });
 
-    it('names the board, opens the Host’s settings, and can disconnect', () => {
+    it('names the board and can disconnect; settings are only in the Host', () => {
         host.state = connected();
         show();
         expect(screen.getByText('Keybard Host is following Svalboard Right.')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: /Overlay settings/ }));
-        expect(host.command).toHaveBeenCalledWith({ op: 'colors' });
+        expect(screen.queryByRole('button', { name: /settings/i })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: /Disconnect/ }));
         expect(host.command).toHaveBeenCalledWith({ op: 'disconnect' });
     });
