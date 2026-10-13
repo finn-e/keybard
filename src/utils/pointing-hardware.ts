@@ -1,31 +1,35 @@
-// Trackball firmware vs. hardware: Sval POINTING_HARDWARE (0x2C).
+// Pointing-device firmware vs. hardware: Sval POINTING_HARDWARE (0x2C).
 //
-// PMW3360 and PMW3389 trackball sensors need different firmware, and the wrong
-// one leaves the trackball dead with no other sign. Svalboard QMK reports, for
-// each half, its side, the sensor its firmware drives and the sensor that
-// answered, so Keybard can name the .uf2 that fixes it.
+// Each pointing module (trackball, Azoteq trackpad, TrackPoint) needs its own
+// firmware, PMW3360 and PMW3389 trackballs need different firmware, and the wrong
+// one leaves the module dead with no other sign. Svalboard QMK reports, for each
+// half, its side, the module its firmware drives and the module that answered, so
+// Keybard can name the .uf2 that fixes it.
 //
 // Reply after the wrapper: [0x2C] [format = 1] [USB half: 5 bytes] [other half: 5 bytes]
-// Each half: [flags] [built_for] [detected] [Product_ID] [Inverse_Product_ID]
-//   flags: bit 0 reported, bit 1 left half, bit 2 sensor driver initialized
-//   built_for: 0 not a trackball build, 1 PMW3360, 2 PMW3389
-//   detected: 0 not checked, 1 PMW3360, 2 PMW3389, 3 no answer, 4 some other ID
+// Each half: [flags] [built_for] [detected] [id0] [id1]
+//   flags: bit 0 reported, bit 1 left half, bit 2 the module's driver started
+//   built_for: 0 no pointing module, 1 PMW3360, 2 PMW3389, 5 Azoteq, 6 TrackPoint
+//   detected: 0 not checked yet, 1 PMW3360, 2 PMW3389, 3 no module answered,
+//             4 the trackball bus answered with another ID, 5 Azoteq, 6 TrackPoint
+//   ids: PMW Product_ID / Inverse_Product_ID, Azoteq product number, or PS/2 device ID
 // Documented in svalboard/qmk keyboards/svalboard/docs/protocol.md.
 
 /** GET_INFO second feature byte: the board answers POINTING_HARDWARE (0x2C). */
 export const SVIL_FLAG2_POINTING_HARDWARE = 0x02;
 
 export type TrackballSensor = "pmw3360" | "pmw3389";
+export type PointingModule = TrackballSensor | "azoteq" | "trackpoint";
 export type Side = "left" | "right";
 
 export interface PointingHalfReport {
     /** The half plugged into the computer (it answers for both). */
     usb: boolean;
     side: Side;
-    /** The trackball sensor this half's firmware drives; null for other builds. */
-    builtFor: TrackballSensor | null;
-    /** What answered: a known sensor, "none" (no answer), "unknown" (another ID), or null (not checked). */
-    detected: TrackballSensor | "none" | "unknown" | null;
+    /** The module this half's firmware drives; "none" for a build without one. */
+    builtFor: PointingModule | "none";
+    /** What answered: a module, "none" (nothing), "unknown" (another trackball ID), or null (not checked yet). */
+    detected: PointingModule | "none" | "unknown" | null;
     sensorStarted: boolean;
     productId: number;
     inverseProductId: number;
@@ -41,7 +45,7 @@ const FLAG_LEFT = 0x02;
 const FLAG_INIT_OK = 0x04;
 const BLOCK_SIZE = 5;
 
-const SENSORS: Record<number, TrackballSensor> = { 1: "pmw3360", 2: "pmw3389" };
+const MODULES: Record<number, PointingModule> = { 1: "pmw3360", 2: "pmw3389", 5: "azoteq", 6: "trackpoint" };
 
 function parseHalf(bytes: Uint8Array, offset: number, usb: boolean): PointingHalfReport | null {
     if (bytes.length < offset + BLOCK_SIZE) return null;
@@ -51,8 +55,8 @@ function parseHalf(bytes: Uint8Array, offset: number, usb: boolean): PointingHal
     return {
         usb,
         side: flags & FLAG_LEFT ? "left" : "right",
-        builtFor: SENSORS[bytes[offset + 1]] ?? null,
-        detected: SENSORS[detectedCode] ?? (detectedCode === 3 ? "none" : detectedCode === 4 ? "unknown" : null),
+        builtFor: MODULES[bytes[offset + 1]] ?? "none",
+        detected: MODULES[detectedCode] ?? (detectedCode === 3 ? "none" : detectedCode === 4 ? "unknown" : null),
         sensorStarted: (flags & FLAG_INIT_OK) !== 0,
         productId: bytes[offset + 3],
         inverseProductId: bytes[offset + 4],
@@ -68,16 +72,26 @@ export function parsePointingHardware(reply: Uint8Array, cmd = 0x2c): PointingHa
     return halves.length ? { halves } : null;
 }
 
-export const SENSOR_NAMES: Record<TrackballSensor, string> = { pmw3360: "PMW3360", pmw3389: "PMW3389" };
+export const MODULE_NAMES: Record<PointingModule, string> = {
+    pmw3360: "PMW3360 trackball",
+    pmw3389: "PMW3389 trackball",
+    azoteq: "Azoteq trackpad",
+    trackpoint: "TrackPoint",
+};
 
-/** The release asset for a trackball half, as svalboard/qmk names them. */
-export function trackballFirmwareFile(sensor: TrackballSensor, side: Side): string {
-    return `svalboard_trackball_${sensor}_${side}_sval_<release>.uf2`;
+export const isTrackball = (module: PointingModule | "none"): module is TrackballSensor =>
+    module === "pmw3360" || module === "pmw3389";
+
+/** The release asset for a half with this module (or none), as svalboard/qmk names them. */
+export function firmwareFile(module: PointingModule | "none", side: Side): string {
+    if (module === "none") return `svalboard_${side}_sval_<release>.uf2`;
+    if (isTrackball(module)) return `svalboard_trackball_${module}_${side}_sval_<release>.uf2`;
+    return `svalboard_${module}_${side}_sval_<release>.uf2`;
 }
 
 export type PointingProblem =
-    | { kind: "wrong-sensor"; half: PointingHalfReport; builtFor: TrackballSensor; actual: TrackballSensor; file: string }
-    | { kind: "no-sensor"; half: PointingHalfReport; builtFor: TrackballSensor }
+    | { kind: "wrong-module"; half: PointingHalfReport; builtFor: PointingModule | "none"; actual: PointingModule; file: string }
+    | { kind: "no-module"; half: PointingHalfReport; builtFor: PointingModule; file: string }
     | { kind: "unknown-sensor"; half: PointingHalfReport; builtFor: TrackballSensor };
 
 /** What's wrong with the firmware on each half, if anything. */
@@ -85,14 +99,14 @@ export function findPointingProblems(report: PointingHardwareReport | null | und
     if (!report) return [];
     const problems: PointingProblem[] = [];
     for (const half of report.halves) {
-        const builtFor = half.builtFor;
-        if (!builtFor || half.detected === null) continue;
-        if (half.detected === "none") {
-            problems.push({ kind: "no-sensor", half, builtFor });
-        } else if (half.detected === "unknown") {
-            if (!half.sensorStarted) problems.push({ kind: "unknown-sensor", half, builtFor });
-        } else if (half.detected !== builtFor) {
-            problems.push({ kind: "wrong-sensor", half, builtFor, actual: half.detected, file: trackballFirmwareFile(half.detected, half.side) });
+        const { builtFor, detected } = half;
+        if (detected === null) continue;
+        if (detected === "none") {
+            if (builtFor !== "none") problems.push({ kind: "no-module", half, builtFor, file: firmwareFile("none", half.side) });
+        } else if (detected === "unknown") {
+            if (isTrackball(builtFor) && !half.sensorStarted) problems.push({ kind: "unknown-sensor", half, builtFor });
+        } else if (detected !== builtFor) {
+            problems.push({ kind: "wrong-module", half, builtFor, actual: detected, file: firmwareFile(detected, half.side) });
         }
     }
     return problems;
