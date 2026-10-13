@@ -9,6 +9,15 @@ import sys
 import threading
 import time
 
+# Windows: Chromium's GPU path updated the transparent overlay window with partial frames,
+# so keys could stay lit or patches go blank until the next change. Software rendering hands
+# the window whole frames, and the overlay is small enough that it costs nothing noticeable.
+# Must be set before Qt WebEngine starts.
+WINDOWS_CHROMIUM_FLAGS = ('--disable-gpu', '--disable-gpu-compositing')
+if sys.platform == 'win32':
+    _flags = os.environ.get('QTWEBENGINE_CHROMIUM_FLAGS', '').split()
+    os.environ['QTWEBENGINE_CHROMIUM_FLAGS'] = ' '.join(_flags + [f for f in WINDOWS_CHROMIUM_FLAGS if f not in _flags])
+
 from PySide6.QtCore import Qt, QTimer, QUrl, Signal, QObject, QStandardPaths, QLockFile, QSize, QPointF
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget, QToolButton, QHBoxLayout
