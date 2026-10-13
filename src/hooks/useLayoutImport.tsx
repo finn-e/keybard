@@ -12,7 +12,6 @@ export function useLayoutImport() {
     const { queue, todo, isInstant, commit, isSaving } = useChanges();
     const [review, setReview] = useState<{ plan: ImportReview; target: KeyboardInfo | null; connected: boolean; filename: string; file: File } | null>(null);
     const [fileError, setFileError] = useState<string | null>(null);
-    const [fileStatus, setFileStatus] = useState<string | null>(null);
     const [applying, setApplying] = useState(false);
 
     const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -25,7 +24,6 @@ export function useLayoutImport() {
     /** Open the import review for a layout file (also used to restore backups). */
     const reviewFile = async (file: File) => {
         setFileError(null);
-        setFileStatus(null);
         if (Object.keys(todo).length || isSaving) {
             setFileError('Apply or discard your pending changes before importing a layout.');
             return;
@@ -58,7 +56,6 @@ export function useLayoutImport() {
                 await importService.syncWithKeyboard(next, keyboard, (desc, cb, metadata) => queue(desc, cb, { ...metadata, deferCommit: true }), { keyboardService });
                 if (isInstant && !await commit()) throw new Error('Some imported changes could not be saved. They remain in pending changes. Retry Apply after restoring the connection.');
             }
-            setFileStatus(isConnected ? (isInstant ? 'Import saved to keyboard.' : 'Import staged. Use Apply to save it to the keyboard.') : 'Layout opened offline. No keyboard was changed.');
             setReview(null);
         } catch (error) {
             setFileError(error instanceof Error ? error.message : String(error));
@@ -68,7 +65,6 @@ export function useLayoutImport() {
 
     const importReview = <>
         {fileError && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{fileError}</p>}
-        {fileStatus && <p role="status" className="text-sm">{fileStatus}</p>}
         <Dialog open={!!review} onOpenChange={open => { if (!open && !applying) setReview(null); }}>
             <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
                 <DialogHeader>

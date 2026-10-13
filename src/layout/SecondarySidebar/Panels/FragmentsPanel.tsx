@@ -24,6 +24,25 @@ function safeMapGet<K extends string | number, V>(
 }
 
 /**
+ * Hardware presets for the finger positions (thumbs always get the thumb cluster):
+ * Default is 5-key everywhere, 6-key adds the 2S key everywhere, and Fang uses
+ * 6-key on index and pinky and 5-key on middle and ring.
+ */
+type FragmentPreset = "default" | "six" | "fang";
+
+const PRESETS: Array<{ preset: FragmentPreset; label: string; description: string }> = [
+    { preset: "default", label: "Default", description: "Restore default hardware selections" },
+    { preset: "six", label: "6-key", description: "Use 6-key finger clusters" },
+    { preset: "fang", label: "Fang", description: "Use 6-key index and pinky clusters, 5-key middle and ring" },
+];
+
+function wantsSixKey(instanceId: string, preset: FragmentPreset): boolean {
+    if (preset === "six") return true;
+    if (preset === "fang") return /index|pinky/i.test(instanceId);
+    return false;
+}
+
+/**
  * Fragment Selections Panel
  *
  * Allows users to select which physical component (fragment) is installed
@@ -103,7 +122,7 @@ const FragmentsPanel: React.FC = () => {
         }
     }, [keyboard, fragmentService, applyLocalSelections, isConnected, queue, getKeyboardSnapshot]);
 
-    const resolveDefaultFragmentName = useCallback((instance: FragmentInstance): string | undefined => {
+    const resolvePresetFragmentName = useCallback((instance: FragmentInstance, preset: FragmentPreset): string | undefined => {
         const options = instance.fragment_options ?? [];
         if (options.length === 0) return undefined;
 
@@ -121,6 +140,14 @@ const FragmentsPanel: React.FC = () => {
             );
         }
 
+        if (wantsSixKey(instance.id, preset)) {
+            return (
+                findByName(/finger[_-]?6|6key|_6\b|6\b/i) ||
+                findByMatrixSize(6) ||
+                fallback
+            );
+        }
+
         return (
             findByName(/finger[_-]?5|5key|_5\b|5\b/i) ||
             findByMatrixSize(5) ||
@@ -128,7 +155,7 @@ const FragmentsPanel: React.FC = () => {
         );
     }, []);
 
-    const handleApplyDefault = useCallback(async () => {
+    const handleApplyPreset = useCallback(async (preset: FragmentPreset) => {
         if (!keyboard) return;
 
         const instances = fragmentService.getSelectableInstances(keyboard);
@@ -146,7 +173,7 @@ const FragmentsPanel: React.FC = () => {
                 continue;
             }
 
-            const targetFragment = resolveDefaultFragmentName(instance);
+            const targetFragment = resolvePresetFragmentName(instance, preset);
             if (!targetFragment) continue;
 
             const currentFragment = fragmentService.resolveFragment(keyboard, idx, instance);
@@ -174,7 +201,7 @@ const FragmentsPanel: React.FC = () => {
         }
 
         setUpdating(null);
-    }, [keyboard, fragmentService, resolveDefaultFragmentName, applyLocalSelections, isConnected, queue, getKeyboardSnapshot]);
+    }, [keyboard, fragmentService, resolvePresetFragmentName, applyLocalSelections, isConnected, queue, getKeyboardSnapshot]);
 
     // Check if keyboard has fragments
     if (!keyboard || !fragmentService.hasFragments(keyboard)) {
@@ -216,18 +243,22 @@ const FragmentsPanel: React.FC = () => {
     return (
         <div className="flex flex-col">
             <div className="flex flex-col px-4 gap-3 py-2">
-                <div>
-                    <Button
-                        type="button"
-                        variant="default"
-                        size="sm"
-                        className="rounded-full px-4 bg-kb-active text-kb-active-fg hover:bg-gray-800 dark:hover:bg-neutral-300"
-                        aria-label="Restore default hardware selections"
-                        onClick={handleApplyDefault}
-                        disabled={updating !== null}
-                    >
-                        Default
-                    </Button>
+                <div className="flex flex-wrap gap-2">
+                    {PRESETS.map(({ preset, label, description }) => (
+                        <Button
+                            key={preset}
+                            type="button"
+                            variant="default"
+                            size="sm"
+                            className="rounded-full px-4 bg-kb-active text-kb-active-fg hover:bg-gray-800 dark:hover:bg-neutral-300"
+                            aria-label={description}
+                            title={description}
+                            onClick={() => handleApplyPreset(preset)}
+                            disabled={updating !== null}
+                        >
+                            {label}
+                        </Button>
+                    ))}
                 </div>
                 {leftInstances.length > 0 && (
                     <div className="flex flex-col gap-2">

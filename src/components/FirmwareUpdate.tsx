@@ -100,8 +100,9 @@ export function UnsupportedFirmwareCard({ info, className, onDismiss }: { info: 
 }
 
 const NOTICE_TEXT: Record<FirmwareUpdateNotice, string> = {
-    rc0: "Newer Svalboard firmware is available. It lets the Trainer follow your layers, and applies more of the QMK settings you save here.",
+    rc0: "Newer Svalboard firmware is available. It lets the overlay follow your layers, and applies more of the QMK settings you save here.",
     rc: "Newer Svalboard firmware is available. It applies more of the QMK settings you save here, such as tap-hold timing.",
+    launch: "Newer Svalboard firmware (vLaunch2) is available. It keeps your settings more reliably, and lets you choose the default layer here.",
 };
 
 const dismissKey = (notice: FirmwareUpdateNotice) => `keybard:firmware-notice-dismissed:${notice}`;

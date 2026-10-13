@@ -1,6 +1,7 @@
 import type { KeyboardInfo } from "../types/keyboard.types";
 import { keyService } from "./key.service";
-import { SvilUSB, checkSvilStatus, svilHasMacroBuffer } from "./usb.service";
+import { SVIL_MACRO_BUFFER_HEADER_BYTES, SvilUSB, checkSvilStatus, svilHasMacroBuffer } from "./usb.service";
+import { payloadCapacity } from "./hid-report";
 
 export class MacroService {
     private readonly MACRO_IDS = {
@@ -25,9 +26,12 @@ export class MacroService {
 
     private readonly QMK_EXT_ID = 1;
 
-    // MACRO_BUFFER_GET/SET carry at most 20 data bytes: 26-byte wrapped payload
-    // minus [cmd][offset:4][count]
-    private readonly SVIL_MACRO_CHUNK = 20;
+    // MACRO_BUFFER_GET/SET data room: the report minus the wrapper and
+    // [cmd][offset:4][count], i.e. 20 bytes at 32, 52 at 64. The firmware refuses
+    // a count larger than that.
+    private get svilMacroChunk(): number {
+        return payloadCapacity(this.usb, SVIL_MACRO_BUFFER_HEADER_BYTES);
+    }
 
     constructor(private usb: SvilUSB) { }
 
@@ -37,7 +41,7 @@ export class MacroService {
         }
         // Macros are stored as one big chunk of memory, null-separated.
         // v3+ firmware: read through Sval with 32-bit offsets (the buffer is past 64 KB);
-        // older firmware: VIA, 28 bytes per fetch.
+        // older firmware: VIA buffer reads.
         const macro_memory = svilHasMacroBuffer(this.usb.svilProtocolVersion)
             ? await this.getSvilBuffer(kbinfo.macros_size || 0, kbinfo.macro_count || 0)
             : await this.usb.getViaBuffer(SvilUSB.CMD_VIA_MACRO_GET_BUFFER, kbinfo.macros_size || 0, { slice: 4, uint8: true, bytes: 1 }, checkComplete);
@@ -77,7 +81,7 @@ export class MacroService {
         let terminators = 0;
 
         while (offset < size) {
-            const count = Math.min(this.SVIL_MACRO_CHUNK, size - offset);
+            const count = Math.min(this.svilMacroChunk, size - offset);
             const data = await this.usb.sendSvil(
                 SvilUSB.CMD_SVIL_MACRO_BUFFER_GET,
                 [...this.LE32(offset), count],
@@ -106,8 +110,9 @@ export class MacroService {
      * Response: [cmd_echo][status], 0 = ok, 1 = out of range
      */
     private async pushSvilBuffer(size: number, buffer: Uint8Array): Promise<void> {
-        for (let offset = 0; offset < size; offset += this.SVIL_MACRO_CHUNK) {
-            const count = Math.min(this.SVIL_MACRO_CHUNK, size - offset);
+        const chunk = this.svilMacroChunk;
+        for (let offset = 0; offset < size; offset += chunk) {
+            const count = Math.min(chunk, size - offset);
             const resp = await this.usb.sendSvil(
                 SvilUSB.CMD_SVIL_MACRO_BUFFER_SET,
                 [...this.LE32(offset), count, ...buffer.slice(offset, offset + count)],

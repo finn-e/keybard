@@ -30,9 +30,9 @@ export function surfaceKeys(board: KeyboardInfo & { trainerLabels?: Record<strin
         // Function-key names are labels, never case-sensitive character output.
         if (/^KC_F(?:[1-9]|1[0-9]|2[0-4])$/.test(base)) letter = base.slice(3);
         const names: Record<string, string> = { esc: 'Escape', escape: 'Escape', del: 'Delete', delete: 'Delete',
-            shift: 'Shift', lsft: 'Shift', rsft: 'Shift', lshift: 'Shift', rshift: 'Shift',
-            ctrl: 'Control', control: 'Control', lctl: 'Control', rctl: 'Control', lctrl: 'Control', rctrl: 'Control',
-            alt: 'Alt', lalt: 'Alt', ralt: 'Alt', caps: 'Caps', capslock: 'Caps', 'caps lock': 'Caps',
+            shift: 'Shift', lsft: 'Shift', rsft: 'Shift', lshift: 'Shift', rshift: 'Shift', 'l shift': 'Shift', 'r shift': 'Shift',
+            ctrl: 'Control', control: 'Control', lctl: 'Control', rctl: 'Control', lctrl: 'Control', rctrl: 'Control', 'l ctrl': 'Control', 'r ctrl': 'Control',
+            alt: 'Alt', lalt: 'Alt', ralt: 'Alt', 'l alt': 'Alt', 'r alt': 'Alt', 'l gui': 'gui', 'r gui': 'gui', caps: 'Caps', capslock: 'Caps', 'caps lock': 'Caps',
             enter: 'Enter', tab: 'Tab', space: 'Space', backsp: 'Backspace', bspc: 'Backspace', backspace: 'Backspace' };
         letter = names[letter.toLowerCase()] || letter;
         // Host-only behavior definitions can supply details absent from the editor snapshot.

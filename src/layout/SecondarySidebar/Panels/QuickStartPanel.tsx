@@ -19,7 +19,7 @@ const QuickStartPanel: React.FC = () => {
                         </li>
                         <li>Drag and drop new black keys from any of the panels on the left onto your layer's layout.</li>
                         <li>You can also swap keys on your layout by dragging and dropping them onto each other (including between layers).</li>
-                        <li><b>[SHORTCUT]</b> Drag a key off your layout into blank space to create a blank key or Option/Alt drag and drop to make a key transparent.</li>
+                        <li><b>[SHORTCUT]</b> Drag a key off your layout into blank space to create a blank key.</li>
                         <li>You can see multiple layers at once by clicking on the <b>Show Multiple Layers</b> button.</li>
                         <li>You can switch between layers by clicking on the layer tabs at the top of the layout. There are a maximum of 16 layers available for use [0-15]. You can just show the layers you are using by clicking on the <b>Hide Transparent Layers</b> button.</li>
                         <li>The <b>3D View</b> button lets you see your layout from a different perspective and the relationships between layers in multiple layers mode.</li>

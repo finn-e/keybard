@@ -8,8 +8,20 @@ from .board_layout import decode_definition, geometry_from_definition
 from .model import Profile, legend
 
 USAGE_PAGE, USAGE = 0xFF61, 0x62
-REPORT_SIZE = 32
+# Raw HID report length: 32 bytes on today's firmware, 64 on newer builds. It is
+# read from the device's report descriptor (hidapi >= 0.14). When the binding
+# can't give one, the first exchange probes: it writes 32 bytes, then 64 if that
+# goes unanswered, and keeps the length of the first valid reply.
+REPORT_SIZE = 32  # default, and the first size probed
+SUPPORTED_REPORT_SIZES = (32, 64)
+WRAPPER_OVERHEAD = 6  # [0xDD][client_id:4][protocol]
+# Framing in front of a transfer's data, wrapper included: VIA keymap buffer
+# [wrapper][cmd][offset:2][size] and Sval definition chunk [wrapper][cmd][offset:2][size].
+CHUNK_HEADER = WRAPPER_OVERHEAD + 4
 DEFAULT_LAYER_STATE_FLAG = 1 << 6
+# Second feature byte: 0x16 appends the board's modifiers and Caps Word / Caps Lock.
+MODIFIER_STATE_FLAG2 = 1 << 2
+SHIFT_BITS = 0x22  # left and right Shift in the HID modifier byte
 # Protocol -> command -> exact request argument length. No setter is expressible.
 READ_COMMANDS = {
     0xDF: {0x00: 0, 0x01: 2, 0x0D: 0, 0x0E: 3, 0x16: 0, 0x18: 0, 0x19: 0, 0x1B: 3},
@@ -21,6 +33,9 @@ READ_COMMANDS = {
 class LayerSnapshot:
     active: int
     default: int | None = None  # None means not advertised; zero is a valid mask.
+    # The board's own Shift and Caps Lock, or None on firmware that doesn't report them.
+    # Caps Word counts as Caps Lock: it capitalizes letters and leaves symbols alone.
+    modifiers: dict | None = None
 
 
 class ProtocolError(Exception):
@@ -37,6 +52,59 @@ class UnsupportedCommand(ProtocolError):
 
 class Cancelled(Exception):
     pass
+
+
+def report_size_from_descriptor(descriptor):
+    """Bytes in the first output report of a HID report descriptor, or None.
+
+    Walks the short items, tracking Report Size, Report Count and Report ID
+    (with Push/Pop), and sums the Output items of the first report ID seen.
+    """
+    data = bytes(descriptor or b"")
+    state = {"size": 0, "count": 0, "id": 0}
+    stack, bits, first_id = [], {}, None
+    i = 0
+    while i < len(data):
+        prefix = data[i]
+        if prefix == 0xFE:  # long item: [0xFE][data size][tag][data]
+            if i + 1 >= len(data):
+                break
+            i += 3 + data[i + 1]
+            continue
+        length = (0, 1, 2, 4)[prefix & 3]
+        value = int.from_bytes(data[i + 1:i + 1 + length], "little")
+        kind, tag = (prefix >> 2) & 3, prefix >> 4
+        i += 1 + length
+        if kind == 1:  # global
+            if tag == 7:
+                state["size"] = value
+            elif tag == 8:
+                state["id"] = value
+            elif tag == 9:
+                state["count"] = value
+            elif tag == 10:
+                stack.append(dict(state))
+            elif tag == 11 and stack:
+                state = stack.pop()
+        elif kind == 0 and tag == 9:  # main: Output
+            if first_id is None:
+                first_id = state["id"]
+            bits[state["id"]] = bits.get(state["id"], 0) + state["size"] * state["count"]
+    if first_id is None:
+        return None
+    size = bits[first_id] // 8
+    return size if size >= REPORT_SIZE else None
+
+
+def device_report_size(device):
+    """The device's raw HID report length from its descriptor, or None if unreadable."""
+    get_descriptor = getattr(device, "get_report_descriptor", None)
+    if get_descriptor is None:
+        return None
+    try:
+        return report_size_from_descriptor(get_descriptor())
+    except Exception:  # binding or OS can't read it: fall back to probing
+        return None
 
 
 def hid_backend(platform=sys.platform):
@@ -65,13 +133,16 @@ def candidates(hid_module):
 
 
 class SvalReader:
-    def __init__(self, device, clock=time.monotonic, cancelled=lambda: False):
+    def __init__(self, device, clock=time.monotonic, cancelled=lambda: False, report_size=None):
         self.device = device
+        # None until known: then the first exchange probes 32, then 64
+        self.report_size = report_size or device_report_size(device)
         self.clock = clock
         self.cancelled = cancelled
         self.client_id = 0
         self.renew_at = 0
         self.feature_flags = 0
+        self.feature_flags2 = 0
         self.load_deadline = None
         # The last board definition read: it only changes with new firmware, so a refresh reuses it.
         self.cached_definition = None
@@ -84,23 +155,31 @@ class SvalReader:
 
     def _exchange(self, request, accept):
         self.checkpoint()
-        if len(request) > REPORT_SIZE:
-            raise ProtocolError("Oversized request")
-        packet = b"\0" + request.ljust(REPORT_SIZE, b"\0")
-        if self.device.write(packet) != len(packet):
-            raise ProtocolError("Incomplete HID write")
-        deadline = self.clock() + .25
-        while self.clock() < deadline:
-            self.checkpoint()
-            reply = bytes(self.device.read(REPORT_SIZE, 30))
-            if not reply:
-                continue
-            if len(reply) != REPORT_SIZE:
-                raise ProtocolError("Malformed HID report length")
-            result = accept(reply)
-            if result is not None:
-                return result
+        sizes = (self.report_size,) if self.report_size else SUPPORTED_REPORT_SIZES
+        for size in sizes:
+            if len(request) > size:
+                raise ProtocolError("Oversized request")
+            packet = b"\0" + request.ljust(size, b"\0")
+            if self.device.write(packet) != len(packet):
+                raise ProtocolError("Incomplete HID write")
+            deadline = self.clock() + .25
+            while self.clock() < deadline:
+                self.checkpoint()
+                reply = bytes(self.device.read(self.report_size or max(SUPPORTED_REPORT_SIZES), 30))
+                if not reply:
+                    continue
+                if (len(reply) != self.report_size if self.report_size
+                        else len(reply) not in SUPPORTED_REPORT_SIZES):
+                    raise ProtocolError("Malformed HID report length")
+                result = accept(reply)
+                if result is not None:
+                    self.report_size = self.report_size or len(reply)
+                    return result
         raise ProtocolError("Svalboard response timed out")
+
+    def chunk_size(self):
+        """Data bytes per keymap or definition chunk: 22 at 32 bytes, 54 at 64."""
+        return (self.report_size or REPORT_SIZE) - CHUNK_HEADER
 
     def bootstrap(self):
         nonce = secrets.token_bytes(20)
@@ -165,6 +244,7 @@ class SvalReader:
         if version not in (2, 3):
             raise ProtocolError(f"Sval protocol {version} is not supported")
         self.feature_flags = data[12]
+        self.feature_flags2 = data[17] if len(data) > 17 else 0
         return version, int.from_bytes(data[4:12], "little")
 
     def layer_state(self):
@@ -174,7 +254,11 @@ class SvalReader:
         data = self._read(0x16)
         default = (int.from_bytes(data[4:8], "little")
                    if self.feature_flags & DEFAULT_LAYER_STATE_FLAG else None)
-        return LayerSnapshot(int.from_bytes(data[:4], "little"), default)
+        modifiers = None
+        if self.feature_flags2 & MODIFIER_STATE_FLAG2:
+            mods, status = data[8], data[9]
+            modifiers = dict(shift=bool(mods & SHIFT_BITS), capsLock=bool(status & 2) != bool(status & 1))
+        return LayerSnapshot(int.from_bytes(data[:4], "little"), default, modifiers)
 
     def pressed_keys(self):
         # VIA GET_KEYBOARD_VALUE / SWITCH_MATRIX_STATE, row offset zero.
@@ -192,12 +276,14 @@ class SvalReader:
             raise ProtocolError("Board definition exceeds the 16-bit transfer range")
         payload = bytearray()
         while len(payload) < size:
-            count = min(22, size - len(payload))
+            count = min(self.chunk_size(), size - len(payload))
             args = len(payload).to_bytes(2, "little") + bytes((count,))
             data = self._read(0x0E, args)
-            if data[2] != count:
+            # The firmware may send less than asked (it caps chunks at 22 bytes), never none
+            got = data[2]
+            if not 1 <= got <= count:
                 raise ProtocolError("Truncated board definition chunk")
-            payload.extend(data[3:3 + count])
+            payload.extend(data[3:3 + got])
         return decode_definition(payload)
 
     def fragment_state(self, command):
@@ -215,7 +301,7 @@ class SvalReader:
         size = count * 10 * 6 * 2
         raw = bytearray()
         while len(raw) < size:
-            amount = min(22, size - len(raw))
+            amount = min(self.chunk_size(), size - len(raw))
             args = len(raw).to_bytes(2, "big") + bytes((amount,))
             data = self._read(0x12, args, protocol=0xFE)
             raw.extend(data[3:3 + amount])

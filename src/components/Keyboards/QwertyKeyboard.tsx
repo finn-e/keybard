@@ -1,4 +1,5 @@
 import { FunctionComponent, useState, useRef, useLayoutEffect } from "react";
+import { usePreviewedLayerColors } from "@/hooks/useLayerColorPreview";
 import { useKeyBinding } from "@/contexts/KeyBindingContext";
 import { useLayer } from "@/contexts/LayerContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
@@ -8,36 +9,18 @@ import { hoverBackgroundClasses, hoverBorderClasses, hoverHeaderClasses } from "
 import { KeyContent } from "@/types/keyboard.types";
 import { LAYOUTS, BUTTON_TO_KEYCODE_MAP, KEY_DISPLAY_OVERRIDES, LAYOUT_KEY_MAPS, US_SHIFT_ALIASES } from "@/components/Keyboards/layouts";
 import { useLayoutSettings } from "@/contexts/LayoutSettingsContext";
+import { applyModifiers, Modifier, ModifierSide, PLAIN_MODIFIER_KEYCODES } from "@/utils/modifierUtils";
 
 interface IProps {
     onKeyPress?: (button: string) => void;
     activeModifiers?: string[];
+    /** Hand used when activeModifiers are applied (RSFT(kc) vs LSFT(kc)). */
+    modifierSide?: ModifierSide;
     hideLanguageSelector?: boolean;
     disableTooltip?: boolean;
 }
 
-// Helper to get modifier bitmask (same as BasicKeyboards)
-const getModifierMask = (activeModifiers: string[]): number => {
-    const hasCtrl = activeModifiers.includes("Ctrl");
-    const hasShift = activeModifiers.includes("Shift");
-    const hasAlt = activeModifiers.includes("Alt");
-    const hasGui = activeModifiers.includes("Gui");
-    return (hasCtrl ? 1 : 0) | (hasShift ? 2 : 0) | (hasAlt ? 4 : 0) | (hasGui ? 8 : 0);
-};
-
-const MODIFIER_MAP: Record<number, string> = {
-    1: "LCTL", 2: "LSFT", 3: "C_S", 4: "LALT", 5: "LCA", 6: "LSA", 7: "MEH",
-    8: "LGUI", 9: "LCG", 10: "SGUI", 11: "LSCG", 12: "LAG", 13: "LCAG", 14: "LSAG", 15: "HYPR",
-};
-
-const applyModifiers = (keycode: string, activeModifiers: string[]) => {
-    if (activeModifiers.length === 0) return keycode;
-    const mask = getModifierMask(activeModifiers);
-    const modifierFunc = MODIFIER_MAP[mask];
-    return modifierFunc ? `${modifierFunc}(${keycode})` : keycode;
-};
-
-const QwertyKeyboard: FunctionComponent<IProps> = ({ onKeyPress: onKeyPressCallback, activeModifiers = [], hideLanguageSelector = false, disableTooltip = false }) => {
+const QwertyKeyboard: FunctionComponent<IProps> = ({ onKeyPress: onKeyPressCallback, activeModifiers = [], modifierSide = "left", hideLanguageSelector = false, disableTooltip = false }) => {
     const [layoutName, setLayoutName] = useState<"default" | "shift">("default");
     const { internationalLayout, setInternationalLayout, layoutMode } = useLayoutSettings();
     const { keyboard } = useKeyboard();
@@ -46,7 +29,7 @@ const QwertyKeyboard: FunctionComponent<IProps> = ({ onKeyPress: onKeyPressCallb
 
     const isCompact = layoutMode === "bottombar";
 
-    const layerColorName = keyboard?.cosmetic?.layer_colors?.[selectedLayer] || "primary";
+    const layerColorName = usePreviewedLayerColors(keyboard?.cosmetic?.layer_colors)?.[selectedLayer] || "primary";
     const hoverBorderColor = hoverBorderClasses[layerColorName] || hoverBorderClasses["primary"];
     const hoverBackgroundColor = hoverBackgroundClasses[layerColorName] || hoverBackgroundClasses["primary"];
 
@@ -157,7 +140,8 @@ const QwertyKeyboard: FunctionComponent<IProps> = ({ onKeyPress: onKeyPressCallb
                     // Apply modifiers to the keycode if valid
                     // We only modify if it looks like a basic keycode
                     if (activeModifiers.length > 0 &&
-                        !["KC_TRNS", "KC_NO", "KC_LSFT", "KC_LCTL", "KC_LALT", "KC_LGUI", "KC_RSFT", "KC_RCTL", "KC_RALT", "KC_RGUI"].includes(keycode) &&
+                        !["KC_TRNS", "KC_NO"].includes(keycode) &&
+                        !PLAIN_MODIFIER_KEYCODES.has(keycode) &&
                         !keycode.includes("{") // Don't modify UI placeholders
                     ) {
                         // Check if keycode is a US Shift Alias (e.g. KC_EXLM -> KC_1)
@@ -166,7 +150,7 @@ const QwertyKeyboard: FunctionComponent<IProps> = ({ onKeyPress: onKeyPressCallb
                             keycode = US_SHIFT_ALIASES[keycode];
                         }
 
-                        keycode = applyModifiers(keycode, activeModifiers);
+                        keycode = applyModifiers(keycode, activeModifiers as Modifier[], false, modifierSide);
                     }
 
                     const displayLabel = KEY_DISPLAY_OVERRIDES[visualKey] || visualKey.replace("{", "").replace("}", "");

@@ -8,8 +8,8 @@ except ImportError:
 
 @unittest.skipUnless(AVAILABLE, 'PySide6 not installed')
 class OpenKeybardTests(unittest.TestCase):
-    def test_opens_trainer_on_the_website(self):
-        self.assertEqual(KEYBARD_URL, 'https://keybard.svalboard.com/#trainer')
+    def test_opens_the_overlay_page_on_the_website(self):
+        self.assertEqual(KEYBARD_URL, 'https://keybard.svalboard.com/#overlay')
         self.assertEqual(controls_url(False, 'http://127.0.0.1:5178/'), KEYBARD_URL)
 
     def test_paranoid_mode_stays_on_its_own_keybard(self):

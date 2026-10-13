@@ -2,8 +2,9 @@ import { LabelService } from "./label.service";
 import { KleService } from "./kle.service";
 import { keyService } from "./key.service";
 import { activeKeycodeVersion, applyKeycodeNumbering, UNREPORTED_KEYCODE_VERSION } from '@/constants/keycode-numbering';
-import { SVIL_TABLE_ALT_REPEAT_KEY, SVIL_TABLE_LEADER, SvilUSB, checkSvilStatus, readSvilTable, svilHasMacroBuffer, svilIndexArgs, usbInstance } from "./usb.service";
+import { SVIL_DEFINITION_HEADER_BYTES, SVIL_TABLE_ALT_REPEAT_KEY, VIA_BUFFER_HEADER_BYTES, SVIL_TABLE_LEADER, SvilUSB, checkSvilStatus, readSvilTable, svilHasMacroBuffer, svilIndexArgs, usbInstance } from "./usb.service";
 import { LE16 } from "./utils";
+import { payloadCapacity } from "./hid-report";
 
 import LZMA from "js-lzma";
 import { assertSupportedSvilProto } from "@/utils/unsupported-firmware";
@@ -272,9 +273,10 @@ export class KeyboardService {
             throw new Error(`Invalid payload size: ${payload_size}`);
         }
 
-        // Fetch definition in chunks using Svil protocol
-        // firmware definition chunk size = 22 (32 total - 6 wrapper - 4 response header)
-        const chunkSize = 22;
+        // Fetch definition in chunks using Svil protocol, as large as the report
+        // allows (22 bytes at 32, 54 at 64). The firmware may clamp a chunk below
+        // what was asked, so a short chunk is not the end of the definition.
+        const chunkSize = payloadCapacity(this.usb, SVIL_DEFINITION_HEADER_BYTES);
         const payload = new ArrayBuffer(payload_size);
         const pdv = new DataView(payload);
         let offset = 0;
@@ -289,13 +291,13 @@ export class KeyboardService {
 
             const data = resp as Uint8Array;
             // Response format after wrapper stripped: [cmd_echo][offset_lo][offset_hi][actual_size][data...]
-            const actualSize = data[3];
+            const actualSize = Math.min(data[3], requestSize);
             for (let i = 0; i < actualSize && offset < payload_size; i++) {
                 pdv.setInt8(offset, data[4 + i]);
                 offset++;
             }
 
-            if (actualSize < requestSize) break; // End of data
+            if (actualSize === 0) break; // End of data
         }
 
         // Decompress and parse JSON
@@ -630,6 +632,26 @@ export class KeyboardService {
     async updateKey(layer: number, row: number, col: number, keymask: number): Promise<void> {
         const BE16 = (num: number) => [(num >> 8) & 0xff, num & 0xff];
         await this.usb.send(SvilUSB.CMD_VIA_SET_KEYCODE, [layer, row, col, ...BE16(keymask)], {});
+    }
+
+    /** The most keycodes one dynamic keymap set-buffer message carries (11 at 32 bytes, 27 at 64). */
+    keymapBlockKeys(): number {
+        return Math.floor(payloadCapacity(this.usb, VIA_BUFFER_HEADER_BYTES) / 2);
+    }
+
+    /**
+     * Write keycodes to consecutive keymap positions in one message, starting at
+     * keymap index (layer * rows + row) * cols + col.
+     * Request: [0x13][offset:2 BE][size][keycode:2 BE ...]
+     */
+    async updateKeyBlock(index: number, keycodes: number[]): Promise<void> {
+        const BE16 = (num: number) => [(num >> 8) & 0xff, num & 0xff];
+        const offset = index * 2;
+        const size = keycodes.length * 2;
+        if (!keycodes.length || keycodes.length > this.keymapBlockKeys() || offset + size > 0x10000) {
+            throw new Error(`Keymap block of ${keycodes.length} keys at ${index} doesn't fit one message`);
+        }
+        await this.usb.send(SvilUSB.CMD_VIA_KEYMAP_SET_BUFFER, [...BE16(offset), size, ...keycodes.flatMap(BE16)], {});
     }
 
     async updateMacros(kbinfo: KeyboardInfo) {

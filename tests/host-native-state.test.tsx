@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { useHost } from '../src/features/trainer/host';
 import { DEFAULTS } from '../src/features/trainer/core';
 const board = { rows: 10, cols: 6, keymap: [Array(60).fill(4)], trainerLabels: {} };
-const state = { apiVersion: 1, revision: 1, layoutRevision: 1, session: 'one', board, config: { ...DEFAULTS, manualDefault: 1, highlightPressed: false }, active: 0, default: 1, valid: true, pressed: [], devices: [], practiceHidden: [], practiceTarget: null, visible: true, arrange: true };
+const state = { apiVersion: 1, revision: 1, layoutRevision: 1, session: 'one', board, config: { ...DEFAULTS, manualDefault: 1, highlightPressed: false }, active: 0, default: 1, valid: true, pressed: [], devices: [], practiceHidden: [], practiceTarget: null, visible: true };
 afterEach(() => { delete window.__keybardNativeState; vi.unstubAllGlobals(); });
 it('applies native layer events immediately and keeps the cached layout', async () => {
     window.__keybardNativeState = true;

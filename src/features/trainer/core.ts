@@ -8,13 +8,13 @@ export interface Appearance {
     changed: string; pressed: string;
 }
 export const PRESETS: Record<string, Appearance> = {
-    Dark: { fill: '#14202b', fillAlpha: 75, outline: '#51606a', outlineAlpha: 100,
+    Dark: { fill: '#14202b', fillAlpha: 80, outline: '#51606a', outlineAlpha: 100,
         legend: '#f0f5f7', legendAlpha: 100, width: 1, halo: false, changed: '#8ce4d3', pressed: '#ffd27a' },
 };
-PRESETS.Subtle = { ...PRESETS.Dark, fillAlpha: 22, outlineAlpha: 40, legendAlpha: 82, halo: true };
-PRESETS['Outline only'] = { ...PRESETS.Dark, fillAlpha: 0, outline: '#dce5ec', outlineAlpha: 86, halo: true };
-PRESETS.Light = { ...PRESETS.Dark, fill: '#f3f5f7', fillAlpha: 88, outline: '#56616b', legend: '#15202b' };
-PRESETS['High contrast'] = { ...PRESETS.Dark, fill: '#000000', fillAlpha: 95, outline: '#ffffff', width: 2, halo: true };
+PRESETS.Subtle = { ...PRESETS.Dark, fillAlpha: 20, outlineAlpha: 40, legendAlpha: 80, halo: true };
+PRESETS['Outline only'] = { ...PRESETS.Dark, fillAlpha: 0, outline: '#dce5ec', outlineAlpha: 90, halo: true };
+PRESETS.Light = { ...PRESETS.Dark, fill: '#f3f5f7', fillAlpha: 90, outline: '#56616b', legend: '#15202b' };
+PRESETS['High contrast'] = { ...PRESETS.Dark, fill: '#000000', fillAlpha: 90, outline: '#ffffff', width: 2, halo: true };
 export interface Preferences { layoutId: string; appearance: Appearance; effect: 'Off' | 'Quick flash' | 'Short fade'; duration: number; scale: number; hands: 'Both' | 'Left' | 'Right' }
 export const DEFAULTS: Preferences = { layoutId: 'us', appearance: { ...PRESETS['Outline only'] }, effect: 'Short fade', duration: 150, scale: 100, hands: 'Both' };
 export const STORAGE_KEY = 'keybard.trainer.v1';
@@ -36,6 +36,13 @@ export function preferences(value: unknown): Preferences {
     for (const key of ['duration', 'scale'] as const) if (typeof data[key] === 'number' && Number.isFinite(data[key]))
         result[key] = Math.max(key === 'duration' ? 50 : 50, Math.min(key === 'duration' ? 750 : 150, data[key] as number));
     return result;
+}
+/** The preferences that differ between two snapshots (a whole appearance counts as one field). */
+export function changedPreferences(before: Preferences, after: Preferences): Partial<Preferences> {
+    const changed: Partial<Preferences> = {};
+    for (const key of Object.keys(after) as Array<keyof Preferences>)
+        if (JSON.stringify(after[key]) !== JSON.stringify(before[key])) (changed as Record<string, unknown>)[key] = after[key];
+    return changed;
 }
 export function resolveBinding(keymap: number[][], index: number, active: number, defaults: number) {
     const mask = (active | defaults) >>> 0;

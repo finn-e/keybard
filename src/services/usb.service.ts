@@ -1,12 +1,27 @@
 // USB HID communication layer for Svil protocol
 // Supports client ID wrapper (0xDD) for multi-client concurrent access
 import type { USBSendOptions } from "../types/keyboard.types";
-import { BE16, LE16, MSG_LEN } from "./utils";
+import { BE16, LE16 } from "./utils";
+import {
+  DEFAULT_REPORT_LENGTH,
+  WRAPPER_HEADER_BYTES,
+  payloadCapacity,
+  reportLength as deviceReportLength,
+} from "./hid-report";
 
 // Protocol prefixes
 const WRAPPER_PREFIX = 0xdd;
 const SVIL_PREFIX = 0xdf;
 const VIA_PREFIX = 0xfe;
+
+// Framing in front of the data of a chunked transfer, counted from the start of
+// the report (wrapper included). The data room is the report length minus these.
+// VIA get/set buffer: [wrapper:6][cmd][offset:2][size][data...]
+export const VIA_BUFFER_HEADER_BYTES = WRAPPER_HEADER_BYTES + 4;
+// Sval DEFINITION_CHUNK reply: [wrapper:6][cmd][offset:2][actual_size][data...]
+export const SVIL_DEFINITION_HEADER_BYTES = WRAPPER_HEADER_BYTES + 4;
+// Sval MACRO_BUFFER_GET reply / SET request: [wrapper:6][cmd][offset:4][count][data...]
+export const SVIL_MACRO_BUFFER_HEADER_BYTES = WRAPPER_HEADER_BYTES + 6;
 
 // Client ID constants
 const NONCE_SIZE = 20;
@@ -167,6 +182,7 @@ export class SvilUSB {
   static readonly CMD_VIA_MACRO_SET_BUFFER = 0x0f;
   static readonly CMD_VIA_GET_LAYER_COUNT = 0x11;
   static readonly CMD_VIA_KEYMAP_GET_BUFFER = 0x12;
+  static readonly CMD_VIA_KEYMAP_SET_BUFFER = 0x13;
 
   static readonly VIA_LAYOUT_OPTIONS = 0x02;
   static readonly VIA_SWITCH_MATRIX_STATE = 0x03;
@@ -255,6 +271,11 @@ export class SvilUSB {
   // (set while connecting). Assume version 1 until the keyboard says otherwise.
   public svilProtocolVersion: number = 1;
 
+  // Raw HID report length of the open device, from its report descriptor
+  // (32 bytes on today's firmware, 64 on newer builds). Every report we send is
+  // this long, and chunked transfers size their data from it.
+  public reportLength: number = DEFAULT_REPORT_LENGTH;
+
   public onDisconnect?: () => void;
 
   private handleDisconnect = (event: HIDConnectionEvent) => {
@@ -308,6 +329,7 @@ export class SvilUSB {
   async openDevice(device: HIDDevice): Promise<boolean> {
     this.device = device;
     this.bootstrapped = false;
+    this.reportLength = deviceReportLength(device);
     if (!this.device.opened) {
       try {
         await this.device.open();
@@ -320,7 +342,7 @@ export class SvilUSB {
 
     // Don't bootstrap here - do it lazily on first command
     // This helps debug connection issues
-    console.log("USB device opened:", this.device.productName);
+    console.log(`USB device opened: ${this.device.productName} (${this.reportLength}-byte reports)`);
 
     return true;
   }
@@ -367,7 +389,7 @@ export class SvilUSB {
 
     const nonce = generateNonce();
 
-    const message = new Uint8Array(MSG_LEN);
+    const message = new Uint8Array(this.reportLength);
     message[0] = WRAPPER_PREFIX;
     // Client ID = 0 (bootstrap)
     message[1] = 0;
@@ -377,7 +399,7 @@ export class SvilUSB {
     // Nonce
     message.set(nonce, 5);
 
-    console.log("Bootstrap request:", Array.from(message.slice(0, 30)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+    console.log("Bootstrap request:", Array.from(message.slice(0, 5 + NONCE_SIZE)).map(b => b.toString(16).padStart(2, '0')).join(' '));
 
     // Send bootstrap request and wait for OUR response (might get other clients' responses first).
     // A fresh connection that gets no answer probes the board once and, if it
@@ -423,7 +445,7 @@ export class SvilUSB {
           break; // Timeout - retry the send
         }
 
-        console.log("Bootstrap response:", Array.from(response.slice(0, 32)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+        console.log("Bootstrap response:", Array.from(response.slice(0, 31)).map(b => b.toString(16).padStart(2, '0')).join(' '));
 
         // QMK without the wrapper answers [0xFF][rest of our request] (id_unhandled)
         if (response[0] === QMK_UNHANDLED && isOurRequest(response, message, 1)) {
@@ -537,7 +559,7 @@ export class SvilUSB {
    */
   private async probe(request: number[], fits: (reply: Uint8Array) => boolean): Promise<Uint8Array | null> {
     if (!this.device) return null;
-    const message = new Uint8Array(MSG_LEN);
+    const message = new Uint8Array(this.reportLength);
     message.set(request);
     try {
       await this.device.sendReport(0, message as BufferSource);
@@ -617,6 +639,7 @@ export class SvilUSB {
     this.clientIdExpiry = 0;
     this.bootstrapped = false;
     this.svilProtocolVersion = 1;
+    this.reportLength = DEFAULT_REPORT_LENGTH;
 
     if (this.device) {
       if (this.handleEvent) {
@@ -648,7 +671,7 @@ export class SvilUSB {
    * Format: [0xDD][client_id:4][protocol][payload...]
    */
   private buildWrappedMessage(protocol: number, payload: number[]): Uint8Array {
-    const message = new Uint8Array(MSG_LEN);
+    const message = new Uint8Array(this.reportLength);
     message[0] = WRAPPER_PREFIX;
     // Client ID (little-endian)
     message[1] = this.clientId & 0xff;
@@ -658,7 +681,7 @@ export class SvilUSB {
     // Protocol
     message[5] = protocol;
     // Payload
-    for (let i = 0; i < payload.length && i < MSG_LEN - 6; i++) {
+    for (let i = 0; i < payload.length && i < this.reportLength - WRAPPER_HEADER_BYTES; i++) {
       message[6 + i] = payload[i];
     }
     return message;
@@ -979,8 +1002,10 @@ export class SvilUSB {
     options: USBSendOptions = {},
     checkComplete?: (data: number[] | Uint8Array) => boolean
   ): Promise<number[] | Uint8Array> {
-    // VIA_BUFFER_CHUNK_SIZE = 22 (32 total - 6 wrapper - 4 VIA response header)
-    const chunksize = 22;
+    // The firmware's reply to a wrapped VIA command loses its last 6 bytes to the
+    // wrapper, so a chunk is the report length minus wrapper and VIA header
+    // (22 bytes at 32, 54 at 64).
+    const chunksize = payloadCapacity(this, VIA_BUFFER_HEADER_BYTES);
     const bytes = options.bytes || 1;
     const alldata: number[] = [];
     let offset = 0;
@@ -1033,9 +1058,10 @@ export class SvilUSB {
     );
     const size = sizeResp as number;
 
-    // Fetch definition in chunks
-    // firmware definition chunk size = 22 (32 total - 6 wrapper - 4 response header)
-    const chunkSize = 22;
+    // Fetch definition in chunks, as large as the report allows. The firmware may
+    // clamp a chunk below what was asked (it caps them at 22 bytes today), so a
+    // short chunk is not the end; only the definition size or an empty chunk is.
+    const chunkSize = payloadCapacity(this, SVIL_DEFINITION_HEADER_BYTES);
     const alldata: number[] = [];
     let offset = 0;
 
@@ -1049,13 +1075,13 @@ export class SvilUSB {
 
       const data = resp as Uint8Array;
       // Response format after wrapper stripped: [cmd_echo][offset_lo][offset_hi][actual_size][data...]
-      const actualSize = data[3]; // Skip cmd_echo
+      const actualSize = Math.min(data[3], requestSize); // Skip cmd_echo
       for (let i = 0; i < actualSize; i++) {
         alldata.push(data[4 + i]); // Skip cmd_echo + header
       }
 
       offset += actualSize;
-      if (actualSize < requestSize) break; // End of data
+      if (actualSize === 0) break; // End of data
     }
 
     return new Uint8Array(alldata);
@@ -1069,8 +1095,8 @@ export class SvilUSB {
     const buffer = new Uint8Array(data);
     let offset = 0;
     let chunkOffset = 0;
-    // VIA_BUFFER_CHUNK_SIZE = 22 (matches get chunk size)
-    const chunkSize = 22;
+    // Same chunk size as getViaBuffer
+    const chunkSize = payloadCapacity(this, VIA_BUFFER_HEADER_BYTES);
 
     while (offset < size) {
       const chunk = new Uint8Array(chunkSize);
@@ -1186,11 +1212,29 @@ export class SvilUSB {
    * Set layer color on keyboard.
    * Takes HSV values (0-255 range).
    */
-  async setLayerColor(layer: number, hue: number, sat: number): Promise<void> {
+  async setLayerColor(layer: number, hue: number, sat: number, save = true): Promise<void> {
     const valueId = SvilUSB.LAYER_COLOR_VALUE_ID_BASE + layer;
     console.log(`setLayerColor: layer=${layer}, valueId=${valueId}, hue=${hue}, sat=${sat}`);
     await this.customValueSet(SvilUSB.LAYER_COLOR_CHANNEL, valueId, [hue, sat]);
-    await this.customValueSave(SvilUSB.LAYER_COLOR_CHANNEL);
+    if (save) await this.customValueSave(SvilUSB.LAYER_COLOR_CHANNEL);
+  }
+
+  // LED brightness: QMK's own rgblight brightness on VIA's lighting channel, the
+  // value RGB_VAI/RGB_VAD change. It applies to every layer. 0-255; the firmware
+  // scales it to RGBLIGHT_LIMIT_VAL.
+
+  static readonly RGBLIGHT_CHANNEL = 2;
+  static readonly RGBLIGHT_BRIGHTNESS_ID = 1;
+
+  async getLedBrightness(): Promise<number> {
+    const data = await this.customValueGet(SvilUSB.RGBLIGHT_CHANNEL, SvilUSB.RGBLIGHT_BRIGHTNESS_ID, 1);
+    return data[0];
+  }
+
+  /** With save false the board shows the brightness but keeps the stored one, for live previews. */
+  async setLedBrightness(val: number, save = true): Promise<void> {
+    await this.customValueSet(SvilUSB.RGBLIGHT_CHANNEL, SvilUSB.RGBLIGHT_BRIGHTNESS_ID, [val]);
+    if (save) await this.customValueSave(SvilUSB.RGBLIGHT_CHANNEL);
   }
 
   /**

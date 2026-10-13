@@ -12,7 +12,7 @@ export const HOST_ORIGIN = (import.meta.env.VITE_KEYBARD_HOST_ORIGIN as string |
 const REMOTE_KEY = 'keybard-host-remote';
 const servedByHost = () => typeof document !== 'undefined' && document.documentElement.dataset.keybardHost === 'true';
 function rememberedRemote() { try { return appStorage.getItem(REMOTE_KEY) === '1'; } catch { return false; } }
-export interface HostConfig extends Preferences { highlightPressed: boolean; manualDefault: number }
+export interface HostConfig extends Preferences { highlightPressed: boolean; manualDefault: number; capitalAlphas?: boolean; adaptiveContrast?: boolean }
 export interface HostSnapshot {
     modifiers?: { shift: boolean; capsLock: boolean } | null;
     apiVersion: number; config: HostConfig; revision: number; layoutRevision: number;
@@ -20,7 +20,7 @@ export interface HostSnapshot {
     selectedDevice: string | null; status: string; devices: { id: string; name: string; serial: string }[];
     active: number; default: number | null; valid: boolean; pressed: number[];
     practiceHidden: number[]; practiceTarget: number | null;
-    matrixAvailable: boolean | null; visible: boolean; arrange: boolean; session: string;
+    matrixAvailable: boolean | null; visible: boolean; session: string;
 }
 /** The host's release and the Keybard it bundles. Hosts before vLaunch2 don't report them: 'unknown'. */
 export interface HostBuild { version: string; keybardCommit: string | null }
@@ -68,6 +68,7 @@ export function useHost() {
         function receive(data: HostSnapshot) {
             if (!alive || data.apiVersion !== 1) return;
             lastReceived = Date.now();
+            setError(''); // updates are arriving again
             if (current.current?.session !== data.session) current.current = null;
             if (current.current && data.revision < current.current.revision) { data.revision = current.current.revision; data.config = current.current.config; }
             if (data.layoutRevision === current.current?.layoutRevision && !data.board) data.board = current.current.board;
@@ -109,14 +110,19 @@ export function useHost() {
             await post('/api/host/command', () => value); setError('');
         } catch (e) { setError(e instanceof Error ? e.message : 'Host command failed'); }
     }, [post]);
-    const configure = useCallback(async (config: HostConfig) => {
+    const configure = useCallback(async (config: HostConfig | ((latest: HostConfig) => HostConfig)) => {
         if (!current.current || busyRef.current) return false;
         busyRef.current = true; setBusy(true);
         try {
-            // The revision is read at send time: a retry after a host restart uses the new host's.
-            const data = await post('/api/host/config', () => ({ config, revision: current.current?.revision ?? 0 }));
+            // The config and revision are read at send time: a retry after a host restart uses the new
+            // host's, and a change made meanwhile (overlay menu, resize grip) isn't overwritten.
+            let sent = typeof config === 'function' ? config(current.current.config) : config;
+            const data = await post('/api/host/config', () => {
+                if (typeof config === 'function' && current.current) sent = config(current.current.config);
+                return { config: sent, revision: current.current?.revision ?? 0 };
+            });
             if (!current.current) return false;
-            current.current = { ...current.current, config, revision: data.revision };
+            current.current = { ...current.current, config: sent, revision: data.revision };
             setState(current.current); setError(''); return true;
         } catch (e) { setError(e instanceof Error ? e.message : 'Could not save host settings'); return false; }
         finally { busyRef.current = false; setBusy(false); }
@@ -134,7 +140,7 @@ let refreshOp: 'refresh' | 'reload' = 'refresh';
  * Tell Keybard Host the board's layout changed, so its overlay re-reads it. Called once a batch
  * of writes has reached the board; a burst of edits gives one re-read (about 0.6 s of USB reads).
  * Only where the host is already in use: Keybard served by it, or a hosted page the user
- * connected to it from the Trainer. Never probes loopback otherwise.
+ * connected to it from the Overlay page. Never probes loopback otherwise.
  */
 export function notifyHostLayoutChanged(): void {
     const local = servedByHost() || (typeof window !== 'undefined' && !!window.__keybardNativeState);

@@ -144,20 +144,16 @@ export const useKeyDrag = (props: UseKeyDragProps) => {
         window.addEventListener("mouseup", handleUp);
     }, [keycode, label, keyContents, uniqueId, w, currentUnitSize, h, row, col, layerColor, variant, isRelative, layerIndex, startDrag, dragW, dragH, dragItemData]);
 
-    const handleMouseUp = useCallback((e: React.MouseEvent) => {
+    const handleMouseUp = useCallback(() => {
         if (canDrop && isDragHover && draggedItem) {
             markDropConsumed();
 
             if (draggedItem.row !== undefined && draggedItem.col !== undefined && draggedItem.layer !== undefined) {
                 if (draggedItem.row !== row || draggedItem.col !== col || draggedItem.layer !== layerIndex) {
-                    if (e.altKey) {
-                        assignKeycodeTo({ type: "keyboard", layer: layerIndex, row, col }, draggedItem.keycode);
-                    } else {
-                        swapKeys(
-                            { type: "keyboard", row: draggedItem.row, col: draggedItem.col, layer: draggedItem.layer },
-                            { type: "keyboard", row, col, layer: layerIndex }
-                        );
-                    }
+                    swapKeys(
+                        { type: "keyboard", row: draggedItem.row, col: draggedItem.col, layer: draggedItem.layer },
+                        { type: "keyboard", row, col, layer: layerIndex }
+                    );
                 }
             } else {
                 const dragKc = draggedItem.keycode;
