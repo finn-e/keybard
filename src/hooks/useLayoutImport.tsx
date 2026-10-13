@@ -58,7 +58,7 @@ export function useLayoutImport() {
                 await importService.syncWithKeyboard(next, keyboard, (desc, cb, metadata) => queue(desc, cb, { ...metadata, deferCommit: true }), { keyboardService });
                 if (isInstant && !await commit()) throw new Error('Some imported changes could not be saved. They remain in pending changes. Retry Apply after restoring the connection.');
             }
-            setFileStatus(isConnected ? (isInstant ? 'Import saved to keyboard.' : 'Import staged. Use Apply to save it to the keyboard.') : 'Layout opened offline. No keyboard was changed.');
+            if (!isConnected) setFileStatus('Layout opened offline. No keyboard was changed.');
             setReview(null);
         } catch (error) {
             setFileError(error instanceof Error ? error.message : String(error));
