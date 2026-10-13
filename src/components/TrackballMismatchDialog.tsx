@@ -54,34 +54,12 @@ function describe(problem: PointingProblem): ReactNode {
                     and didn't start. Check its cable.
                 </>
             );
-        case "same-side": {
-            const files = problem.files;
-            return (
-                <>
-                    Both halves are set up as the {problem.side} half, so the keyboard can't tell them apart. Flash the half
-                    that's really on the {problem.otherSide} with{" "}
-                    {files.length === 1 && <File name={files[0]} />}
-                    {files.length > 1 && (
-                        <>
-                            {files.map((f, i) => (
-                                <span key={f}>
-                                    {i > 0 && " or "}
-                                    <File name={f} />
-                                </span>
-                            ))}
-                            , whichever matches its pointing device
-                        </>
-                    )}
-                    .
-                </>
-            );
-        }
     }
 }
 
 /**
  * Shown once per connection when a half's firmware doesn't match its pointing
- * device (or lack of one), or both halves claim the same side. Names the .uf2 that fixes it.
+ * device (or lack of one). Names the .uf2 that fixes it.
  */
 export const TrackballMismatchDialog: FC = () => {
     const { keyboard, isConnected } = useKeyboard();
@@ -89,14 +67,13 @@ export const TrackballMismatchDialog: FC = () => {
     const kbid = keyboard?.kbid ?? "";
     const problems = isConnected ? findPointingProblems(keyboard?.pointing_hardware) : [];
     const open = problems.length > 0 && acknowledged !== kbid;
-    const sensorProblem = problems.some((p) => p.kind !== "same-side");
     const acknowledge = () => setAcknowledged(kbid);
 
     return (
         <Dialog open={open} onOpenChange={(next) => !next && acknowledge()}>
             <DialogContent className="sm:max-w-[520px]">
                 <DialogHeader>
-                    <DialogTitle>{sensorProblem ? "Wrong pointing-device firmware" : "Wrong firmware on one half"}</DialogTitle>
+                    <DialogTitle>Wrong pointing-device firmware</DialogTitle>
                     <DialogDescription asChild>
                         <div className="space-y-2 text-sm">
                             <ul className="list-disc space-y-2 pl-5">

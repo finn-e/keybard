@@ -92,14 +92,7 @@ export function firmwareFile(module: PointingModule | "none", side: Side): strin
 export type PointingProblem =
     | { kind: "wrong-module"; half: PointingHalfReport; builtFor: PointingModule | "none"; actual: PointingModule; file: string }
     | { kind: "no-module"; half: PointingHalfReport; builtFor: PointingModule; file: string }
-    | { kind: "unknown-sensor"; half: PointingHalfReport; builtFor: TrackballSensor }
-    | { kind: "same-side"; side: Side; otherSide: Side; files: string[] };
-
-/** The module a half really has, as far as we know. */
-function moduleOf(half: PointingHalfReport): PointingModule | "none" {
-    if (half.detected && half.detected !== "unknown") return half.detected;
-    return half.builtFor;
-}
+    | { kind: "unknown-sensor"; half: PointingHalfReport; builtFor: TrackballSensor };
 
 /** What's wrong with the firmware on each half, if anything. */
 export function findPointingProblems(report: PointingHardwareReport | null | undefined): PointingProblem[] {
@@ -115,12 +108,6 @@ export function findPointingProblems(report: PointingHardwareReport | null | und
         } else if (detected !== builtFor) {
             problems.push({ kind: "wrong-module", half, builtFor, actual: detected, file: firmwareFile(detected, half.side) });
         }
-    }
-    const [a, b] = report.halves;
-    if (a && b && a.side === b.side) {
-        const otherSide: Side = a.side === "left" ? "right" : "left";
-        const files = [...new Set([moduleOf(a), moduleOf(b)].map((m) => firmwareFile(m, otherSide)))];
-        problems.push({ kind: "same-side", side: a.side, otherSide, files });
     }
     return problems;
 }
