@@ -1,4 +1,5 @@
 import { FunctionComponent, useState, useRef, useLayoutEffect } from "react";
+import { usePreviewedLayerColors } from "@/hooks/useLayerColorPreview";
 import { useKeyBinding } from "@/contexts/KeyBindingContext";
 import { useLayer } from "@/contexts/LayerContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
@@ -28,7 +29,7 @@ const QwertyKeyboard: FunctionComponent<IProps> = ({ onKeyPress: onKeyPressCallb
 
     const isCompact = layoutMode === "bottombar";
 
-    const layerColorName = keyboard?.cosmetic?.layer_colors?.[selectedLayer] || "primary";
+    const layerColorName = usePreviewedLayerColors(keyboard?.cosmetic?.layer_colors)?.[selectedLayer] || "primary";
     const hoverBorderColor = hoverBorderClasses[layerColorName] || hoverBorderClasses["primary"];
     const hoverBackgroundColor = hoverBackgroundClasses[layerColorName] || hoverBackgroundClasses["primary"];
 

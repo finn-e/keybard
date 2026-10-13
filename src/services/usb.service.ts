@@ -1185,11 +1185,29 @@ export class SvilUSB {
    * Set layer color on keyboard.
    * Takes HSV values (0-255 range).
    */
-  async setLayerColor(layer: number, hue: number, sat: number): Promise<void> {
+  async setLayerColor(layer: number, hue: number, sat: number, save = true): Promise<void> {
     const valueId = SvilUSB.LAYER_COLOR_VALUE_ID_BASE + layer;
     console.log(`setLayerColor: layer=${layer}, valueId=${valueId}, hue=${hue}, sat=${sat}`);
     await this.customValueSet(SvilUSB.LAYER_COLOR_CHANNEL, valueId, [hue, sat]);
-    await this.customValueSave(SvilUSB.LAYER_COLOR_CHANNEL);
+    if (save) await this.customValueSave(SvilUSB.LAYER_COLOR_CHANNEL);
+  }
+
+  // LED brightness: QMK's own rgblight brightness on VIA's lighting channel, the
+  // value RGB_VAI/RGB_VAD change. It applies to every layer. 0-255; the firmware
+  // scales it to RGBLIGHT_LIMIT_VAL.
+
+  static readonly RGBLIGHT_CHANNEL = 2;
+  static readonly RGBLIGHT_BRIGHTNESS_ID = 1;
+
+  async getLedBrightness(): Promise<number> {
+    const data = await this.customValueGet(SvilUSB.RGBLIGHT_CHANNEL, SvilUSB.RGBLIGHT_BRIGHTNESS_ID, 1);
+    return data[0];
+  }
+
+  /** With save false the board shows the brightness but keeps the stored one, for live previews. */
+  async setLedBrightness(val: number, save = true): Promise<void> {
+    await this.customValueSet(SvilUSB.RGBLIGHT_CHANNEL, SvilUSB.RGBLIGHT_BRIGHTNESS_ID, [val]);
+    if (save) await this.customValueSave(SvilUSB.RGBLIGHT_CHANNEL);
   }
 
   /**

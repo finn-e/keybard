@@ -24,6 +24,7 @@ import { needsDarkIndicatorOutline } from "@/components/layer3DColors";
 import { KEYMAP } from "@/constants/keygen";
 import { MATRIX_COLS } from "@/constants/svalboard-layout";
 import CustomColorDialog from "@/components/CustomColorDialog";
+import { setLayerColorPreview, useLayerColorPreview } from "@/hooks/useLayerColorPreview";
 import { PublishLayerDialog } from "@/components/PublishLayerDialog";
 import { useLayerClipboardActions } from "@/hooks/useLayerClipboardActions";
 
@@ -59,6 +60,8 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
     const { queue } = useChanges();
     const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
     const [isCustomColorOpen, setIsCustomColorOpen] = useState(false);
+    // The board's LED brightness (shared by every layer), read when the color dialog opens.
+    const [ledBrightness, setLedBrightness] = useState(128);
     const [isEditing, setIsEditing] = useState(false);
     const [editValue, setEditValue] = useState("");
     const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
@@ -69,6 +72,7 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
     const cancelRename = useRef(false);
     const savingRename = useRef(false);
     const isDark = useIsDark();
+    const colorPreview = useLayerColorPreview();
     const restoreRenameFocus = () => requestAnimationFrame(() => renameButtonRef.current?.focus());
 
     useEffect(() => {
@@ -106,7 +110,9 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
 
 
 
-    const displayColorHex = getDisplayColorHex();
+    // The saved color seeds the dialog; the swatch shows the color being picked.
+    const savedColorHex = getDisplayColorHex();
+    const displayColorHex = colorPreview?.layer === selectedLayer ? colorPreview.color : savedColorHex;
     // Dark mode only: a status dot whose colour is too close to the dark page (e.g. a very
     // dark custom colour) gets a thin kb-gray-border outline so it stays visible.
     const showDarkDotOutline = isDark && needsDarkIndicatorOutline(displayColorHex);
@@ -186,14 +192,29 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
 
             // Store LED color as hardware HSV
             const updatedLayerColors = [...(keyboard.layer_colors || [])];
-            updatedLayerColors[selectedLayer] = { hue: ledHsv.hue, sat: ledHsv.sat, val: ledHsv.val };
+            updatedLayerColors[selectedLayer] = { hue: ledHsv.hue, sat: ledHsv.sat, val: updatedLayerColors[selectedLayer]?.val ?? 255 };
 
             setKeyboard({ ...keyboard, cosmetic, layer_colors: updatedLayerColors });
 
             if (isConnected) {
                 await queue(`Layer ${selectedLayer} LED color`, async () => { await usbInstance.setLayerColor(selectedLayer, ledHsv.hue, ledHsv.sat); }, { type: "setting", writeKey: `layer-color:${selectedLayer}` });
+                setLedBrightness(ledHsv.val);
+                await queue("LED brightness", async () => { await usbInstance.setLedBrightness(ledHsv.val); }, { type: "setting", writeKey: "led-brightness" });
             }
         }
+    };
+
+    // Live key color preview from the color dialog: shown on the layout, kept out of the keyboard state.
+    const handlePreviewDisplayColor = (displayHsv: { hue: number; sat: number; val: number } | null) => {
+        setLayerColorPreview(displayHsv && { layer: selectedLayer, color: hsvToHex(displayHsv.hue, displayHsv.sat, displayHsv.val) });
+    };
+
+    // Live LED preview from the color dialog: shown on the board, not saved (Apply saves).
+    const handlePreviewLedColor = (ledHsv: { hue: number; sat: number; val: number }) => {
+        if (!isConnected) return;
+        usbInstance.setLayerColor(selectedLayer, ledHsv.hue, ledHsv.sat, false)
+            .then(() => usbInstance.setLedBrightness(ledHsv.val, false))
+            .catch(() => {});
     };
 
     // Layer Actions
@@ -346,8 +367,11 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
                                 type="button"
                                 aria-label="Custom layer color"
                                 className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 w-5 h-5 rounded-full transition-all hover:scale-110 border-2 border-transparent bg-gray-200 dark:bg-neutral-700 flex items-center justify-center"
-                                onClick={() => {
+                                onClick={async () => {
                                     setIsColorPickerOpen(false);
+                                    if (isConnected) {
+                                        try { setLedBrightness(await usbInstance.getLedBrightness()); } catch { /* keep the last known value */ }
+                                    }
                                     setIsCustomColorOpen(true);
                                 }}
                             >
@@ -449,12 +473,14 @@ export const LayerNameBadge: React.FC<LayerNameBadgeProps> = ({
                 // LED Color (Hardware)
                 initialLedHue={keyboard.layer_colors?.[selectedLayer]?.hue ?? 85}
                 initialLedSat={keyboard.layer_colors?.[selectedLayer]?.sat ?? 255}
-                initialLedVal={keyboard.layer_colors?.[selectedLayer]?.val ?? 200}
+                initialLedVal={ledBrightness}
                 // Display Color (UI) - Convert current display hex to HSV
-                initialDisplayHue={hexToHsv(displayColorHex).hue}
-                initialDisplaySat={hexToHsv(displayColorHex).sat}
-                initialDisplayVal={hexToHsv(displayColorHex).val}
+                initialDisplayHue={hexToHsv(savedColorHex).hue}
+                initialDisplaySat={hexToHsv(savedColorHex).sat}
+                initialDisplayVal={hexToHsv(savedColorHex).val}
                 onApply={handleSetCustomColor}
+                onPreviewLed={handlePreviewLedColor}
+                onPreviewDisplay={handlePreviewDisplayColor}
                 layerName={svalService.getLayerName(keyboard, selectedLayer)}
             />
         </>
