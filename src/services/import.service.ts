@@ -6,6 +6,30 @@ import { usbInstance } from "./usb.service";
 import { keyService } from "./key.service";
 import { NO_SELECTION } from "./fragment.service";
 
+/** A keycode as the firmware stores it: entries read from a file hold names, the board's hold names or numbers. */
+const kc = (value: unknown): number => typeof value === "string" ? keyService.parse(value) : Number(value ?? 0);
+
+/**
+ * Each table entry reduced to what its write sends, so an entry read from a file
+ * and the same entry read from the board compare equal: field order, index
+ * fields, keycode spelling and `enabled` on tables that keep it in `options`
+ * don't matter.
+ */
+const canonical: Record<string, (entry: any) => unknown> = {
+    combos: c => [[0, 1, 2, 3].map(i => kc(c.keys?.[i] ?? 0)), kc(c.output), (c.options ?? 0) >>> 0],
+    tapdances: t => [kc(t.tap), kc(t.hold), kc(t.doubletap), kc(t.taphold), t.tapping_term ?? 200, t.enabled !== false],
+    key_overrides: o => [kc(o.trigger), kc(o.replacement), (o.layers ?? 0xFFFF) >>> 0, o.trigger_mods || 0, o.negative_mod_mask || 0, o.suppressed_mods || 0, o.options || 0],
+    alt_repeat_keys: a => [kc(a.keycode), kc(a.alt_keycode), a.allowed_mods || 0, a.options || 0],
+    // The board's reader drops empty sequence slots, so compare without them.
+    leaders: l => [(l.sequence ?? []).map(kc).filter((k: number) => k !== 0), kc(l.output), l.options || 0],
+};
+
+/** Whether a table entry from the file would change the board's entry. */
+export function entryChanged(table: keyof typeof canonical, next: unknown, current: unknown): boolean {
+    if (next === undefined || current === undefined) return next !== current;
+    return JSON.stringify(canonical[table](next)) !== JSON.stringify(canonical[table](current));
+}
+
 export class ImportService {
     async syncWithKeyboard(
         newKb: KeyboardInfo,
@@ -85,7 +109,7 @@ export class ImportService {
             for (let idx = 0; idx < newCombos.length; idx++) {
                 const combo = newCombos[idx];
                 const oldCombo = currentCombos[idx];
-                if (JSON.stringify(combo) !== JSON.stringify(oldCombo)) {
+                if (entryChanged("combos", combo, oldCombo)) {
                     await queue(
                         `Update Combo ${idx}`,
                         async () => {
@@ -105,7 +129,7 @@ export class ImportService {
             for (let idx = 0; idx < newTds.length; idx++) {
                 const td = newTds[idx];
                 const oldTd = oldTds[idx];
-                if (JSON.stringify(td) !== JSON.stringify(oldTd)) {
+                if (entryChanged("tapdances", td, oldTd)) {
                     await queue(
                         `Update Tapdance ${idx}`,
                         async () => {
@@ -126,7 +150,7 @@ export class ImportService {
             const oldEntries = currentKb[field];
             if (!entries || !oldEntries) continue;
             for (let idx = 0; idx < entries.length; idx++) {
-                if (JSON.stringify(entries[idx]) === JSON.stringify(oldEntries[idx])) continue;
+                if (!entryChanged(field, entries[idx], oldEntries[idx])) continue;
                 await queue(
                     `Update ${label} ${idx}`,
                     async () => {
@@ -145,7 +169,7 @@ export class ImportService {
             for (let idx = 0; idx < newOverrides.length; idx++) {
                 const ko = newOverrides[idx];
                 const oldKo = currentOverrides[idx];
-                if (JSON.stringify(ko) !== JSON.stringify(oldKo)) {
+                if (entryChanged("key_overrides", ko, oldKo)) {
                     await queue(
                         `Update Key Override ${idx}`,
                         async () => {
