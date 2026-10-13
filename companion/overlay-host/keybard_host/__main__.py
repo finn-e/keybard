@@ -25,7 +25,8 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings, QWebEngineScript
 from .device.protocol import candidates, hid_backend
 from .device.worker import DeviceWorker
-from .state import EFFECTS, PRESETS, HostState, serialize_profile
+from .state import DEFAULTS, EFFECTS, PRESETS, HostState, serialize_profile
+from .colors import ColorsPanel
 from .server import REMOTE_ORIGINS, load_paranoid_page, make_server
 from .build import build_info
 from .browser import open_contained
@@ -417,6 +418,9 @@ class Host(QObject):
         self.halo_action = QAction('Outline shadow', self, checkable=True)
         self.halo_action.setToolTip('A contrasting shadow around legends and key outlines, readable on any background')
         self.halo_action.triggered.connect(lambda value: self.set_config(appearance=dict(self.state.config['appearance'], halo=value)))
+        self.colors_action = QAction('Colors…', self)
+        self.colors_action.triggered.connect(self.open_colors)
+        self.colors_panel = None
         self.highlight_menu, self.highlight_actions = choices('Layer highlight', EFFECTS, lambda n: self.set_config(**EFFECTS[n]))
         self.hands_menu, self.hands_actions = choices('Hands', ('Both', 'Left', 'Right'), lambda n: self.set_config(hands=n))
         self.held_action = QAction('Highlight held keys', self, checkable=True)
@@ -425,8 +429,23 @@ class Host(QObject):
     def add_settings(self, menu):
         menu.addMenu(self.board_menu)
         menu.addSeparator()
-        for item in (self.style_menu, self.halo_action, self.highlight_menu, self.held_action, self.hands_menu):
+        for item in (self.style_menu, self.halo_action, self.colors_action, self.highlight_menu, self.held_action, self.hands_menu):
             menu.addAction(item) if isinstance(item, QAction) else menu.addMenu(item)
+
+    def open_colors(self):
+        """The color setup panel, beside the overlay's controls."""
+        if self.colors_panel is None:
+            self.colors_panel = ColorsPanel(lambda: dict(self.state.config['appearance']),
+                                            lambda appearance: self.set_config(appearance=appearance), DEFAULTS['appearance'])
+        self.colors_panel.refresh()
+        self.colors_panel.adjustSize()
+        corner = self.controls.geometry()
+        area = (self.controls.screen() or self.app.primaryScreen()).availableGeometry()
+        x = min(max(area.left(), corner.right() - self.colors_panel.width()), area.right() - self.colors_panel.width())
+        y = corner.top() - self.colors_panel.height() - 8
+        if y < area.top(): y = corner.bottom() + 8
+        self.colors_panel.move(x, y)
+        self.colors_panel.show(); self.colors_panel.raise_(); self.colors_panel.activateWindow()
 
     def fill_board_menu(self):
         """The connected Svalboards, read when the menu opens so new boards show up."""
@@ -459,6 +478,7 @@ class Host(QObject):
         colors = {k: v for k, v in config['appearance'].items() if k != 'halo'}
         for name, action in self.style_actions.items(): action.setChecked(colors == {k: v for k, v in PRESETS[name].items() if k != 'halo'})
         self.halo_action.setChecked(config['appearance']['halo'])
+        if getattr(self, 'colors_panel', None) is not None and self.colors_panel.isVisible(): self.colors_panel.refresh()
         for name, action in self.highlight_actions.items(): action.setChecked(config['effect'] == EFFECTS[name]['effect'])
         for name, action in self.hands_actions.items(): action.setChecked(config['hands'] == name)
         self.held_action.setChecked(config['highlightPressed'])
@@ -624,6 +644,7 @@ class Host(QObject):
 
     def shutdown(self):
         self.scan_timer.stop(); self.timer.stop()
+        if self.colors_panel is not None: self.colors_panel.close()
         if self.worker:
             self.worker.stop(); self.worker.wait(5000)
         self.server.shutdown(); self.server.server_close(); self.controls.close(); self.surface.close(); self.tray.hide()
