@@ -30,7 +30,7 @@ def package():
                 if path.is_file() and '__pycache__' not in path.parts:
                     archive.write(path, Path('KeybardHost') / path.relative_to(HOST))
         archive.writestr('KeybardHost/keybard_host/build.json', build_json())
-        for name in ('Start-Windows.cmd', 'Start-Paranoid.cmd', 'Open-Paranoid.cmd', 'README.md', 'RELEASE-NOTES.md', 'requirements.txt', 'start-linux.sh'):
+        for name in ('Start-Windows.cmd', 'Start-Paranoid.cmd', 'Open-Paranoid.cmd', 'README.md', 'RELEASE-NOTES.md', 'requirements.txt', 'start-linux.sh', 'start-macos.sh'):
             archive.write(HOST / name, Path('KeybardHost') / name)
         for path in web_files:
             archive.write(path, Path('KeybardHost/web') / path.relative_to(DIST))

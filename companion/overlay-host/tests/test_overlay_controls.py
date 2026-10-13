@@ -20,58 +20,65 @@ class OverlayControlsTest(unittest.TestCase):
     def setUp(self):
         self.surface = Surface(5178)
         self.calls = []
-        self.controls = OverlayControls(self.surface, lambda: self.calls.append('hide'), lambda: self.calls.append('open'), lambda value: self.calls.append(value))
+        self.controls = OverlayControls(self.surface, lambda: self.calls.append('open'))
 
     def tearDown(self):
         self.controls.close(); self.surface.close()
         self.controls.deleteLater(); self.surface.deleteLater()
         self.app.processEvents()
 
-    def test_click_through_is_default_and_handle_stays_interactive(self):
-        import tempfile
-        from pathlib import Path
-        from keybard_host.state import HostState
-        with tempfile.TemporaryDirectory() as folder:
-            self.assertFalse(HostState(Path(folder) / 'preferences.json').arrange)
-        self.assertFalse(self.surface.arranging)
-        self.surface.set_arrange(False)
-        self.assertFalse(self.surface.arranging)
+    def test_overlay_passes_every_click_through_and_handle_stays_interactive(self):
+        self.surface.pass_clicks_through()
         self.assertTrue(self.surface.windowFlags() & Qt.WindowTransparentForInput)
+        self.assertTrue(self.surface.mask().isEmpty())
         self.assertFalse(self.controls.windowFlags() & Qt.WindowTransparentForInput)
         self.assertFalse(self.controls.handle.testAttribute(Qt.WA_TransparentForMouseEvents))
 
-    def test_drag_by_keys_takes_input_only_on_the_keys(self):
-        self.surface.set_arrange(True)
-        # Until the overlay reports keys, nothing is visible, so nothing takes a click.
-        self.assertTrue(self.surface.windowFlags() & Qt.WindowTransparentForInput)
-        # The page answers in JSON.
-        self.surface.apply_key_rects('[[10, 20, 37, 37], [50, 20.4, 37, 37]]')
-        self.assertFalse(self.surface.windowFlags() & Qt.WindowTransparentForInput)
-        mask = self.surface.mask()
-        self.assertTrue(mask.contains(QPoint(20, 30)))
-        self.assertTrue(mask.contains(QPoint(85, 55)))
-        self.assertFalse(mask.contains(QPoint(5, 5)))
-        self.assertFalse(mask.contains(QPoint(20, 80)))
-        self.assertFalse(mask.contains(QPoint(150, 30)))
-        # The keys disappear (overlay hidden or board lost): clicks pass through again.
-        self.surface.apply_key_rects([])
-        self.assertTrue(self.surface.windowFlags() & Qt.WindowTransparentForInput)
-        self.assertTrue(self.surface.mask().isEmpty())
-        self.surface.apply_key_rects([[10, 20, 37, 37]])
-        self.surface.set_arrange(False)
-        self.assertTrue(self.surface.windowFlags() & Qt.WindowTransparentForInput)
-        self.assertTrue(self.surface.mask().isEmpty())
-        # Late answers from the page don't turn input back on.
-        self.surface.apply_key_rects([[10, 20, 37, 37]])
-        self.assertTrue(self.surface.windowFlags() & Qt.WindowTransparentForInput)
+    def test_control_menu_has_open_and_capital_letters(self):
+        actions = [a for a in self.controls.more.menu().actions() if not a.isSeparator()]
+        self.assertEqual([a.text() for a in actions], ['Open Keybard', 'Capital letters', 'Adaptive contrast', 'Place at bottom', 'Reload board layout'])
+        from keybard_host import backdrop
+        self.assertEqual(self.controls.adaptive.isVisible(), backdrop.supported())
+        actions[0].trigger()
+        self.assertEqual(self.calls, ['open'])
 
-    def test_control_menu_has_working_hide_open_and_drag_by_keys(self):
-        actions = self.controls.more.menu().actions()
-        actions[0].trigger(); actions[1].trigger(); actions[2].trigger()
-        self.assertEqual(self.calls, ['hide', 'open', True])
+    def test_capital_letters_is_a_checkable_toggle(self):
+        values = []
+        controls = OverlayControls(self.surface, lambda: None, set_capitals=lambda v: values.append(v))
+        try:
+            self.assertTrue(controls.capitals.isCheckable())
+            controls.capitals.trigger(); controls.capitals.trigger()
+            self.assertEqual(values, [True, False])
+        finally:
+            controls.close(); controls.deleteLater()
+
+    def test_collapse_leaves_only_the_controls_and_expand_restores(self):
+        self.surface.show()
+        button = self.controls.collapser
+        self.assertEqual(button.accessibleName(), 'Collapse overlay')
+        button.click()
+        self.assertTrue(self.controls.collapsed)
+        self.assertTrue(self.surface.isHidden())
+        self.assertFalse(self.controls.resizer.isEnabled())
+        self.assertEqual(button.accessibleName(), 'Expand overlay')
+        button.click()
+        self.assertFalse(self.controls.collapsed)
+        self.assertFalse(self.surface.isHidden())
+        # Window opacity puts the overlay on a slower Windows update path (stale frames).
+        self.assertEqual(self.surface.windowOpacity(), 1)
+        self.assertTrue(self.controls.resizer.isEnabled())
+
+    def test_collapsed_overlay_still_moves_with_its_handle(self):
+        self.controls.set_collapsed(True)
+        self.surface.move(100, 100)
+        before = self.surface.pos()
+        handle = self.controls.handle
+        handle.mousePressEvent(QMouseEvent(QMouseEvent.MouseButtonPress, QPointF(4,4), QPointF(200,200), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+        handle.mouseMoveEvent(QMouseEvent(QMouseEvent.MouseMove, QPointF(24,14), QPointF(220,210), Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
+        self.assertEqual(self.surface.pos(), before + QPoint(20,10))
 
     def test_handle_drags_surface_even_in_click_through(self):
-        self.surface.set_arrange(False)
+        self.surface.pass_clicks_through()
         self.surface.move(100, 100)
         before = self.surface.pos()
         handle = self.controls.handle
@@ -104,7 +111,7 @@ class OverlayControlsTest(unittest.TestCase):
     def test_resize_handle_scales_from_the_drag_and_saves_on_release(self):
         calls = []
         self.controls.close()
-        self.controls = OverlayControls(self.surface, lambda: None, lambda: None, lambda value: None, lambda: 100, lambda scale, final: calls.append((scale, final)))
+        self.controls = OverlayControls(self.surface, lambda: None, lambda: 100, lambda scale, final: calls.append((scale, final)))
         self.surface.setFixedSize(1000, 300)
         handle = self.controls.resizer
         press = lambda kind, x, y, button, buttons: QMouseEvent(kind, QPointF(4,4), QPointF(x,y), button, buttons, Qt.NoModifier)

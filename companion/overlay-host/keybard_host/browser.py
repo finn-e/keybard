@@ -9,6 +9,7 @@ network, and background services (sync, updates, safe-browsing pings) are off.
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 # Keep in sync with scripts/Open-Paranoid.ps1.
 CONTAINMENT_FLAGS = (
@@ -22,7 +23,20 @@ CONTAINMENT_FLAGS = (
 )
 
 
-def find_chromium():
+# macOS app bundles, checked in /Applications and then ~/Applications.
+MAC_BROWSERS = (
+    'Google Chrome.app/Contents/MacOS/Google Chrome',
+    'Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+)
+
+
+def find_chromium(platform=None):
+    if (platform or sys.platform) == 'darwin':
+        for root in (Path('/Applications'), Path.home() / 'Applications'):
+            for rel in MAC_BROWSERS:
+                path = root / rel
+                if path.is_file(): return path
+        return None
     roots = [os.environ.get(k) for k in ('PROGRAMFILES', 'PROGRAMFILES(X86)', 'LOCALAPPDATA')]
     for root in filter(None, roots):
         for rel in (r'Google\Chrome\Application\chrome.exe', r'Microsoft\Edge\Application\msedge.exe'):

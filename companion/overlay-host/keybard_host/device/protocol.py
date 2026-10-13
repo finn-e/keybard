@@ -10,6 +10,9 @@ from .model import Profile, legend
 USAGE_PAGE, USAGE = 0xFF61, 0x62
 REPORT_SIZE = 32
 DEFAULT_LAYER_STATE_FLAG = 1 << 6
+# Second feature byte: 0x16 appends the board's modifiers and Caps Word / Caps Lock.
+MODIFIER_STATE_FLAG2 = 1 << 2
+SHIFT_BITS = 0x22  # left and right Shift in the HID modifier byte
 # Protocol -> command -> exact request argument length. No setter is expressible.
 READ_COMMANDS = {
     0xDF: {0x00: 0, 0x01: 2, 0x0D: 0, 0x0E: 3, 0x16: 0, 0x18: 0, 0x19: 0, 0x1B: 3},
@@ -21,6 +24,9 @@ READ_COMMANDS = {
 class LayerSnapshot:
     active: int
     default: int | None = None  # None means not advertised; zero is a valid mask.
+    # The board's own Shift and Caps Lock, or None on firmware that doesn't report them.
+    # Caps Word counts as Caps Lock: it capitalizes letters and leaves symbols alone.
+    modifiers: dict | None = None
 
 
 class ProtocolError(Exception):
@@ -72,6 +78,7 @@ class SvalReader:
         self.client_id = 0
         self.renew_at = 0
         self.feature_flags = 0
+        self.feature_flags2 = 0
         self.load_deadline = None
         # The last board definition read: it only changes with new firmware, so a refresh reuses it.
         self.cached_definition = None
@@ -165,6 +172,7 @@ class SvalReader:
         if version not in (2, 3):
             raise ProtocolError(f"Sval protocol {version} is not supported")
         self.feature_flags = data[12]
+        self.feature_flags2 = data[17] if len(data) > 17 else 0
         return version, int.from_bytes(data[4:12], "little")
 
     def layer_state(self):
@@ -174,7 +182,11 @@ class SvalReader:
         data = self._read(0x16)
         default = (int.from_bytes(data[4:8], "little")
                    if self.feature_flags & DEFAULT_LAYER_STATE_FLAG else None)
-        return LayerSnapshot(int.from_bytes(data[:4], "little"), default)
+        modifiers = None
+        if self.feature_flags2 & MODIFIER_STATE_FLAG2:
+            mods, status = data[8], data[9]
+            modifiers = dict(shift=bool(mods & SHIFT_BITS), capsLock=bool(status & 2) != bool(status & 1))
+        return LayerSnapshot(int.from_bytes(data[:4], "little"), default, modifiers)
 
     def pressed_keys(self):
         # VIA GET_KEYBOARD_VALUE / SWITCH_MATRIX_STATE, row offset zero.
