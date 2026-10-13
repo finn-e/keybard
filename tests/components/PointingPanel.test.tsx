@@ -49,4 +49,11 @@ describe('PointingPanel: all keys come from the shared MouseKeysSection', () => 
         expect(screen.getByTestId('mouse-keys-section')).toBeInTheDocument();
         expect(screen.queryByTestId('stray-key')).not.toBeInTheDocument();
     });
+
+    it.each(['sidebar', 'bottombar'] as const)('%s mode no longer shows the pointing hardware summary (it lives in the layout slots)', (mode) => {
+        layoutSettings.layoutMode = mode;
+        render(<PointingPanel />);
+        expect(screen.queryByTestId('pointing-hardware-summary')).not.toBeInTheDocument();
+        expect(screen.queryByText(/trackball|TrackPoint|Checking/i)).not.toBeInTheDocument();
+    });
 });

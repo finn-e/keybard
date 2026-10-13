@@ -6,9 +6,10 @@
  * (e.g., 5-key vs 6-key finger clusters) are installed or selected.
  */
 
-import type { KeyboardInfo, FragmentInstance } from "../types/keyboard.types";
-import { KleService } from "./kle.service";
-import { FragmentService } from "./fragment.service";
+import type { KeyboardInfo, FragmentInstance, FragmentWidget } from "../types/keyboard.types";
+import type { KleService } from "./kle.service";
+// Type-only: fragment.service imports isWidgetInstance from here at runtime.
+import type { FragmentService } from "./fragment.service";
 import { FRAGMENT_THUMB_GAP_REDUCTION_U } from "../constants/keyboard-visuals";
 
 /**
@@ -30,6 +31,117 @@ export interface ComposedKeyLayout {
     rotation_y?: number;
 }
 
+/**
+ * A widget instance (pointing slot) after composition. Composed units, like keys.
+ * `fragmentName`/`widget` are null until hardware detection names one of the
+ * instance's options.
+ */
+export interface ComposedWidget {
+    instanceIdx: number;
+    instanceId: string;
+    side: "left" | "right";
+    fragmentName: string | null;
+    widget: FragmentWidget | null;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
+/** X/Y shift applied to each thumb cluster by applyPlacementCorrections. */
+export interface ThumbCorrections {
+    left: { dx: number; dy: number };
+    right: { dx: number; dy: number };
+}
+
+const NO_DETECTION = 0xff;
+
+/** Space kept between a pointing slot and the keys around it, in key units. */
+export const POINTING_POCKET_MARGIN = 0.15;
+
+/**
+ * A pointing module's width as a share of its hand's finger span: on the board an
+ * Azoteq TPS43 touchpad is 43 mm across under finger clusters that span about 90 mm.
+ */
+export const POINTING_SPAN_SHARE = 43 / 90;
+
+/**
+ * The square a hand's pointing module fills, as on the board: right under the ring
+ * and middle finger clusters, centred on the gap between their bottom keys (X and C
+ * on the left in QWERTY, "." and "," on the right), as large as the keys around it
+ * allow (reaching down beside the thumb cluster), up to POINTING_SPAN_SHARE of the
+ * hand's finger span. Null when the composition doesn't name those clusters.
+ */
+export function fitPointingPocket(
+    kbinfo: KeyboardInfo,
+    keys: Record<number, ComposedKeyLayout>,
+    side: "left" | "right",
+): { x: number; y: number; w: number; h: number } | null {
+    const instances = kbinfo.composition?.instances ?? [];
+    const clusterKeys = (id: string) => {
+        const instance = instances.find((i) => i.id === id);
+        if (!instance) return [];
+        const cells = new Set<string>();
+        for (const opt of instance.fragment_options ?? []) for (const [r, c] of opt.matrix_map ?? []) cells.add(`${r},${c}`);
+        for (const [r, c] of instance.matrix_map ?? []) cells.add(`${r},${c}`);
+        return Object.values(keys).filter((k) => cells.has(`${k.row},${k.col}`));
+    };
+    const bottomKey = (cluster: ComposedKeyLayout[]) =>
+        cluster.reduce<ComposedKeyLayout | null>((low, k) => (!low || k.y + k.h > low.y + low.h ? k : low), null);
+    const ring = bottomKey(clusterKeys(`${side}_ring`));
+    const middle = bottomKey(clusterKeys(`${side}_middle`));
+    const thumb = clusterKeys(`${side}_thumb`);
+    if (!ring || !middle || thumb.length === 0) return null;
+
+    const fingers = ["pinky", "ring", "middle", "index"].flatMap((f) => clusterKeys(`${side}_${f}`));
+    const span = Math.max(...fingers.map((k) => k.x + k.w)) - Math.min(...fingers.map((k) => k.x));
+    const [outer, inner] = side === "left" ? [ring, middle] : [middle, ring];
+    const cx = (outer.x + outer.w + inner.x) / 2;
+    const top = Math.max(ring.y + ring.h, middle.y + middle.h) + POINTING_POCKET_MARGIN;
+    const all = Object.values(keys);
+    const m = POINTING_POCKET_MARGIN;
+    const fits = (size: number) =>
+        all.every((k) => k.x >= cx + size / 2 + m || k.x + k.w <= cx - size / 2 - m || k.y >= top + size + m || k.y + k.h <= top - m);
+
+    let lo = 0;
+    let hi = POINTING_SPAN_SHARE * span;
+    if (fits(hi)) lo = hi;
+    else for (let i = 0; i < 30; i++) {
+        const mid = (lo + hi) / 2;
+        if (fits(mid)) lo = mid;
+        else hi = mid;
+    }
+    if (lo < 1) return null;
+    return { x: cx - lo / 2, y: top, w: lo, h: lo };
+}
+
+function mapGet<K extends string | number, V>(m: Map<K, V> | Record<string, V> | undefined, k: K): V | undefined {
+    if (!m) return undefined;
+    return m instanceof Map ? m.get(k) : (m as Record<string, V>)[String(k)];
+}
+
+/**
+ * True for an instance drawn as a widget (zero keys): every fragment it can
+ * resolve to has a `widget`. Such instances never add keys to keylayout, are not
+ * user-selectable, and only hardware detection decides which option they show.
+ */
+export function isWidgetInstance(kbinfo: Pick<KeyboardInfo, "fragments">, instance: FragmentInstance): boolean {
+    const fragments = kbinfo.fragments;
+    if (!fragments) return false;
+    if (instance.fragment) return Boolean(fragments[instance.fragment]?.widget);
+    const options = instance.fragment_options ?? [];
+    return options.length > 0 && options.every((opt) => Boolean(fragments[opt.fragment]?.widget));
+}
+
+/** Indices of the widget instances in a composition. */
+export function widgetInstanceIndices(kbinfo: Pick<KeyboardInfo, "fragments" | "composition">): Set<number> {
+    const out = new Set<number>();
+    kbinfo.composition?.instances?.forEach((instance, idx) => {
+        if (isWidgetInstance(kbinfo, instance)) out.add(idx);
+    });
+    return out;
+}
+
 export class FragmentComposerService {
     constructor(
         private kleService: KleService,
@@ -43,27 +155,70 @@ export class FragmentComposerService {
      * @returns Record keyed by matrix position (row * cols + col)
      */
     composeLayout(kbinfo: KeyboardInfo): Record<number, ComposedKeyLayout> {
-        let layout: Record<number, ComposedKeyLayout> = {};
-
         // Check if keyboard has fragment composition
         if (!kbinfo.composition?.instances || !kbinfo.fragments) {
-            return layout;
-        }
-
-        const cols = kbinfo.cols;
-
-        for (let idx = 0; idx < kbinfo.composition.instances.length; idx++) {
-            const instance = kbinfo.composition.instances[idx];
-
-            // Expand this instance and merge into layout
-            const instanceKeys = this.expandInstance(kbinfo, idx, instance, cols);
-            Object.assign(layout, instanceKeys);
+            return {};
         }
 
         // Apply GUI-side placement corrections for thumb clusters
-        layout = this.applyPlacementCorrections(layout, kbinfo);
+        return this.applyPlacementCorrections(this.composeRawLayout(kbinfo), kbinfo);
+    }
 
+    /** Key instances expanded at their raw placements, before thumb corrections. Widget instances add nothing. */
+    private composeRawLayout(kbinfo: KeyboardInfo): Record<number, ComposedKeyLayout> {
+        const layout: Record<number, ComposedKeyLayout> = {};
+        const instances = kbinfo.composition?.instances ?? [];
+        for (let idx = 0; idx < instances.length; idx++) {
+            const instance = instances[idx];
+            if (isWidgetInstance(kbinfo, instance)) continue;
+            Object.assign(layout, this.expandInstance(kbinfo, idx, instance, kbinfo.cols));
+        }
         return layout;
+    }
+
+    /**
+     * Widget instances (pointing slots), placed like that side's thumb cluster:
+     * raw placement plus the thumb correction applyPlacementCorrections gives that
+     * side. Only hardware detection picks the fragment; EEPROM, user selections
+     * and defaults are ignored.
+     */
+    composeWidgets(kbinfo: KeyboardInfo, hwDetection: Map<number, number>): ComposedWidget[] {
+        const instances = kbinfo.composition?.instances;
+        const fragments = kbinfo.fragments;
+        if (!instances || !fragments) return [];
+        const widgetIdx = widgetInstanceIndices(kbinfo);
+        if (widgetIdx.size === 0) return [];
+
+        const corrections = this.computeThumbCorrections(this.composeRawLayout(kbinfo));
+        const keys = this.composeLayout(kbinfo);
+        const out: ComposedWidget[] = [];
+        for (const idx of widgetIdx) {
+            const instance = instances[idx];
+            const side = instance.id.startsWith("left_") ? "left" : instance.id.startsWith("right_") ? "right" : null;
+            if (!side) continue;
+            const options = instance.fragment
+                ? [{ fragment: instance.fragment, placement: instance.placement ?? { x: 0, y: 0 } }]
+                : instance.fragment_options ?? [];
+            if (options.length === 0) continue;
+
+            const detectedId = mapGet(hwDetection, idx);
+            const detected = detectedId === undefined || detectedId === NO_DETECTION
+                ? undefined
+                : options.find((opt) => fragments[opt.fragment]?.id === detectedId);
+            const sizeFrom = fragments[options[0].fragment]?.widget;
+            const placement = options[0].placement;
+            const { dx, dy } = corrections[side];
+            const fitted = fitPointingPocket(kbinfo, keys, side);
+            out.push({
+                instanceIdx: idx,
+                instanceId: instance.id,
+                side,
+                fragmentName: detected?.fragment ?? null,
+                widget: detected ? fragments[detected.fragment]?.widget ?? null : null,
+                ...(fitted ?? { x: placement.x + dx, y: placement.y + dy, w: sizeFrom?.w ?? 0, h: sizeFrom?.h ?? 0 }),
+            });
+        }
+        return out;
     }
 
     /**
@@ -182,15 +337,17 @@ export class FragmentComposerService {
      * - Align right thumb's leftmost key edge symmetrically about midline
      *
      * This keeps the internal cluster structure intact while centering thumbs properly.
+     * Pointing slots (composeWidgets) get the same shift as their side's thumb.
      *
-     * @param layout - The composed layout to correct
-     * @param _kbinfo - Keyboard info (unused, kept for API compatibility)
-     * @returns Corrected layout with thumb clusters in the right positions
+     * @param layout - The raw composed layout (before corrections)
+     * @returns Each thumb cluster's X/Y shift (0 when it can't be computed)
      */
-    applyPlacementCorrections(
-        layout: Record<number, ComposedKeyLayout>,
-        _kbinfo: KeyboardInfo
-    ): Record<number, ComposedKeyLayout> {
+    computeThumbCorrections(layout: Record<number, ComposedKeyLayout>): ThumbCorrections & {
+        keysByRow: Record<number, number[]>;
+        midline: number;
+        maxIndexBottomEdge: number;
+        desiredYGap: number;
+    } {
         // Cluster row definitions for Svalboard
         const leftThumbRow = 0;
         const rightThumbRow = 5;
@@ -311,6 +468,35 @@ export class FragmentComposerService {
         // Use the minimum thumb top edge to ensure proper gap from the tallest index cluster
         const minThumbTopEdge = Math.min(leftThumbTopEdge, rightThumbTopEdge);
         const thumbShiftY = (maxIndexBottomEdge + desiredYGap) - minThumbTopEdge;
+
+        const finite = (n: number) => (Number.isFinite(n) ? n : 0);
+        return {
+            left: { dx: finite(leftThumbShiftX), dy: finite(thumbShiftY) },
+            right: { dx: finite(rightThumbShiftX), dy: finite(thumbShiftY) },
+            keysByRow,
+            midline,
+            maxIndexBottomEdge,
+            desiredYGap,
+        };
+    }
+
+    /**
+     * Apply placement corrections to thumb clusters (see computeThumbCorrections).
+     *
+     * @param layout - The composed layout to correct
+     * @param _kbinfo - Keyboard info (unused, kept for API compatibility)
+     * @returns Corrected layout with thumb clusters in the right positions
+     */
+    applyPlacementCorrections(
+        layout: Record<number, ComposedKeyLayout>,
+        _kbinfo: KeyboardInfo
+    ): Record<number, ComposedKeyLayout> {
+        const leftThumbRow = 0;
+        const rightThumbRow = 5;
+        const { left, right, keysByRow, midline, maxIndexBottomEdge, desiredYGap } = this.computeThumbCorrections(layout);
+        const thumbShiftY = left.dy;
+        const leftThumbShiftX = left.dx;
+        const rightThumbShiftX = right.dx;
 
         const correctedLayout = { ...layout };
 

@@ -31,6 +31,8 @@ import { useChanges } from "@/hooks/useChanges";
 import { usePreviewedLayerColors } from "@/hooks/useLayerColorPreview";
 import { useIsDark } from "@/lib/theme";
 import { dark3DLabelColor, needsDarkIndicatorOutline, screenedBackdropHex } from "./layer3DColors";
+import { PointingSlot } from "./pointing-viz/PointingSlot";
+import { usePointingSlots } from "@/hooks/usePointingSlots";
 
 const TEXT_CLASS_TO_HEX: Record<string, string> = {
     "text-white": "#ffffff",
@@ -54,6 +56,8 @@ interface KeyboardProps {
     isToggling3D?: boolean;
     showDropTargetHighlight?: boolean;
     isLayerDragActive?: boolean;
+    /** Draw each hand's pointing slot (live module animation). Only the primary layer view does, so stacked and 3D views don't each run their own animations. */
+    showPointingSlots?: boolean;
 }
 
 /**
@@ -73,6 +77,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
     isToggling3D = false,
     showDropTargetHighlight = false,
     isLayerDragActive = false,
+    showPointingSlots = true,
 }) => {
     const {
         selectKeyboardKey,
@@ -82,6 +87,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
     } = useKeyBinding();
 
     const { activePanel, itemToEdit } = usePanels();
+    const pointingSlots = usePointingSlots();
     const { hasPendingChangeForKey } = useChanges();
     const layerColorNames = usePreviewedLayerColors(keyboard.cosmetic?.layer_colors);
 
@@ -742,6 +748,31 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                         }}
                     />
                 )}
+                {/* Pointing slots: under each hand's ring and middle clusters, beside the thumb. The
+                    finger clusters close in on the thumbs as they squeeze, so the slot moves with
+                    the fingers and gives up the squeeze on its thumb side to stay clear of it. */}
+                {showPointingSlots && !(!is3DMode && isThumb3DOffsetActive) && pointingSlots.map((slot) => {
+                    const squeeze = fingerClusterSqueeze > 0 ? Math.min(fingerClusterSqueeze, slot.w / 2) : 0;
+                    // Left: fingers stay put and the thumb moves left by the squeeze, so the slot keeps its
+                    // left edge. Right: fingers move left by twice the squeeze and the thumb by once, so
+                    // the slot keeps its right edge with the fingers.
+                    const xPos = slot.x - (slot.side === "left" ? 0 : squeeze) + layoutOffsets.offsetX;
+                    const yPos = getYPos(slot.y) + layoutOffsets.offsetY;
+                    const sized = squeeze > 0 ? { ...slot, w: slot.w - squeeze, h: slot.h - squeeze } : slot;
+                    return (
+                        <PointingSlot
+                            key={`pointing-${slot.side}`}
+                            slot={sized}
+                            unitPx={currentUnitSize}
+                            style={{
+                                left: xPos * currentUnitSize,
+                                top: yPos * currentUnitSize,
+                                transform: (is3DMode && isThumb3DOffsetActive) ? "translateY(900px)" : undefined,
+                                transition: is3DMode ? KEY_3D_MOTION_TRANSITION : undefined,
+                            }}
+                        />
+                    );
+                })}
                 {/* Keys */}
                 {Object.entries(keyboardLayout).map(([matrixPos, layout]) => {
                     const pos = Number(matrixPos);

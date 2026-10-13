@@ -54,6 +54,16 @@ vi.mock("@/components/ui/tooltip", () => ({
   TooltipContent: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
+const mockPointingSlots = vi.hoisted(() => ({ slots: [] as any[] }));
+vi.mock("@/hooks/usePointingSlots", () => ({
+  usePointingSlots: () => mockPointingSlots.slots,
+}));
+vi.mock("../../src/components/pointing-viz/PointingSlot", () => ({
+  PointingSlot: ({ slot, unitPx, style }: { slot: { side: string; w: number }; unitPx: number; style: Record<string, unknown> }) => (
+    <div data-testid={`slot-${slot.side}`} data-unit={unitPx} style={style as any} />
+  ),
+}));
+
 vi.mock("@/services/sval.service", () => ({
   svalService: {
     getLayerName: (_keyboard: unknown, layer: number) => `Layer ${layer}`,
@@ -70,6 +80,7 @@ const keyboardFixture = {
 
 describe("Keyboard thumb backdrop toggle behavior", () => {
   beforeEach(() => {
+    mockPointingSlots.slots = [];
     vi.useFakeTimers();
     vi.clearAllMocks();
     mockLayoutSettings.is3DMode = true;
@@ -130,5 +141,72 @@ describe("Keyboard thumb backdrop toggle behavior", () => {
       vi.advanceTimersByTime(1);
     });
     expect(container.querySelectorAll('[data-layer-backdrop="true"]').length).toBe(0);
+  });
+});
+
+describe("Keyboard pointing slots", () => {
+  const slot = (side: "left" | "right", x: number) => ({
+    instanceIdx: side === "left" ? 10 : 11, instanceId: `${side}_pointing`, side,
+    fragmentName: null, widget: null, x, y: 4.75, w: 2.5, h: 2.5, kind: "pending",
+  });
+  // Two keys so the layout has a midline and nothing sits at negative x.
+  const keyboard = {
+    ...keyboardFixture,
+    keylayout: {
+      0: { x: 0, y: 0, w: 1, h: 1, row: 0, col: 0 },
+      1: { x: 24, y: 0, w: 1, h: 1, row: 0, col: 1 },
+    },
+  };
+  const renderKb = (props: Record<string, unknown> = {}) => render(
+    <Keyboard keyboard={keyboard as any} selectedLayer={0} setSelectedLayer={vi.fn()} {...props} />
+  );
+
+  beforeEach(() => {
+    mockPointingSlots.slots = [slot("left", 4.5), slot("right", 18)];
+    mockLayoutSettings.is3DMode = false;
+    mockLayoutSettings.isThumb3DOffsetActive = false;
+    mockLayoutSettings.fingerClusterSqueeze = 0;
+    mockLayoutSettings.keyVariant = "default";
+  });
+
+  it("places each slot in key units, like thumb keys", () => {
+    const { getByTestId } = renderKb();
+    expect(getByTestId("slot-left").style.left).toBe(`${4.5 * 60}px`);
+    expect(getByTestId("slot-left").style.top).toBe(`${4.75 * 60}px`);
+    expect(getByTestId("slot-right").style.left).toBe(`${18 * 60}px`);
+    expect(getByTestId("slot-left").dataset.unit).toBe("60");
+  });
+
+  it("follows the key size setting", () => {
+    mockLayoutSettings.keyVariant = "small";
+    const { getByTestId } = renderKb();
+    expect(getByTestId("slot-right").style.left).toBe(`${18 * 30}px`);
+    expect(getByTestId("slot-right").dataset.unit).toBe("30");
+  });
+
+  it("keeps clear of the thumb when the finger clusters squeeze toward it", () => {
+    mockLayoutSettings.fingerClusterSqueeze = 0.5;
+    const { getByTestId } = renderKb();
+    // Left: the fingers stay and the thumb moves left by the squeeze, so the slot keeps its left
+    // edge and gives up the squeeze on its right. Right: the slot's right edge moves with the
+    // fingers (twice the squeeze), its left edge with the thumb (once).
+    expect(getByTestId("slot-left").style.left).toBe(`${4.5 * 60}px`);
+    expect(getByTestId("slot-right").style.left).toBe(`${(18 - 0.5) * 60}px`);
+  });
+
+  it("is hidden for thumbnails and print (showPointingSlots=false)", () => {
+    const { queryByTestId } = renderKb({ showPointingSlots: false });
+    expect(queryByTestId("slot-left")).toBeNull();
+  });
+
+  it("hides with the thumbs in 2D when the thumb offset is active, and moves with them in 3D", () => {
+    mockLayoutSettings.isThumb3DOffsetActive = true;
+    const hidden = renderKb();
+    expect(hidden.queryByTestId("slot-left")).toBeNull();
+    hidden.unmount();
+
+    mockLayoutSettings.is3DMode = true;
+    const { getByTestId } = renderKb();
+    expect(getByTestId("slot-left").style.transform).toBe("translateY(900px)");
   });
 });

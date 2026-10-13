@@ -9,6 +9,7 @@
 
 import type { KeyboardInfo } from "../types/keyboard.types";
 import { SvilUSB } from "./usb.service";
+import { isWidgetInstance } from "./fragment-composer.service";
 
 // Max number of fragment instances (protocol uses fixed 21-byte arrays)
 const MAX_INSTANCES = 21;
@@ -57,10 +58,22 @@ export class FragmentService {
     }
 
     /**
-     * Query hardware detection results via 0x18
-     * Response: [cmd_echo][count][frag0..frag20]
+     * Query hardware detection results via 0x18 and store them in fragmentState.
      */
     private async getHardwareDetection(kbinfo: KeyboardInfo): Promise<void> {
+        const detected = await this.readHardwareDetection();
+        if (!detected) return;
+        const state = kbinfo.fragmentState!;
+        state.hwDetection.clear();
+        for (const [idx, id] of detected) state.hwDetection.set(idx, id);
+    }
+
+    /**
+     * Reads 0x18 (hardware detection) without touching any keyboard state.
+     * Response: [cmd_echo][count][frag0..frag20]. Instances reporting 0xFF (not
+     * detected, or not settled yet) are left out. Null when the read fails.
+     */
+    async readHardwareDetection(): Promise<Map<number, number> | null> {
         try {
             const data = await this.usb.sendSvil(
                 SvilUSB.CMD_SVIL_FRAGMENT_GET_HARDWARE,
@@ -71,23 +84,23 @@ export class FragmentService {
             // Response: [0x18][count][21 bytes data]
             if (data.length < 3) {
                 console.warn("Fragment hardware detection response too short");
-                return;
+                return null;
             }
 
             const count = data[1];
-            const state = kbinfo.fragmentState!;
-            state.hwDetection.clear();
-
+            const detected = new Map<number, number>();
             // Parse fragment IDs for each instance position
-            for (let i = 0; i < count && i < MAX_INSTANCES; i++) {
+            for (let i = 0; i < count && i < MAX_INSTANCES && 2 + i < data.length; i++) {
                 const fragmentId = data[2 + i];
                 // 0xFF means no detection, don't store
                 if (fragmentId !== NO_SELECTION) {
-                    state.hwDetection.set(i, fragmentId);
+                    detected.set(i, fragmentId);
                 }
             }
+            return detected;
         } catch (e) {
             console.warn("Failed to get fragment hardware detection:", e);
+            return null;
         }
     }
 
@@ -112,10 +125,13 @@ export class FragmentService {
             const count = data[1];
             const state = kbinfo.fragmentState!;
             state.eepromSelections.clear();
+            const instances = kbinfo.composition?.instances ?? [];
 
             // Parse option indices for each instance position
             // Note: EEPROM stores option indices, NOT fragment IDs
             for (let i = 0; i < count && i < MAX_INSTANCES; i++) {
+                // Widget instances (pointing slots) follow detection only: ignore their bytes.
+                if (instances[i] && isWidgetInstance(kbinfo, instances[i])) continue;
                 const optionIdx = data[2 + i];
                 // 0xFF means no selection, don't store
                 if (optionIdx !== NO_SELECTION) {
@@ -197,7 +213,8 @@ export class FragmentService {
     }
 
     /**
-     * Get list of selectable instances (those with fragment_options)
+     * Get list of selectable instances (those with fragment_options). Widget
+     * instances (pointing slots) are not selectable: hardware detection decides them.
      */
     getSelectableInstances(kbinfo: KeyboardInfo): Array<{ idx: number; instance: NonNullable<KeyboardInfo['composition']>['instances'][0] }> {
         if (!kbinfo.composition?.instances) {
@@ -206,7 +223,7 @@ export class FragmentService {
 
         return kbinfo.composition.instances
             .map((instance, idx) => ({ idx, instance }))
-            .filter(({ instance }) => instance.fragment_options && instance.fragment_options.length > 0);
+            .filter(({ instance }) => instance.fragment_options && instance.fragment_options.length > 0 && !isWidgetInstance(kbinfo, instance));
     }
 
     /**

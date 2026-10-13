@@ -9,6 +9,7 @@ import { payloadCapacity } from "./hid-report";
 import LZMA from "js-lzma";
 import { assertSupportedSvilProto } from "@/utils/unsupported-firmware";
 import { parsePointingHardware, SVIL_FLAG2_POINTING_HARDWARE } from "@/utils/pointing-hardware";
+import { parsePointingMotion, SVIL_FLAG2_POINTING_MOTION, type PointingMotionReport } from "@/utils/pointing-motion";
 import type { KeyboardInfo, AltRepeatKeyEntry, LeaderEntry } from "../types/keyboard.types";
 
 // Svil feature flags (from protocol info response)
@@ -538,6 +539,36 @@ export class KeyboardService {
             if (report) kbinfo.pointing_hardware = report;
         } catch (e) {
             console.warn("Pointing hardware report not available:", e);
+        }
+    }
+
+    /**
+     * Hardware detection (0x18) read fresh, for the pointing slots: the board
+     * settles its pointing modules after connect. Leaves kbinfo untouched; an
+     * empty map on firmware without fragments or on a failed read.
+     */
+    async getFragmentHardware(kbinfo: KeyboardInfo): Promise<Map<number, number>> {
+        if (!this.fragment.hasFragments(kbinfo)) return new Map();
+        return (await this.fragment.readHardwareDetection()) ?? new Map();
+    }
+
+    /** Whether the board answers POINTING_MOTION (0x2D). */
+    hasPointingMotion(kbinfo: KeyboardInfo | null | undefined): boolean {
+        return ((kbinfo?.feature_flags2 ?? 0) & SVIL_FLAG2_POINTING_MOTION) !== 0;
+    }
+
+    /**
+     * Each hand's pointing motion since the previous read (POINTING_MOTION, 0x2D,
+     * read-and-clear). Null without sending on firmware that doesn't advertise it,
+     * and null on a failed or empty read.
+     */
+    async getPointingMotion(kbinfo: KeyboardInfo): Promise<PointingMotionReport | null> {
+        if (!this.hasPointingMotion(kbinfo)) return null;
+        try {
+            const reply = await this.usb.sendSvil(SvilUSB.CMD_SVIL_POINTING_MOTION, [], { uint8: true }) as Uint8Array;
+            return parsePointingMotion(reply, SvilUSB.CMD_SVIL_POINTING_MOTION);
+        } catch {
+            return null;
         }
     }
 

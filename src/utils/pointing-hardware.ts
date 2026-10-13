@@ -111,3 +111,33 @@ export function findPointingProblems(report: PointingHardwareReport | null | und
     }
     return problems;
 }
+
+/** Both halves have reported and finished checking for a module; the report won't change until a half restarts. */
+export function isPointingReportSettled(report: PointingHardwareReport | null | undefined): boolean {
+    return !!report && report.halves.length === 2 && report.halves.every((h) => h.detected !== null);
+}
+
+/** What one half has attached, for display. */
+export interface PointingHalfSummary {
+    side: Side;
+    /** The module attached, "none", "unknown" (an unrecognized trackball sensor), "checking", or "silent" (the half hasn't reported). */
+    module: PointingModule | "none" | "unknown" | "checking" | "silent";
+    usb: boolean;
+    /** The half's firmware drives what's attached (always true while checking or silent). */
+    firmwareMatches: boolean;
+}
+
+/** One summary per side, left then right. Both halves claiming one side are listed as they reported. */
+export function summarizePointingHardware(report: PointingHardwareReport | null | undefined): PointingHalfSummary[] {
+    const summarize = (half: PointingHalfReport): PointingHalfSummary => {
+        const module = half.detected ?? "checking";
+        const firmwareMatches = module === "checking" || module === "unknown" ? true : module === half.builtFor;
+        return { side: half.side, module, usb: half.usb, firmwareMatches };
+    };
+    const halves = report?.halves ?? [];
+    if (halves.length === 2 && halves[0].side === halves[1].side) return halves.map(summarize);
+    return (["left", "right"] as const).map((side) => {
+        const half = halves.find((h) => h.side === side);
+        return half ? summarize(half) : { side, module: "silent", usb: false, firmwareMatches: true };
+    });
+}
