@@ -54,12 +54,14 @@ sudo apt install python3-venv libnss3 libasound2t64 libxkbfile1 libxcb-cursor0 l
   libxcb-keysyms1 libxcb-image0 libxcb-render-util0 libxcb-shape0 libxkbcommon-x11-0
 ```
 
-The Host reads the board through hidraw, which only root can open by default. Give the logged-in user access to Svalboard HID devices, then replug the board. The rule matches the USB IDs rather than the serial number, because current firmware no longer reports the serial that Vial's udev rule looks for.
+The Host reads the board through hidraw, which only root can open by default. Give the logged-in user access to Svalboard HID devices, then replug the board. The rule matches the USB IDs rather than the serial number, because current firmware no longer reports the serial that Vial's udev rule looks for. It covers every Svalboard product ID (0x4044-0x404D), so it keeps working after flashing a firmware file with a different ID. Keybard's own Linux access command writes the same rule.
 
 ```sh
-echo 'KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="4044", MODE="0660", TAG+="uaccess"' \
-  | sudo tee /etc/udev/rules.d/60-svalboard.rules
-sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
+sudo tee /etc/udev/rules.d/60-svalboard.rules > /dev/null <<'EOF'
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="404[4-9a-d]", MODE="0660", TAG+="uaccess"
+EOF
+sudo udevadm control --reload
+sudo udevadm trigger --subsystem-match=hidraw
 ```
 
 Under WSL, attach the board with [usbipd-win](https://github.com/dorssel/usbipd-win) (`usbipd bind`, then `usbipd attach --wsl`); Windows loses the board until it is detached. If Wayland fails with `Failed to create wl_display`, set `XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir`. WSLg doesn't show the overlay under X11 (`QT_QPA_PLATFORM=xcb`), so use Wayland there. If a Windows Host already uses port 5178, start the Linux Host with `--port 5179`. What works under WSLg says nothing about stacking, focus or click-through on native Ubuntu.
