@@ -19,13 +19,13 @@ if sys.platform == 'win32':
     os.environ['QTWEBENGINE_CHROMIUM_FLAGS'] = ' '.join(_flags + [f for f in WINDOWS_CHROMIUM_FLAGS if f not in _flags])
 
 from PySide6.QtCore import Qt, QTimer, QUrl, Signal, QObject, QStandardPaths, QLockFile, QSize, QPointF
-from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtGui import QAction, QActionGroup, QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget, QToolButton, QHBoxLayout
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings, QWebEngineScript
 from .device.protocol import candidates, hid_backend
 from .device.worker import DeviceWorker
-from .state import HostState, serialize_profile
+from .state import EFFECTS, PRESETS, HostState, serialize_profile
 from .server import REMOTE_ORIGINS, load_paranoid_page, make_server
 from .build import build_info
 from .browser import open_contained
@@ -212,7 +212,7 @@ SCALE_MIN, SCALE_MAX = 50, 150
 
 class OverlayControls(QWidget):
     """A separate input window: the handle moves the overlay while the keyboard passes clicks through."""
-    def __init__(self, surface, open_controls, get_scale=lambda: 100, set_scale=lambda scale, final: None, set_capitals=lambda value: None, set_adaptive=lambda value: None, place=lambda: None, reload=lambda: None):
+    def __init__(self, surface, open_controls, get_scale=lambda: 100, set_scale=lambda scale, final: None, set_capitals=lambda value: None, set_adaptive=lambda value: None, place=lambda: None, reload=lambda: None, add_settings=lambda menu: None):
         super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus)
         self.surface = surface
         self.setWindowTitle('Keybard · Overlay controls')
@@ -230,6 +230,7 @@ class OverlayControls(QWidget):
         menu = QMenu(self.more)
         menu.addAction('Open Keybard', open_controls)
         menu.addSeparator()
+        add_settings(menu)
         self.capitals = menu.addAction('Capital letters'); self.capitals.setCheckable(True)
         self.capitals.triggered.connect(set_capitals)
         self.adaptive = menu.addAction('Adaptive contrast'); self.adaptive.setCheckable(True)
@@ -300,9 +301,10 @@ class Host(QObject):
         self.surface.show()
         self.surface.pass_clicks_through()
         self.place()
+        self.build_settings_menus()
         self.controls = OverlayControls(self.surface, self.open_controls,
             lambda: self.state.config['scale'], self.resize_overlay, self.set_capitals, self.set_adaptive,
-            self.place, lambda: self.command(dict(op='reload')))
+            self.place, lambda: self.command(dict(op='reload')), self.add_settings)
         self.controls.capitals.setChecked(self.state.config['capitalAlphas'])
         self.controls.adaptive.setChecked(self.state.config['adaptiveContrast'])
         # Expanding shows the overlay's adapted colors at once rather than at the next sample.
@@ -326,6 +328,10 @@ class Host(QObject):
         self.show_action = QAction('Show overlay', menu, checkable=True, checked=True)
         self.show_action.triggered.connect(lambda value: self.command(dict(op='show', value=value)))
         menu.addAction(self.show_action)
+        menu.addSeparator()
+        self.add_settings(menu)
+        menu.addAction(self.controls.capitals); menu.addAction(self.controls.adaptive)
+        menu.addSeparator()
         menu.addAction('Place at bottom', self.place)
         menu.addSeparator(); menu.addAction('Reload board layout', lambda: self.command(dict(op='reload')))
         menu.addAction('Quit host', app.quit)
@@ -380,14 +386,59 @@ class Host(QObject):
             except (OSError, RuntimeError, ValueError): return self.size_surface()
         self.publish_state()
 
-    def set_flag(self, name, value):
-        """An overlay menu toggle, saved with the Host's settings like Trainer's."""
+    def set_config(self, **fields):
+        """A menu choice, saved with the Host's settings; held-key tracking and the size follow."""
         with self.state.lock:
-            if self.state.config[name] != value:
-                try: self.state.configure(dict(self.state.config, **{name: value}), self.state.revision)
-                except (OSError, RuntimeError, ValueError): pass
+            changed = {k: v for k, v in fields.items() if self.state.config.get(k) != v}
+            if changed:
+                try: self.state.configure(dict(self.state.config, **changed), self.state.revision)
+                except (OSError, RuntimeError, ValueError): changed = {}
+        if changed: self.command(dict(op='configure'))
         self.sync_menu()
         self.publish_state()
+
+    def set_flag(self, name, value): self.set_config(**{name: value})
+
+    def build_settings_menus(self):
+        """The overlay's settings, shared by its ⋯ menu and the tray menu."""
+        self.board_menu = QMenu('Board')
+        self.board_menu.aboutToShow.connect(self.fill_board_menu)
+
+        def choices(title, names, apply):
+            menu = QMenu(title); group = QActionGroup(menu); actions = {}
+            for name in names:
+                action = menu.addAction(name); action.setCheckable(True); group.addAction(action)
+                action.triggered.connect(lambda _checked=False, n=name: apply(n))
+                actions[name] = action
+            return menu, actions
+        self.style_menu, self.style_actions = choices('Style', PRESETS, lambda n: self.set_config(appearance=dict(PRESETS[n])))
+        self.highlight_menu, self.highlight_actions = choices('Layer highlight', EFFECTS, lambda n: self.set_config(**EFFECTS[n]))
+        self.hands_menu, self.hands_actions = choices('Hands', ('Both', 'Left', 'Right'), lambda n: self.set_config(hands=n))
+        self.held_action = QAction('Highlight held keys', self, checkable=True)
+        self.held_action.triggered.connect(lambda value: self.set_config(highlightPressed=value))
+
+    def add_settings(self, menu):
+        menu.addMenu(self.board_menu)
+        menu.addSeparator()
+        for item in (self.style_menu, self.highlight_menu, self.held_action, self.hands_menu):
+            menu.addAction(item) if isinstance(item, QAction) else menu.addMenu(item)
+
+    def fill_board_menu(self):
+        """The connected Svalboards, read when the menu opens so new boards show up."""
+        self.board_menu.clear()
+        group = QActionGroup(self.board_menu)
+        devices = list(self.state.devices)
+        names = [d['name'] for d in devices]
+        for d in devices:
+            label = d['name'] if names.count(d['name']) == 1 else f"{d['name']} ({d['serial'][-4:]})"
+            action = self.board_menu.addAction(label); action.setCheckable(True); group.addAction(action)
+            action.setChecked(d['id'] == self.state.selected_device)
+            action.triggered.connect(lambda _checked=False, key=d['id']: self.command(dict(op='connect', id=key)))
+        if not devices:
+            self.board_menu.addAction('No Svalboard found').setEnabled(False)
+        self.board_menu.addSeparator()
+        disconnect = self.board_menu.addAction('Disconnect', lambda: self.command(dict(op='disconnect')))
+        disconnect.setEnabled(self.state.selected_device is not None)
 
     def set_capitals(self, value): self.set_flag('capitalAlphas', value)
 
@@ -396,9 +447,14 @@ class Host(QObject):
         self.sample_backdrop()
 
     def sync_menu(self):
-        """Keep the overlay menu's check marks in step when Trainer or another page changes them."""
+        """Keep the menus' check marks in step with the settings, however they changed."""
         self.controls.capitals.setChecked(self.state.config['capitalAlphas'])
         self.controls.adaptive.setChecked(self.state.config['adaptiveContrast'])
+        config = self.state.config
+        for name, action in self.style_actions.items(): action.setChecked(config['appearance'] == PRESETS[name])
+        for name, action in self.highlight_actions.items(): action.setChecked(config['effect'] == EFFECTS[name]['effect'])
+        for name, action in self.hands_actions.items(): action.setChecked(config['hands'] == name)
+        self.held_action.setChecked(config['highlightPressed'])
 
     def sample_backdrop(self):
         """Adaptive contrast: send the overlay what's on screen under it; tell it to stop when off."""
@@ -579,11 +635,11 @@ def refuse(message):
     QMessageBox.critical(None, 'Keybard Host (paranoid mode)', message)
 
 
-KEYBARD_URL = 'https://keybard.svalboard.com/#trainer'
+KEYBARD_URL = 'https://keybard.svalboard.com/#overlay'
 
 
 def controls_url(paranoid, local_url, keybard_url=KEYBARD_URL):
-    """Where Open Keybard goes: the website's Trainer, or in paranoid mode the
+    """Where Open Keybard goes: the website's Overlay page, or in paranoid mode the
     Keybard Paranoid this host serves itself, since paranoid mode trusts no website."""
     return local_url if paranoid else keybard_url
 

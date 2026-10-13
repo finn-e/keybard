@@ -1,83 +1,44 @@
-.trainer-page{height:100dvh;background:var(--color-kb-gray,#f1f2f2);color:#333;display:flex;flex-direction:column;overflow:hidden;font-size:13px}.trainer-header{display:flex;align-items:center;gap:14px;padding:14px 24px;border-bottom:1px solid #ddd;background:white;flex-shrink:0}.trainer-header-divider{height:22px;border-left:1px solid #ddd;margin:0 4px}.trainer-source-status{margin-left:auto;color:#748178;font-size:12px}.trainer-main{padding:28px;overflow:auto;min-height:0}.trainer-title{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:22px}.trainer-title h2{font-size:25px;font-weight:600;letter-spacing:-.7px;margin-bottom:5px}.trainer-title p{color:#7b857e}.trainer-workspace{display:grid;grid-template-columns:minmax(0,1fr) 336px;gap:24px;max-width:1700px;margin:auto}.trainer-stage{min-width:0}.trainer-preview-card,.trainer-inspector{background:white;border:1px solid #d8dcda;border-radius:10px;overflow:hidden}.trainer-preview-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px}.trainer-preview-heading h2{font-size:14px;font-weight:600;margin-top:5px;overflow-wrap:anywhere}.trainer-eyebrow{font-size:10px;letter-spacing:1.1px;color:#819087;font-weight:600}.trainer-badge{padding:5px 8px;border:1px solid #dce4df;border-radius:5px;color:#698071;font-size:11px;white-space:nowrap;background:#f9fbfa}.trainer-canvas{min-height:300px;display:flex;align-items:center;justify-content:flex-start;overflow:auto;padding:32px 20px}.trainer-bg-dark{background-color:#273436;background-image:radial-gradient(#496060 0.7px,transparent .7px);background-size:16px 16px}.trainer-bg-light{background:#f5f5f1}.trainer-bg-busy{background:repeating-linear-gradient(125deg,#c8d1c8 0 30px,#8a9c92 30px 31px,#e6e8dc 31px 61px)}.trainer-keyboard{flex-shrink:0;margin:auto}.trainer-keyboard svg{width:100%;display:block;overflow:visible}.trainer-keyboard g{cursor:pointer}.trainer-preview-footer{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;color:#7f8b83;font-size:11px;gap:8px}.trainer-segments{display:flex;padding:3px;background:#f1f3f1;border-radius:6px}.trainer-segments button{padding:5px 10px;border-radius:4px;cursor:pointer}.trainer-segments button[aria-pressed=true]{background:white;color:#276247;box-shadow:0 1px 4px #0001}.trainer-source-card{display:flex;align-items:end;gap:12px;margin-top:22px}.trainer-source-card .trainer-field{flex:1;min-width:0;margin:0}.trainer-layer-controls{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}.trainer-note{font-size:12px;color:#78837b;line-height:1.65;margin:8px 0 18px}.trainer-host-card{display:flex;gap:12px;padding:18px;border:1px dashed #c9d2cb;border-radius:8px;margin-top:22px;align-items:start;color:#627769}.trainer-host-card strong{font-size:13px;font-weight:600}.trainer-host-card p{font-size:12px;line-height:1.6;margin-top:5px;color:#7b887f}.trainer-host-card .trainer-badge{margin-left:auto}.trainer-inspector{align-self:start;position:sticky;top:0;display:flex;flex-direction:column;max-height:calc(100dvh - 128px)}.trainer-pane{padding:20px;overflow:auto;min-height:0}.trainer-pane h2{font-size:14px;font-weight:600;margin-bottom:7px}.trainer-field{margin-bottom:20px;min-width:0}.trainer-field label{display:flex;justify-content:space-between;font-size:12px;font-weight:500;color:#526359;margin-bottom:10px}.trainer-field label span{color:#87988c;font-size:11px}.trainer-page select{width:100%;min-width:0;padding:9px 10px;border:1px solid #d8dfda;border-radius:5px;background:white;font-size:12px;color:#4d6053;text-overflow:ellipsis}.trainer-page input[type=range]{width:100%;min-width:0;accent-color:#099e7c;height:4px}.trainer-page input[type=color]{width:29px;height:27px;padding:0;border:1px solid #d8dfda;border-radius:5px;overflow:hidden;flex-shrink:0;cursor:pointer}.trainer-page input[type=color]::-webkit-color-swatch-wrapper{padding:0}.trainer-page input[type=color]::-webkit-color-swatch{border:0}.trainer-toggle{display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:12px;color:#526359;margin:20px 0}.trainer-toggle [data-state=checked]{background:#099e7c}.trainer-inspector-footer{display:flex;align-items:center;gap:7px;padding:12px 20px;font-size:10px;color:#698671;background:#f7faf8;border-top:1px solid #e2e7e3;flex-shrink:0}.trainer-page hr{border:0;border-top:1px solid #e1e6e2;margin:22px 0}.trainer-error{color:#b52a44;font-size:12px}.trainer-fade{animation:trainer-fade linear forwards}@keyframes trainer-fade{from{opacity:1}to{opacity:0}}
-@media(max-width:1050px){.trainer-main{padding:20px}.trainer-workspace{grid-template-columns:minmax(0,1fr) 300px;gap:16px}.trainer-pane{padding:16px}.trainer-host-card{flex-wrap:wrap}.trainer-source-card{align-items:stretch;flex-direction:column}.trainer-canvas{min-height:240px}}
-@media(max-width:760px){.trainer-workspace{grid-template-columns:1fr}.trainer-inspector{position:static;max-height:none}.trainer-header{padding:12px;gap:8px;flex-wrap:wrap}.trainer-source-status{font-size:10px}.trainer-header-divider{display:none}.trainer-main{padding:16px}.trainer-title h2{font-size:21px}.trainer-title p{font-size:12px}.trainer-canvas{min-height:200px;padding:20px 12px}.trainer-host-card{margin:12px 0}.trainer-preview-heading{padding:14px;flex-wrap:wrap}.trainer-preview-heading h2{font-size:13px}.trainer-title{align-items:start}.trainer-title button{font-size:11px;padding:8px}}
+.trainer-page{height:100dvh;background:var(--color-kb-gray,#f1f2f2);color:#333;display:flex;flex-direction:column;overflow:hidden;font-size:13px}.trainer-header{display:flex;align-items:center;gap:14px;padding:14px 24px;border-bottom:1px solid #ddd;background:white;flex-shrink:0}.trainer-main{padding:28px;overflow:auto;min-height:0}.trainer-note{font-size:12px;color:#78837b;line-height:1.65;margin:8px 0 18px}.trainer-page select{width:100%;min-width:0;padding:9px 10px;border:1px solid #d8dfda;border-radius:5px;background:white;font-size:12px;color:#4d6053;text-overflow:ellipsis}.trainer-page input[type=range]{width:100%;min-width:0;accent-color:#099e7c;height:4px}.trainer-page input[type=color]{width:29px;height:27px;padding:0;border:1px solid #d8dfda;border-radius:5px;overflow:hidden;flex-shrink:0;cursor:pointer}.trainer-page input[type=color]::-webkit-color-swatch-wrapper{padding:0}.trainer-page input[type=color]::-webkit-color-swatch{border:0}.trainer-page hr{border:0;border-top:1px solid #e1e6e2;margin:22px 0}.trainer-error{color:#b52a44;font-size:12px}.trainer-fade{animation:trainer-fade linear forwards}@keyframes trainer-fade{from{opacity:1}to{opacity:0}}
+@media(max-width:1050px){.trainer-main{padding:20px}}
+@media(max-width:760px){.trainer-header{padding:12px;gap:8px;flex-wrap:wrap}.trainer-main{padding:16px}}
 
 .trainer-native-surface{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:transparent}.trainer-native-surface svg{width:100%;height:100%;display:block}
-.trainer-host-section{padding:16px 0;border-bottom:1px solid #dce4de;margin-bottom:20px}
 
-.trainer-host-section{padding:0 0 12px;margin-bottom:14px}.trainer-host-toolbar{display:flex;gap:8px;align-items:center}.trainer-host-toolbar select{min-width:0;flex:1}.trainer-host-toolbar button{font-size:12px}.trainer-host-section .trainer-note{margin:8px 0 0;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}@media(max-width:900px){.trainer-host-toolbar{flex-wrap:wrap}.trainer-host-toolbar select{flex-basis:100%}}
-
-/* Live inside Keybard's existing navigation rail, with independent workspace scrolling. */
+/* Live inside Keybard's existing navigation rail,with independent workspace scrolling. */
 .trainer-shell{display:flex;width:100%;min-width:0;height:100dvh;background:var(--color-kb-gray,#f1f2f2)}
 .trainer-shell-content{flex:1;min-width:0;position:relative;container-type:inline-size}
 .trainer-header{height:64px;padding:0 24px;background:transparent;border-bottom:1px solid #ddd;gap:10px}
 .trainer-header h1{font-size:16px;font-weight:600}
-.trainer-title h2{font-size:18px;letter-spacing:-.3px}
-.trainer-title p{font-size:12px}
+
 .trainer-main{flex:1;padding:24px}
 .trainer-mobile-nav{position:absolute;top:16px;left:8px;z-index:10}
-@container(max-width:900px){.trainer-workspace{grid-template-columns:minmax(0,1fr) 280px;gap:16px}.trainer-main{padding:16px}.trainer-pane{padding:16px}}
-@container(max-width:700px){.trainer-workspace{grid-template-columns:1fr}.trainer-inspector{position:static;max-height:none}.trainer-source-card{flex-direction:column;align-items:stretch}}
+@container(max-width:900px){.trainer-main{padding:16px}}
 @media(max-width:767px){.trainer-header{padding-left:48px}}
 
-.trainer-key-legend { height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:600; line-height:1.05; overflow:hidden; }
-.trainer-key-heading { display:flex; align-items:center; justify-content:center; gap:2px; font-size:7px; max-width:100%; flex-shrink:0; }
-.trainer-key-center { display:flex; align-items:center; justify-content:center; gap:2px; min-height:0; flex:1; max-width:100%; white-space:pre-line; text-align:center; overflow-wrap:anywhere; }
-.trainer-key-legend svg { width:12px; height:12px; margin:0; flex-shrink:0; }
+.trainer-key-legend{ height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:600; line-height:1.05; overflow:hidden; }
+.trainer-key-heading{ display:flex; align-items:center; justify-content:center; gap:2px; font-size:7px; max-width:100%; flex-shrink:0; }
+.trainer-key-center{ display:flex; align-items:center; justify-content:center; gap:2px; min-height:0; flex:1; max-width:100%; white-space:pre-line; text-align:center; overflow-wrap:anywhere; }
+.trainer-key-legend svg{ width:12px; height:12px; margin:0; flex-shrink:0; }
 
-/* Short fade is an explicitly selected opacity effect, with no spatial motion.
+/* Short fade is an explicitly selected opacity effect,with no spatial motion.
    Keep it under reduced-motion settings; disabling it turns it into a flash. */
 
-.trainer-install { max-width:1700px; margin:0 auto 20px; padding:16px 20px; background:white; border:1px solid #d8dcda; }
-.trainer-install-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:12px; }
-.trainer-install h2 { font-size:15px; font-weight:600; margin:0 0 4px; }
-.trainer-install p { font-size:12px; line-height:1.6; color:#526359; margin:4px 0; }
-.trainer-install-download { display:inline-flex; align-items:center; gap:8px; background:#099e7c; color:white; padding:10px 14px; font-size:13px; font-weight:600; }
-.trainer-install-download:hover { background:#087e60; }
-.trainer-install-links { display:flex; gap:20px; flex-wrap:wrap; margin-top:12px; font-size:12px; }
-.trainer-install-links a { display:inline-flex; align-items:center; gap:5px; color:#087e60; text-decoration:underline; text-underline-offset:3px; }
+.trainer-install{ max-width:1700px; margin:0 auto 20px; padding:16px 20px; background:white; border:1px solid #d8dcda; }
+.trainer-install-heading{ display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:12px; }
+.trainer-install h2{ font-size:15px; font-weight:600; margin:0 0 4px; }
+.trainer-install p{ font-size:12px; line-height:1.6; color:#526359; margin:4px 0; }
+.trainer-install-download{ display:inline-flex; align-items:center; gap:8px; background:#099e7c; color:white; padding:10px 14px; font-size:13px; font-weight:600; }
+.trainer-install-download:hover{ background:#087e60; }
+.trainer-install-links{ display:flex; gap:20px; flex-wrap:wrap; margin-top:12px; font-size:12px; }
+.trainer-install-links a{ display:inline-flex; align-items:center; gap:5px; color:#087e60; text-decoration:underline; text-underline-offset:3px; }
 
-/* Dark theme (html.dark). The preview backgrounds (.trainer-bg-*) and overlay colours are left alone: they stand in for the desktop behind the overlay. */
-.dark .trainer-page{color:#f1f2f2}
-.dark .trainer-header,.dark .trainer-header-divider,.dark .trainer-group,.dark .trainer-page hr,.dark .trainer-host-section{border-color:#3a3d42}
-.dark .trainer-preview-card,.dark .trainer-inspector,.dark .trainer-install{background:#1d1e21;border-color:#3a3d42}
-.dark .trainer-badge{background:#26282b;border-color:#3a3d42;color:#a3a3a3}
-.dark .trainer-segments{background:#26282b}
-.dark .trainer-segments button[aria-pressed=true]{background:#3a3d42;color:#5fd3b3}
-.dark .trainer-inspector-footer{background:#26282b;border-color:#3a3d42}
+.dark .trainer-header,.dark .trainer-page hr{border-color:#3a3d42}
+.dark .trainer-install{background:#1d1e21;border-color:#3a3d42}
+
 .dark .trainer-page select{background:#26282b;border-color:#75797f;color:#f1f2f2}
 .dark .trainer-page input[type=color]{border-color:#75797f}
-.dark .trainer-host-card{border-color:#75797f}
-.dark .trainer-host-card strong{color:#f1f2f2}
+
 .dark .trainer-error{color:#f2788b}
 .dark .trainer-install-links a{color:#3cc29f}
-.dark :is(.trainer-source-status,.trainer-title p,.trainer-eyebrow,.trainer-preview-footer,.trainer-note,.trainer-host-card,.trainer-host-card p,.trainer-muted,.trainer-install p,.trainer-inspector-footer){color:#a3a3a3}
-.dark :is(.trainer-field label,.trainer-toggle,.trainer-prop>label){color:#d4d4d4}
-.dark .trainer-field label span{color:#a3a3a3}
+.trainer-note,.trainer-install p{color:#a3a3a3}
 
-/* One settings panel: each row puts its name beside its controls. */
-.trainer-pane{padding:14px 16px}
-.trainer-group{border-top:1px solid #e4e8e4;padding:10px 0 6px}.trainer-group:first-child{border-top:0;padding-top:0}
-.trainer-group-head{display:flex;justify-content:space-between;align-items:center;min-height:24px;margin-bottom:2px}
-.trainer-icon-button{width:24px;height:24px}.trainer-icon-button svg{width:14px;height:14px}
-.trainer-prop{display:grid;grid-template-columns:56px minmax(0,1fr);align-items:center;gap:8px;min-height:30px}
-.trainer-prop>label{font-size:12px;color:#526359;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.trainer-prop-controls{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
-.trainer-page .trainer-prop input[type=color]{width:22px;height:22px;border-radius:4px}
-.trainer-prop input[type=range]{flex:1;min-width:60px;appearance:none;-webkit-appearance:none;height:4px;border-radius:2px;background:linear-gradient(to right,#099e7c var(--fill,0%),#d8dfda var(--fill,0%));cursor:pointer}
-.trainer-prop input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#099e7c;border:2px solid white;box-shadow:0 0 0 1px #099e7c}
-.trainer-prop input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#099e7c;border:2px solid white}
-.trainer-readout{font-size:11px;color:#78837b;width:30px;text-align:right;font-variant-numeric:tabular-nums}
-.trainer-swatch-space{width:22px;flex:none}
-.trainer-page .trainer-prop select{padding:4px 6px;font-size:12px}
-.trainer-segments.small{padding:2px}.trainer-segments.small button{padding:3px 8px;font-size:11px}
-.trainer-segments [aria-checked=true],.trainer-segments.small [aria-pressed=true]{background:#e2f3ee;color:#087e60;box-shadow:0 1px 3px #0001;font-weight:600}
-.trainer-chip{border:1px solid #d8dfda;border-radius:4px;padding:2px 7px;font-size:11px;color:#526359;cursor:pointer}
-.trainer-chip[aria-pressed=true]{background:#e2f3ee;border-color:#099e7c;color:#087e60;font-weight:600}
-.trainer-muted{font-size:11px;color:#78837b}
-.dark .trainer-segments [aria-checked=true],.dark .trainer-segments.small [aria-pressed=true]{background:#3a3d42;color:#5fd3b3}
-.dark .trainer-prop input[type=range]{background:linear-gradient(to right,#099e7c var(--fill,0%),#3a3d42 var(--fill,0%))}
-.dark .trainer-prop input[type=range]::-webkit-slider-thumb{border-color:#1d1e21}
-.dark .trainer-readout{color:#a3a3a3}
-.dark .trainer-chip{border-color:#3a3d42;color:#d4d4d4}
-.dark .trainer-chip[aria-pressed=true]{background:#1f3a33;border-color:#3cc29f;color:#5fd3b3}

@@ -6,8 +6,20 @@ import secrets
 from threading import RLock
 from pathlib import Path
 
-DEFAULTS = dict(layoutId='us', appearance=dict(fill='#14202b', fillAlpha=75, outline='#51606a', outlineAlpha=100,
-    legend='#f0f5f7', legendAlpha=100, width=1, halo=False, changed='#8ce4d3', pressed='#ffd27a'),
+# The overlay's styles, offered in the Host's menus (Keybard's src/features/trainer/core.ts has the same).
+_DARK = dict(fill='#14202b', fillAlpha=80, outline='#51606a', outlineAlpha=100,
+    legend='#f0f5f7', legendAlpha=100, width=1, halo=False, changed='#8ce4d3', pressed='#ffd27a')
+PRESETS = {
+    'Dark': _DARK,
+    'Subtle': dict(_DARK, fillAlpha=20, outlineAlpha=40, legendAlpha=80, halo=True),
+    'Outline only': dict(_DARK, fillAlpha=0, outline='#dce5ec', outlineAlpha=90, halo=True),
+    'Light': dict(_DARK, fill='#f3f5f7', fillAlpha=90, outline='#56616b', legend='#15202b'),
+    'High contrast': dict(_DARK, fill='#000000', fillAlpha=90, outline='#ffffff', width=2, halo=True),
+}
+# Layer-change highlight choices; each sets the effect and its duration together.
+EFFECTS = {'Off': dict(effect='Off'), 'Flash': dict(effect='Quick flash', duration=150), 'Fade': dict(effect='Short fade', duration=400)}
+
+DEFAULTS = dict(layoutId='us', appearance=dict(PRESETS['Outline only']),
     effect='Short fade', duration=150, scale=100, hands='Both', highlightPressed=True, manualDefault=1,
     capitalAlphas=False, adaptiveContrast=False)
 

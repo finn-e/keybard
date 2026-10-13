@@ -141,8 +141,10 @@ class QtHardeningTest(unittest.TestCase):
 
     def test_a_failed_save_puts_the_check_mark_back(self):
         controls = mock.Mock()
-        host = SimpleNamespace(state=self.state, controls=controls, publish_state=mock.Mock())
+        host = SimpleNamespace(state=self.state, controls=controls, publish_state=mock.Mock(), command=mock.Mock(),
+                               style_actions={}, highlight_actions={}, hands_actions={}, held_action=mock.Mock())
         host.sync_menu = lambda: Host.sync_menu(host)
+        host.set_config = lambda **fields: Host.set_config(host, **fields)
         with mock.patch.object(self.state, 'save', side_effect=OSError):
             Host.set_flag(host, 'capitalAlphas', True)
         self.assertFalse(self.state.config['capitalAlphas'])
@@ -150,6 +152,22 @@ class QtHardeningTest(unittest.TestCase):
         Host.set_flag(host, 'capitalAlphas', True)
         self.assertTrue(self.state.config['capitalAlphas'])
         controls.capitals.setChecked.assert_called_with(True)
+
+    def test_menu_choices_save_and_apply_together(self):
+        from keybard_host.state import EFFECTS, PRESETS
+        actions = {name: mock.Mock() for name in PRESETS}
+        host = SimpleNamespace(state=self.state, controls=mock.Mock(), publish_state=mock.Mock(), command=mock.Mock(),
+                               style_actions=actions, highlight_actions={}, hands_actions={}, held_action=mock.Mock())
+        host.sync_menu = lambda: Host.sync_menu(host)
+        Host.set_config(host, appearance=dict(PRESETS['High contrast']), **EFFECTS['Flash'], hands='Left')
+        self.assertEqual(self.state.config['appearance'], PRESETS['High contrast'])
+        self.assertEqual((self.state.config['effect'], self.state.config['duration'], self.state.config['hands']), ('Quick flash', 150, 'Left'))
+        host.command.assert_called_once_with(dict(op='configure'))  # held-key tracking and size follow
+        actions['High contrast'].setChecked.assert_called_with(True)
+        actions['Dark'].setChecked.assert_called_with(False)
+        host.command.reset_mock()
+        Host.set_config(host, hands='Left')  # no change: nothing saved or re-applied
+        host.command.assert_not_called()
 
     def test_icon_swaps_once_when_the_taskbar_theme_changes(self):
         host = SimpleNamespace(icon_light_background=False, app=mock.Mock(), surface=mock.Mock(), tray=mock.Mock())

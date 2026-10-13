@@ -14,17 +14,17 @@ Keybard Host is now in your system tray, and it opens Keybard's Overlay page on 
 ## Set up the overlay
 
 1. On the Overlay page, connect your keyboard if it isn't already, and click **Connect to Keybard Host**. If the browser asks whether the site can access apps on this device, allow it. Next time it reconnects on its own.
-2. Pick the board to show, if you have more than one, and set the overlay's colors, size and other options. They're saved on this computer.
+2. If you have more than one Svalboard, pick yours from **Board** in the overlay's ⋯ menu or the tray icon. Settings are saved on this computer.
 
 Use Chrome or Edge. **Open Keybard** in the tray menu takes you back to the Overlay page. Offline, the Host's built-in copy of Keybard at `http://127.0.0.1:5178/` works the same way.
 
 ## Using it
 
 - **Place it:** drag the move grip above the overlay's top-right corner. **Size it:** drag the resize grip next to it, up or right to grow, down or left to shrink. **Collapse it:** the collapse button beside the grips hides the overlay and leaves just the grips; click it again to bring it back. Clicks anywhere else, keys included, pass through to the window underneath.
-- **Overlay menu:** the menu beside the grips opens Keybard; **Capital letters** shows letter keys in capitals; **Adaptive contrast** (Windows, off by default) restyles each key for the background behind it.
+- **Overlay menu** (⋯ beside the grips, and the same items in the tray menu): **Board** picks the Svalboard to follow; **Style** picks a look (Dark, Subtle, Outline only, Light, High contrast); **Layer highlight** is Off, Flash or Fade; **Highlight held keys**; **Hands**; **Capital letters** shows letter keys in capitals; **Adaptive contrast** (Windows, off by default) restyles each key for the background behind it; **Place at bottom**; **Reload board layout**.
 - **Tray menu:** show or hide the overlay, drag or place it at the bottom of the screen, reload the layout, open Keybard's Overlay page, or quit. Closing the browser leaves the overlay running.
 - **After you edit your layout in Keybard**, the overlay updates by itself about a second after the change reaches the keyboard, as long as Keybard is connected to Keybard Host (the Overlay page's **Connect to Keybard Host**, once). For changes made elsewhere, choose **Reload layout** from the tray.
-- **Held keys:** the keys you're holding are highlighted. Turn this off with the **Held** switch on the Overlay page. Very short taps can be missed.
+- **Held keys:** the keys you're holding are highlighted. Turn this off with **Highlight held keys** in the overlay's menu. Very short taps can be missed.
 - **Shift and Caps Lock** on your Svalboard change the letters and symbols shown, using the keyboard language chosen in Keybard. Other keyboards on the computer don't. The board reports them itself, so this needs Svalboard firmware that does; older firmware shows plain legends.
 
 ## What it doesn't do
