@@ -232,15 +232,19 @@ class OverlayControls(QWidget):
             button.setFixedSize(24, 24); layout.addWidget(button)
         self.setFixedSize(108, 24)
         self.collapsed = False
-        self.set_collapsed(False)
+        self.set_collapsed(False, apply=False)
         surface.geometry_changed.connect(self.reposition)
         self.reposition()
 
-    def set_collapsed(self, value):
-        """Collapsed: only these controls show. The overlay's window stays, fully transparent,
-        so the move grip still moves it and the controls stay put above its corner."""
+    def set_collapsed(self, value, apply=True):
+        """Collapsed: only these controls show. The overlay's window is hidden; the move grip
+        still moves it and the controls stay put above its corner.
+
+        Never use window opacity here: on Windows it moves the transparent overlay onto a
+        slower update path where the screen kept showing stale frames (a key stuck lit until
+        the overlay was moved)."""
         self.collapsed = value
-        self.surface.setWindowOpacity(0 if value else 1)
+        if apply: self.surface.setVisible(not value)
         self.resizer.setEnabled(not value)
         label = 'Expand overlay' if value else 'Collapse overlay'
         self.collapser.setIcon(overlay_control_icon('expand' if value else 'collapse'))

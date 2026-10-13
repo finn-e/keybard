@@ -53,15 +53,18 @@ class OverlayControlsTest(unittest.TestCase):
             controls.close(); controls.deleteLater()
 
     def test_collapse_leaves_only_the_controls_and_expand_restores(self):
+        self.surface.show()
         button = self.controls.collapser
         self.assertEqual(button.accessibleName(), 'Collapse overlay')
         button.click()
         self.assertTrue(self.controls.collapsed)
-        self.assertEqual(self.surface.windowOpacity(), 0)
+        self.assertTrue(self.surface.isHidden())
         self.assertFalse(self.controls.resizer.isEnabled())
         self.assertEqual(button.accessibleName(), 'Expand overlay')
         button.click()
         self.assertFalse(self.controls.collapsed)
+        self.assertFalse(self.surface.isHidden())
+        # Window opacity puts the overlay on a slower Windows update path (stale frames).
         self.assertEqual(self.surface.windowOpacity(), 1)
         self.assertTrue(self.controls.resizer.isEnabled())
 
