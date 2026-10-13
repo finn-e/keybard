@@ -17,7 +17,6 @@ from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings, QWebEngi
 from .device.protocol import candidates, hid_backend
 from .device.worker import DeviceWorker
 from .state import HostState, serialize_profile
-from .modifiers import ModifierReader
 from .server import REMOTE_ORIGINS, load_paranoid_page, make_server
 from .build import build_info
 from .browser import open_contained
@@ -315,20 +314,11 @@ class Host(QObject):
         self.tray.setContextMenu(menu); info = build_info(); self.tray.setToolTip(f"Keybard Host {info['version']}" + (f" · Keybard {info['keybardCommit']}" if info['keybardCommit'] else ''))
         self.tray.activated.connect(lambda reason: self.open_controls() if reason == QSystemTrayIcon.DoubleClick else None)
         self.tray.show()
-        self.modifier_reader = ModifierReader()
-        self.modifier_timer = QTimer(self); self.modifier_timer.timeout.connect(self.read_modifiers); self.modifier_timer.start(16)
         self.timer = QTimer(self); self.timer.timeout.connect(self.tick); self.timer.start(100)
         self.scan_timer = QTimer(self); self.scan_timer.timeout.connect(self.scan); self.scan_timer.start(2500)
         QTimer.singleShot(0, self.scan)
         self.surface.windowHandle().screenChanged.connect(lambda screen: QTimer.singleShot(0, self.size_surface))
         app.aboutToQuit.connect(self.shutdown)
-
-    def read_modifiers(self):
-        value = self.modifier_reader.read()
-        with self.state.lock:
-            if value == self.state.modifiers: return
-            self.state.modifiers = value
-        self.publish_state()
 
     def renderer_loaded(self, ok):
         self.published_layout = -1
@@ -464,7 +454,7 @@ class Host(QObject):
         with self.state.lock:
             self.state.valid = False; self.state.pressed = []; self.state.board = None; self.state.selected_device = None
             self.state.layout_revision += 1; self.state.session = secrets.token_hex(12)
-            self.state.default = None; self.state.active = 0; self.state.matrix_available = None
+            self.state.default = None; self.state.active = 0; self.state.matrix_available = None; self.state.modifiers = None
         return True
 
     def profile(self, profile):
@@ -486,6 +476,8 @@ class Host(QObject):
         self.last_state = time.monotonic()
         with self.state.lock:
             self.state.active, self.state.default = snapshot.active, snapshot.default
+            # Shift and Caps Lock come from this board alone, never from other keyboards.
+            self.state.modifiers = snapshot.modifiers
             mask = snapshot.active | (snapshot.default if snapshot.default is not None else self.state.config['manualDefault'])
             self.state.valid = not (mask >> len(self.state.board['keymap']))
             if not self.state.valid: self.state.status = 'Board refers to an unknown layer; reload the layout'
@@ -550,8 +542,6 @@ class Host(QObject):
         self.publish_state()
 
     def shutdown(self):
-        self.modifier_timer.stop()
-        self.modifier_reader.close()
         self.scan_timer.stop(); self.timer.stop()
         if self.worker:
             self.worker.stop(); self.worker.wait(5000)

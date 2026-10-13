@@ -4,7 +4,7 @@ import lzma
 import sys
 import types
 from unittest import mock
-from keybard_host.device.protocol import SvalReader, ProtocolError, candidates, hid_backend, READ_COMMANDS, LayerSnapshot, DEFAULT_LAYER_STATE_FLAG
+from keybard_host.device.protocol import SvalReader, ProtocolError, candidates, hid_backend, READ_COMMANDS, LayerSnapshot, DEFAULT_LAYER_STATE_FLAG, MODIFIER_STATE_FLAG2
 
 
 class FakeDevice:
@@ -16,6 +16,9 @@ class FakeDevice:
         self.foreign = False
         self.version = 3
         self.feature_flags = 0
+        self.feature_flags2 = 0
+        self.mods = 0
+        self.status = 0
         self.default_mask = 1
         self.legacy_padding = b"\xa5" * 4
         self.uid = 0x1122334455667788
@@ -47,6 +50,7 @@ class FakeDevice:
             reply[7:11] = self.version.to_bytes(4, "little")
             reply[11:19] = self.uid.to_bytes(8, "little")
             reply[19] = self.feature_flags
+            reply[24] = self.feature_flags2
         else:
             protocol, command = reply[5:7]
             args = bytes(reply[7:])
@@ -54,6 +58,7 @@ class FakeDevice:
             if (protocol, command) == (0xDF, 0x16):
                 data = self.mask.to_bytes(4, "little")
                 data += self.default_mask.to_bytes(4, "little") if self.feature_flags & DEFAULT_LAYER_STATE_FLAG else self.legacy_padding
+                data += bytes((self.mods, self.status)) if self.feature_flags2 & MODIFIER_STATE_FLAG2 else b"\xa5\xa5"
             elif protocol == 0xDF and command in (0x0D, 0x0E):
                 if self.compressed is None:
                     self.compressed = lzma.compress(json.dumps(self.definition).encode(), format=lzma.FORMAT_ALONE)
@@ -128,6 +133,23 @@ class ProtocolTests(unittest.TestCase):
         device.feature_flags = 0
         reader.info()
         self.assertIsNone(reader.layer_snapshot().default)
+
+    def test_shift_and_caps_lock_come_from_the_board(self):
+        device = FakeDevice()
+        reader = SvalReader(device)
+        reader.info()
+        self.assertIsNone(reader.layer_snapshot().modifiers)  # Not advertised: trailing bytes are ignored.
+        device.feature_flags2 = MODIFIER_STATE_FLAG2
+        reader.info()
+        # (HID mods, status) -> shift, capsLock. Status bit 0 Caps Word, bit 1 Caps Lock LED.
+        for mods, status, shift, caps in [(0, 0, False, False), (0x02, 0, True, False), (0x20, 0, True, False),
+                                          (0x01 | 0x04 | 0x08, 0, False, False), (0, 2, False, True),
+                                          (0, 1, False, True), (0, 3, False, False), (0x02, 1, True, True)]:
+            device.mods, device.status = mods, status
+            self.assertEqual(reader.layer_snapshot().modifiers, dict(shift=shift, capsLock=caps), (mods, status))
+        device.feature_flags2 = 0  # A downgrade drops it on the next handshake.
+        reader.info()
+        self.assertIsNone(reader.layer_snapshot().modifiers)
 
     def test_pressed_matrix_covers_both_hands_chords_and_release(self):
         device = FakeDevice()

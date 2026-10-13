@@ -8,6 +8,7 @@ This release is a portable ZIP for 64-bit Windows 10 and 11, not a signed instal
 
 - **Trainer is now called Overlay.** The page in Keybard's left panel that sets up the overlay is now **Overlay**, and its overlay tab is now **Placement**.
 - **Practice is hidden for now.** The Overlay page no longer shows the Practice tab.
+- **Shift comes from your Svalboard.** Shifted legends follow Shift, Caps Lock and Caps Word on the board the overlay follows, as the board reports them. Shift on another keyboard no longer changes the overlay. This needs current Svalboard firmware; older firmware shows plain legends.
 - **Held keys are highlighted.** **Highlight held keys** is now on by default, and this update turns it on once for everyone, since earlier versions saved it as off on their own. Turn it off in the Overlay page's **Feedback** tab; that choice is kept.
 - **The Svalboard icon matches your taskbar.** In the tray and taskbar it is a black glyph on a light taskbar and a white one on a dark taskbar, and switches when you change the Windows theme. Shortcuts and the installer keep the black-on-white icon.
 - **Resize the overlay where it is.** Drag the new resize grip, between the move grip and the menu above the overlay's corner: up or right makes the overlay bigger, down or left smaller. Its bottom-left corner stays put, and the size is saved like Trainer's **Overlay size** slider.

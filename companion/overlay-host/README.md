@@ -25,7 +25,7 @@ Use Chrome or Edge. **Open Keybard** in the tray menu takes you back to the Over
 - **Tray menu:** show or hide the overlay, drag or place it at the bottom of the screen, reload the layout, open Keybard's Overlay page, or quit. Closing the browser leaves the overlay running.
 - **After you edit your layout in Keybard**, the overlay updates by itself about a second after the change reaches the keyboard, as long as Keybard is connected to Keybard Host (the Overlay page's **Connect to Keybard Host**, once). For changes made elsewhere, choose **Reload layout** from the tray.
 - **Held keys:** the keys you're holding are highlighted. Turn this off with **Highlight held keys** in the Overlay page's Feedback tab. Very short taps can be missed.
-- **Shift and Caps Lock** change the letters and symbols shown, using the keyboard language chosen in Keybard. This doesn't work on Wayland.
+- **Shift and Caps Lock** on your Svalboard change the letters and symbols shown, using the keyboard language chosen in Keybard. Other keyboards on the computer don't. The board reports them itself, so this needs Svalboard firmware that does; older firmware shows plain legends.
 
 ## What it doesn't do
 
@@ -86,7 +86,7 @@ On macOS the Host:
 
 The Host shouldn't need any privacy permission, but these are the ones to look at if something doesn't work (System Settings → Privacy & Security):
 
-- **Input Monitoring:** the Host reads the board's layer and held keys through the board's own Raw HID interface, not its keyboard interface, and reads Shift and Caps Lock from the system's modifier flags rather than watching keystrokes. Neither should need Input Monitoring. If the overlay never finds the board, or Shift and Caps Lock never change the legends, check whether macOS has listed Terminal (or your Python) here, and allow it.
+- **Input Monitoring:** the Host reads the board's layer, held keys, Shift and Caps Lock through the board's own Raw HID interface, not its keyboard interface, and never watches keystrokes. That shouldn't need Input Monitoring. If the overlay never finds the board, check whether macOS has listed Terminal (or your Python) here, and allow it.
 - **Accessibility:** not used. The Host doesn't move other apps' windows or send input.
 - **Local Network:** the Host only listens on `127.0.0.1`, which macOS doesn't ask about.
 
@@ -100,7 +100,7 @@ Chrome needs the board too. Keybard and the Host should both be able to have it 
 4. Clicking the overlay or its controls doesn't take focus from the app you're typing in.
 5. The move grip drags the overlay and the resize grip resizes it; the collapse button hides the overlay but keeps the grips, and brings it back; clicks anywhere else on the overlay, keys included, pass through.
 6. The overlay stays visible after you click on another app, switch Spaces, and open an app in full screen.
-7. Layer changes and, with **Held keys** on, held keys show up live. Shift and Caps Lock change the legends.
+7. Layer changes and, with **Held keys** on, held keys show up live. Shift and Caps Lock on the board change the legends.
 8. Keybard in Chrome and the Host both stay connected to the board at the same time.
 9. **Quit host** from the menu bar quits it, and starting it again keeps your settings.
 10. `bash start-macos.sh --paranoid` opens Keybard Paranoid in its own Chrome or Edge window.
