@@ -5,7 +5,7 @@
 import { derivePointingMode, type AxisLock, type PointingLiveSample, type PointingSide } from "@/components/pointing-viz/types";
 
 /** GET_INFO second feature byte: the board answers POINTING_MOTION (0x2D). */
-export const SVIL_FLAG2_POINTING_MOTION = 0x04;
+export const SVIL_FLAG2_POINTING_MOTION = 0x08;
 
 /** Format byte this parser understands. 0 means the firmware has nothing to report. */
 export const POINTING_MOTION_FORMAT = 1;

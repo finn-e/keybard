@@ -89,7 +89,7 @@ The firmware uses the existing 0x18 handler, the existing detection, and the exi
 
 ### B3. New command 0x2D POINTING_MOTION
 
-- `sval.h`: `sval_cmd_pointing_motion = 0x2D`. Feature bit `sval_flag2_pointing_motion = (1 << 2)`, OR'ed into `sval_get_feature_flags2()` only when `POINTING_DEVICE_ENABLE` is set.
+- `sval.h`: `sval_cmd_pointing_motion = 0x2D`. Feature bit `sval_flag2_pointing_motion = (1 << 3)` (bit 2 is the modifier state, #17), OR'ed into `sval_get_feature_flags2()` only when `POINTING_DEVICE_ENABLE` is set.
 - `sval.c`: a handler next to 0x2C that zeroes `data[2..]` and calls the weak `void sval_pointing_motion_kb(uint8_t *out, uint8_t length)`. The weak default leaves everything zero, so format 0 means "no data".
 - The strong implementation goes in `svalboard.c`. Document the command in `keyboards/svalboard/docs/protocol.md`.
 
@@ -188,7 +188,7 @@ export function usePointingSlots(): PointingSlotState[]
 `src/utils/pointing-motion.ts`:
 
 ```ts
-export const SVIL_FLAG2_POINTING_MOTION = 0x04;
+export const SVIL_FLAG2_POINTING_MOTION = 0x08;
 export interface PointingMotionHalf { valid: boolean; scrolling: boolean; saturated: boolean; autoMouse: boolean; touchValid: boolean; fingers: number; dx: number; dy: number; h: number; v: number; buttons: number; touchX: number; touchY: number; }
 export interface PointingMotionReport { precision: boolean; boost: boolean; autoMouseLayer: boolean; axisLockEnabled: boolean; naturalScroll: boolean; scrollKey: boolean; elapsedMs: number; axisLock: AxisLock; left: PointingMotionHalf; right: PointingMotionHalf; }
 export function parsePointingMotion(reply: Uint8Array, cmd = 0x2d): PointingMotionReport | null   // null unless reply[0]===cmd && reply[1]===1 && length >= 26

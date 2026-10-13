@@ -31,7 +31,7 @@ function reply(o: {
 interface Half { flags: number; dx: number; dy: number; h: number; v: number; buttons: number; tx: number; ty: number }
 
 describe('parsePointingMotion', () => {
-    it('advertises the flag2 bit 2', () => expect(SVIL_FLAG2_POINTING_MOTION).toBe(0x04));
+    it('advertises the flag2 bit 3', () => expect(SVIL_FLAG2_POINTING_MOTION).toBe(0x08));
 
     it('rejects a wrong echo, format 0 (no data) and short replies', () => {
         expect(parsePointingMotion(reply({ format: 0 }))).toBeNull();
