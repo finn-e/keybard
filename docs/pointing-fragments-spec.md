@@ -13,7 +13,7 @@ Sign conventions everywhere: dx +right, dy +down (HID). v +up, h +right (HID whe
 ---
 
 
-> **Feature flag.** The pointing slots and the live `0x2D` poll are off unless `src/features/pointing-viz-flag.ts` turns them on: a build with `VITE_POINTING_VIZ=1` (the dev server's `.env.development`), a browser that opened Keybard once with `?pointingViz=1` (`?pointingViz=0` clears it), or a demo page (`?pointingDemo=...`). Fragment support itself (widget instances skipped when laying out keys, left out of the Fragments panel and `.svil` selections) is always on, so a board whose definition has pointing slots lays out correctly with the flag off.
+> **What ships.** Keybard's `main` draws each hand's detected module as a still icon in its pointing slot and lists the slot, locked, in the Fragments panel. The live `0x2D` motion poll, the three animations and the demo pages are not on `main`: they are kept on the `feat/pointing-motion` branch of `morganvenable/keybard`. Sections C4, C5's animation components, D and the animation tests in E describe that branch.
 
 ## A. Board definition (sval.json)
 
@@ -181,7 +181,7 @@ export function usePointingSlots(): PointingSlotState[]
 - **Demo mode.** If `parsePointingDemo(location.search)` returns a config, return the two slots with kinds from the config, whether or not a board is connected. Positions come from `composeWidgets` when the definition has widget instances. Otherwise they come from the fallback constants `POINTING_SLOT_FALLBACK = { left: {x:4.5,y:4.75,w:2.5,h:2.5}, right: {x:18,y:4.75,w:2.5,h:2.5} }` in composed units. The fallback is used only when the layout has `left_thumb` and `right_thumb` instances; otherwise the hook returns `[]`.
 - **Offline.** With no connection and no demo, return `[]`. A file-loaded layout shows no slot.
 
-### C4. Live data
+### C4. Live data (branch `feat/pointing-motion` only)
 
 `src/services/usb.service.ts`: `static readonly CMD_SVIL_POINTING_MOTION = 0x2d;`
 
@@ -254,7 +254,7 @@ Add a helper `isWidgetInstance(kbinfo, instance)` in `src/services/fragment-comp
 
 ---
 
-## D. Rendering rules (all three viz builders)
+## D. Rendering rules (all three viz builders) (branch `feat/pointing-motion` only)
 
 **Engine.** Each viz uses one 2D `<canvas>` sized with `setupPointingCanvas(canvas, width, height)` from types.ts, re-run when width, height or devicePixelRatio change. If it returns null (jsdom), the component renders the DOM wrapper and draws nothing. It must never throw.
 
