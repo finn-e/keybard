@@ -182,6 +182,7 @@ export class SvilUSB {
   static readonly CMD_VIA_MACRO_SET_BUFFER = 0x0f;
   static readonly CMD_VIA_GET_LAYER_COUNT = 0x11;
   static readonly CMD_VIA_KEYMAP_GET_BUFFER = 0x12;
+  static readonly CMD_VIA_KEYMAP_SET_BUFFER = 0x13;
 
   static readonly VIA_LAYOUT_OPTIONS = 0x02;
   static readonly VIA_SWITCH_MATRIX_STATE = 0x03;

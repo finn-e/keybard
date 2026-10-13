@@ -2,7 +2,7 @@ import { LabelService } from "./label.service";
 import { KleService } from "./kle.service";
 import { keyService } from "./key.service";
 import { activeKeycodeVersion, applyKeycodeNumbering, UNREPORTED_KEYCODE_VERSION } from '@/constants/keycode-numbering';
-import { SVIL_DEFINITION_HEADER_BYTES, SVIL_TABLE_ALT_REPEAT_KEY, SVIL_TABLE_LEADER, SvilUSB, checkSvilStatus, readSvilTable, svilHasMacroBuffer, svilIndexArgs, usbInstance } from "./usb.service";
+import { SVIL_DEFINITION_HEADER_BYTES, SVIL_TABLE_ALT_REPEAT_KEY, VIA_BUFFER_HEADER_BYTES, SVIL_TABLE_LEADER, SvilUSB, checkSvilStatus, readSvilTable, svilHasMacroBuffer, svilIndexArgs, usbInstance } from "./usb.service";
 import { LE16 } from "./utils";
 import { payloadCapacity } from "./hid-report";
 
@@ -601,6 +601,26 @@ export class KeyboardService {
     async updateKey(layer: number, row: number, col: number, keymask: number): Promise<void> {
         const BE16 = (num: number) => [(num >> 8) & 0xff, num & 0xff];
         await this.usb.send(SvilUSB.CMD_VIA_SET_KEYCODE, [layer, row, col, ...BE16(keymask)], {});
+    }
+
+    /** The most keycodes one dynamic keymap set-buffer message carries (11 at 32 bytes, 27 at 64). */
+    keymapBlockKeys(): number {
+        return Math.floor(payloadCapacity(this.usb, VIA_BUFFER_HEADER_BYTES) / 2);
+    }
+
+    /**
+     * Write keycodes to consecutive keymap positions in one message, starting at
+     * keymap index (layer * rows + row) * cols + col.
+     * Request: [0x13][offset:2 BE][size][keycode:2 BE ...]
+     */
+    async updateKeyBlock(index: number, keycodes: number[]): Promise<void> {
+        const BE16 = (num: number) => [(num >> 8) & 0xff, num & 0xff];
+        const offset = index * 2;
+        const size = keycodes.length * 2;
+        if (!keycodes.length || keycodes.length > this.keymapBlockKeys() || offset + size > 0x10000) {
+            throw new Error(`Keymap block of ${keycodes.length} keys at ${index} doesn't fit one message`);
+        }
+        await this.usb.send(SvilUSB.CMD_VIA_KEYMAP_SET_BUFFER, [...BE16(offset), size, ...keycodes.flatMap(BE16)], {});
     }
 
     async updateMacros(kbinfo: KeyboardInfo) {

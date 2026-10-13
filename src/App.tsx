@@ -41,9 +41,9 @@ export const useNavigation = () => {
 
 // Wrapper to connect KeyboardContext's markAsSaved to ChangesProvider
 const ChangesProviderWithKeyboard = ({ children }: { children: ReactNode }) => {
-    const { markAsSaved, getKeyboardSnapshot, isConnected, connectionSessionId, registerTargetChangeGuard } = useKeyboard();
+    const { markAsSaved, getKeyboardSnapshot, isConnected, connectionSessionId, registerTargetChangeGuard, getKeyBlockWriter } = useKeyboard();
     // Once a batch of writes has reached the board, Keybard Host's overlay re-reads it.
-    return <ChangesProvider captureSave={() => { const snapshot = getKeyboardSnapshot(); return () => { if (snapshot) markAsSaved(snapshot); notifyHostLayoutChanged(); }; }} canWrite={isConnected} sessionKey={connectionSessionId} registerTargetChangeGuard={registerTargetChangeGuard}>{children}</ChangesProvider>;
+    return <ChangesProvider captureSave={() => { const snapshot = getKeyboardSnapshot(); return () => { if (snapshot) markAsSaved(snapshot); notifyHostLayoutChanged(); }; }} canWrite={isConnected} sessionKey={connectionSessionId} registerTargetChangeGuard={registerTargetChangeGuard} keyBlockWriter={getKeyBlockWriter}>{children}</ChangesProvider>;
 };
 
 const NavigationProvider = ({ children }: { children: ReactNode }) => {

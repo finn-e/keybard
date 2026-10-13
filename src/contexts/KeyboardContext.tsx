@@ -9,6 +9,7 @@ import { SvilUSB, usbInstance } from "../services/usb.service";
 import { customValueService } from "../services/custom-value.service";
 import { getClosestPresetColor } from "../utils/color-conversion";
 import type { KeyboardInfo } from "../types/keyboard.types";
+import type { KeyBlockWriter } from "../services/changes.service";
 import { PARANOID, userIsLooking } from "../lib/paranoid";
 import { LinuxHidAccessError } from "../utils/linux-hid-access";
 import { UnsupportedFirmwareError, type UnsupportedFirmwareInfo } from "../utils/unsupported-firmware";
@@ -46,6 +47,8 @@ interface KeyboardContextType {
     loadKeyboard: () => Promise<void>;
     loadFromFile: (file: File, source?: "file" | "demo") => Promise<boolean>;
     updateKey: (layer: number, row: number, col: number, keymask: number) => Promise<void>;
+    /** Writes runs of keycodes a message at a time; null unless a keyboard is connected and loaded. */
+    getKeyBlockWriter: () => KeyBlockWriter | null;
     pollMatrix: () => Promise<boolean[][]>;
     lastHeartbeat: number;
     activeLayerIndex: number | null;
@@ -98,6 +101,8 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }, []);
     const [connectionSessionId, setConnectionSessionId] = useState(0);
     const sessionRef = useRef(0);
+    // Keymap dimensions as the connected board reported them, for the session that read them.
+    const deviceKeymapRef = useRef<{ session: number; layers: number; rows: number; cols: number } | null>(null);
     const targetChangeGuard = useRef<(() => Promise<(discardPending?: boolean) => void>) | null>(null);
     const targetChanging = useRef(false);
     const [isChangingTarget, setIsChangingTarget] = useState(false);
@@ -315,6 +320,7 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 setConnectionFirmware(null);
                 // Store original state for revert functionality
                 setOriginalKeyboard(structuredClone(loadedInfo));
+                deviceKeymapRef.current = { session, layers: loadedInfo.layers ?? 0, rows: loadedInfo.rows, cols: loadedInfo.cols };
                 // Set loadedFrom to device product name
                 const deviceName = usbInstance.getDeviceName();
                 setLoadedFrom(deviceName || loadedInfo.kbid || "Connected Device");
@@ -396,6 +402,22 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         },
         [isConnected, connectionState]
     );
+
+    const getKeyBlockWriter = useCallback((): KeyBlockWriter | null => {
+        const dims = deviceKeymapRef.current;
+        if (!isConnected || connectionState !== "connected" || !dims || dims.session !== sessionRef.current) return null;
+        const session = dims.session;
+        return {
+            layers: dims.layers,
+            rows: dims.rows,
+            cols: dims.cols,
+            maxKeys: keyboardService.keymapBlockKeys(),
+            write: async (index, keycodes) => {
+                if (session !== sessionRef.current) throw new Error("Keyboard is not ready for changes");
+                await keyboardService.updateKeyBlock(index, keycodes);
+            },
+        };
+    }, [isConnected, connectionState]);
 
     const pollMatrix = useCallback(async () => {
         if (!keyboard || !isConnected) return [];
@@ -496,6 +518,7 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         loadKeyboard,
         loadFromFile,
         updateKey,
+        getKeyBlockWriter,
         pollMatrix,
         lastHeartbeat,
         activeLayerIndex,
