@@ -179,6 +179,22 @@ describe('FragmentService', () => {
             expect(kbinfo.fragmentState!.eepromSelections.get(1)).toBe(1);
         });
 
+        it('marks the selections read only when 0x19 answers', async () => {
+            const kbinfo = createKbinfoWithFragments();
+            kbinfo.fragmentState = undefined;
+            mockUsb.sendSvil
+                .mockResolvedValueOnce(USB_RESPONSES.hardwareDetection({}))
+                .mockRejectedValueOnce(new Error('USB error'));
+            await service.get(kbinfo);
+            expect(kbinfo.fragmentState!.selectionsRead).toBeFalsy();
+
+            mockUsb.sendSvil
+                .mockResolvedValueOnce(USB_RESPONSES.hardwareDetection({}))
+                .mockResolvedValueOnce(USB_RESPONSES.eepromSelections({ 0: 1 }));
+            await service.get(kbinfo);
+            expect(kbinfo.fragmentState!.selectionsRead).toBe(true);
+        });
+
         it('handles keyboard with no fragments', async () => {
             const kbinfo = createTestKeyboardInfo({
                 rows: 4,
@@ -232,6 +248,7 @@ describe('FragmentService', () => {
             const kbinfo = createKbinfoWithFragments({
                 eepromSelections: [[0, 0]],
             });
+            kbinfo.fragmentState!.selectionsRead = true;
 
             mockUsb.sendSvil.mockResolvedValueOnce(USB_RESPONSES.setSelectionSuccess());
 
@@ -246,6 +263,7 @@ describe('FragmentService', () => {
 
         it('returns true on success', async () => {
             const kbinfo = createKbinfoWithFragments();
+            kbinfo.fragmentState!.selectionsRead = true;
             mockUsb.sendSvil.mockResolvedValueOnce(USB_RESPONSES.setSelectionSuccess());
 
             const result = await service.setSelection(kbinfo, 0, 1);
@@ -255,6 +273,7 @@ describe('FragmentService', () => {
 
         it('returns false on failure response', async () => {
             const kbinfo = createKbinfoWithFragments();
+            kbinfo.fragmentState!.selectionsRead = true;
             mockUsb.sendSvil.mockResolvedValueOnce(USB_RESPONSES.setSelectionFailure());
 
             const result = await service.setSelection(kbinfo, 0, 1);
@@ -264,6 +283,7 @@ describe('FragmentService', () => {
 
         it('updates local cache on success', async () => {
             const kbinfo = createKbinfoWithFragments();
+            kbinfo.fragmentState!.selectionsRead = true;
             mockUsb.sendSvil.mockResolvedValueOnce(USB_RESPONSES.setSelectionSuccess());
 
             await service.setSelection(kbinfo, 0, 1);
@@ -275,11 +295,21 @@ describe('FragmentService', () => {
             const kbinfo = createKbinfoWithFragments({
                 eepromSelections: [[0, 1]],
             });
+            kbinfo.fragmentState!.selectionsRead = true;
             mockUsb.sendSvil.mockResolvedValueOnce(USB_RESPONSES.setSelectionSuccess());
 
             await service.setSelection(kbinfo, 0, 0xFF);
 
             expect(kbinfo.fragmentState!.eepromSelections.has(0)).toBe(false);
+        });
+
+        it("refuses to write before the board's selections were read", async () => {
+            const kbinfo = createKbinfoWithFragments({ eepromSelections: [[0, 1]] });
+
+            const result = await service.setSelection(kbinfo, 0, 1);
+
+            expect(result).toBe(false);
+            expect(mockUsb.sendSvil).not.toHaveBeenCalled();
         });
 
         it('returns false when no fragment state', async () => {
@@ -304,6 +334,7 @@ describe('FragmentService', () => {
 
         it('handles USB error', async () => {
             const kbinfo = createKbinfoWithFragments();
+            kbinfo.fragmentState!.selectionsRead = true;
             mockUsb.sendSvil.mockRejectedValueOnce(new Error('USB error'));
 
             const result = await service.setSelection(kbinfo, 0, 1);

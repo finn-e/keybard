@@ -365,6 +365,10 @@ export interface FragmentState {
     // User selections in current session (from keymap file or UI)
     // Maps instance string ID -> fragment name
     userSelections: Map<string, string>;
+
+    // The board's selections (0x19) were read on this connection. A write sends
+    // every instance's selection, so without them it would reset the others.
+    selectionsRead?: boolean;
 }
 
 // ============================================================================

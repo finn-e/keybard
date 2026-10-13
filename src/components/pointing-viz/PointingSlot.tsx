@@ -53,6 +53,9 @@ export function pointingSlotTitle(slot: PointingSlotState): string {
             return `${side}: detecting pointing module`;
         case "none":
             return slot.widget ? `${side}: no pointing module (detected)` : `${side}: pointing module not reported`;
+        case "unknown":
+            if (!slot.widget) return `${side}: pointing module not reported`;
+            return `${side}: ${slot.description ?? POINTING_KIND_CAPTION[slot.kind]} (detected)`;
         default:
             return `${side}: ${slot.description ?? POINTING_KIND_CAPTION[slot.kind]} (detected)`;
     }

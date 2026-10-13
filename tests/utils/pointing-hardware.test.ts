@@ -11,8 +11,8 @@ describe('parsePointingHardware', () => {
     it('reads both halves', () => {
         const report = parsePointingHardware(reply([LEFT | INIT_OK, PMW3389, PMW3389, 0x47, 0xb8], [RIGHT, PMW3360, PMW3389, 0x47, 0xb8]));
         expect(report?.halves).toEqual([
-            { usb: true, side: 'left', builtFor: 'pmw3389', detected: 'pmw3389', sensorStarted: true, productId: 0x47, inverseProductId: 0xb8 },
-            { usb: false, side: 'right', builtFor: 'pmw3360', detected: 'pmw3389', sensorStarted: false, productId: 0x47, inverseProductId: 0xb8 },
+            { usb: true, side: 'left', builtFor: 'pmw3389', detected: 'pmw3389', sensorStarted: true, auto: false, productId: 0x47, inverseProductId: 0xb8 },
+            { usb: false, side: 'right', builtFor: 'pmw3360', detected: 'pmw3389', sensorStarted: false, auto: false, productId: 0x47, inverseProductId: 0xb8 },
         ]);
     });
 
@@ -76,6 +76,15 @@ describe('findPointingProblems', () => {
         expect(problems([LEFT, TRACKPOINT, NOTHING, 0, 0])).toMatchObject([{ kind: 'no-module', builtFor: 'trackpoint' }]);
         expect(problems([LEFT, PMW3389, UNKNOWN, 0x12, 0x34]).map((p) => p.kind)).toEqual(['unknown-sensor']);
         expect(problems([LEFT | INIT_OK, PMW3389, UNKNOWN, 0x12, 0x34])).toEqual([]);
+    });
+
+    it('on a build that drives any module, reports a module it did not pick up, without a .uf2', () => {
+        const AUTO = 0x08;
+        expect(problems([LEFT | AUTO, NONE, PMW3389, 0x47, 0xb8])).toMatchObject([{ kind: 'not-picked-up', actual: 'pmw3389' }]);
+        expect(problems([LEFT | AUTO | INIT_OK, PMW3389, PMW3389, 0x47, 0xb8])).toEqual([]);
+        expect(problems([RIGHT | AUTO, NONE, NOTHING, 0, 0])).toEqual([]);
+        expect(problems([RIGHT | AUTO, NONE, UNKNOWN, 0x12, 0x34])).toEqual([]);
+        expect(parsePointingHardware(reply([LEFT | AUTO, NONE, NOTHING, 0, 0]))!.halves[0].auto).toBe(true);
     });
 
     it('waits for halves that have not been checked yet', () => {

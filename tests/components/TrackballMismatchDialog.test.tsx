@@ -51,4 +51,20 @@ describe('TrackballMismatchDialog', () => {
         expect(screen.getByText(/firmware is for a TrackPoint, but no pointing device answered/)).toBeTruthy();
         expect(screen.getByText('svalboard_left_sval_<release>.uf2')).toBeTruthy();
     });
+
+    it('on a build that drives any module, says the module was not picked up and names no .uf2', () => {
+        // Flag bit 3: built_for 0 (nothing answered at startup), a PMW3389 answers now.
+        keyboardContext.keyboard = { kbid: 'abc', pointing_hardware: report([0x0b, 0, 2, 0x47, 0xb8], [0x09, 2, 2, 0x47, 0xb8]) };
+        render(<TrackballMismatchDialog />);
+        expect(screen.getByText('Pointing device not picked up')).toBeTruthy();
+        expect(screen.getByText(/The left half didn't pick up its PMW3389 trackball at startup/)).toBeTruthy();
+        expect(screen.queryByText(/\.uf2/)).toBeNull();
+        expect(screen.queryByText(/RPI-RP2/)).toBeNull();
+    });
+
+    it('stays hidden on builds that drive any module when the chosen module answers, or none does', () => {
+        keyboardContext.keyboard = { kbid: 'abc', pointing_hardware: report([0x0f, 5, 5, 0, 40], [0x09, 0, 3, 0, 0]) };
+        render(<TrackballMismatchDialog />);
+        expect(screen.queryByRole('dialog')).toBeNull();
+    });
 });
