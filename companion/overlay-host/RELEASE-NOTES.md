@@ -4,16 +4,17 @@ Keybard Host shows your Svalboard layout as a transparent overlay on your deskto
 
 This release is a portable ZIP for 64-bit Windows 10 and 11, not a signed installer.
 
-## Unreleased
+## New in vLaunch2.3
 
+- **Works with bleeding-edge firmware vNext1.** That firmware uses 64-byte reports and shows each hand's pointing module in its layout; Keybard Host reads both. Boards on vNext1 need Keybard Host vLaunch2.3 or later, and Keybard vLaunch2.3 or later.
 - **Trainer is now called Overlay.** The page in Keybard's left panel that sets up the overlay is now **Overlay**.
 - **Practice is hidden for now.** The Overlay page no longer shows the Practice tab.
 - **Settings live in Keybard Host.** The overlay's ⋯ menu and the tray icon now hold its settings: **Board**, **Style**, **Outline shadow**, **Colors…** (a small panel for every color and opacity), **Layer highlight** (Off, Flash, Fade), **Highlight held keys**, **Hands**, **Capital letters**, **Adaptive contrast**, **Place at bottom** and **Reload board layout**. Keybard's Overlay item is now a small dialog: the download and **Connect** (which lets the overlay refresh after edits), or once connected, the board it follows and **Disconnect**.
 - **Steadier overlay on Windows.** The overlay could leave a key lit, or patches blank, until the next keypress. It now renders in software, which fixes that with no noticeable cost.
 - **Shift comes from your Svalboard.** Shifted legends follow Shift, Caps Lock and Caps Word on the board the overlay follows, as the board reports them. Shift on another keyboard no longer changes the overlay. This needs firmware vNext1 or later; on older firmware the overlay follows the computer's Shift and Caps Lock, as before.
 - **Held keys are highlighted.** **Highlight held keys** is now on by default, and this update turns it on once for everyone, since earlier versions saved it as off on their own. Turn it off with **Highlight held keys** in the overlay's menu; that choice is kept.
-- **The Svalboard icon matches your taskbar.** In the tray and taskbar it is a black glyph on a light taskbar and a white one on a dark taskbar, and switches when you change the Windows theme. Shortcuts and the installer keep the black-on-white icon.
-- **Resize the overlay where it is.** Drag the new resize grip, between the move grip and the menu above the overlay's corner: up or right makes the overlay bigger, down or left smaller. Its bottom-left corner stays put, and the size is saved like Trainer's **Overlay size** slider.
+- **The Svalboard icon matches your taskbar.** In the tray and taskbar it is a black glyph on a light taskbar and a white one on a dark taskbar, and switches when you change the Windows theme.
+- **Resize the overlay where it is.** Drag the new resize grip, between the move grip and the menu above the overlay's corner: up or right makes the overlay bigger, down or left smaller. Its bottom-left corner stays put, and the size is saved.
 - **Collapse the overlay out of the way.** The new collapse button, beside the grips above the overlay's corner, hides the overlay and leaves just the grips. Click it again to bring the overlay back; no trip to the tray needed. The move grip still moves it while it's collapsed. It replaces **Hide overlay** in the overlay's menu; the tray's **Show overlay** still hides it completely.
 - **Bigger letters and numbers.** Keys that show a single letter or digit draw it half again as large, at every overlay size.
 - **Adaptive contrast (Windows).** Turn on **Adaptive contrast** in the overlay's menu and each key restyles itself for the background around it, about twice a second: dark legends over light windows, light ones over dark windows, and a backing plate that gets more opaque the busier the background is. The overlay still shows in screenshots and recordings.
@@ -45,9 +46,9 @@ This release is a portable ZIP for 64-bit Windows 10 and 11, not a signed instal
 ## Get started
 
 1. Download **KeybardHost-Windows.zip** and extract the whole ZIP to a folder you'll keep.
-2. Run **Start-Windows.cmd**. The first launch downloads its own copy of Python and Qt, so you need to be online. No admin rights or system changes are needed. Keybard Host then sits in your system tray and opens Trainer on [keybard.svalboard.com](https://keybard.svalboard.com).
-3. In Trainer (Chrome or Edge), connect your keyboard and click **Connect to Keybard Host**. If the browser asks whether the site can access apps on this device, allow it.
-4. Set up the overlay in Trainer. Use the tray icon to show, move or hide it, or to quit.
+2. Run **Start-Windows.cmd**. The first launch downloads its own copy of Python and Qt, so you need to be online. No admin rights or system changes are needed. Keybard Host then sits in your system tray and opens [keybard.svalboard.com](https://keybard.svalboard.com).
+3. In Keybard (Chrome or Edge), connect your keyboard, open **Overlay** and click **Connect**. If the browser asks whether the site can access apps on this device, allow it.
+4. Set up the overlay from its ⋯ menu or the tray icon. The tray icon also shows, moves or hides it, and quits the Host.
 
 ## What it does
 
@@ -56,7 +57,7 @@ This release is a portable ZIP for 64-bit Windows 10 and 11, not a signed instal
 - Uses Keybard's key icons. Shift and Caps Lock change the letters shown.
 - Stays on top and lets clicks pass through. Move it with its grip.
 - Adjustable color, outline, opacity and halo.
-- Highlights layer changes and, optionally, the keys you're holding. Includes recall practice.
+- Highlights layer changes and, optionally, the keys you're holding.
 
 ## Paranoid mode
 
@@ -69,7 +70,7 @@ Paranoid mode is a separate way to run Keybard Host, for people who want Keybard
 
 ## Limits
 
-- **Read-only:** Keybard Host never changes your layout or flashes firmware. After you edit your layout, choose **Reload layout** from the tray.
+- **Read-only:** Keybard Host never changes your layout or flashes firmware. For layout changes made outside Keybard, choose **Reload board layout** from the tray.
 - **Unsigned:** Windows may warn you about it. Only run a ZIP you downloaded from this release page.
 - **Windows only for now:** macOS is untested, and Wayland has limits.
 - **No automatic updates:** to update, quit from the tray, extract the new release to a new folder, and run it. Your settings carry over.

@@ -61,7 +61,7 @@ jobs:
             echo "## This build"
             echo
             echo "- Bundles Keybard built from commit \`$KEYBARD_COMMIT\` (each Keybard page shows its commit in the corner)."
-            echo "- Keybard Host reports its release and bundled Keybard in Trainer and in its tray tooltip."
+            echo "- Keybard Host reports its release and bundled Keybard in Keybard's Overlay dialog and in its tray tooltip."
           } >> dist/RELEASE-NOTES.md
       - name: Checksum
         working-directory: dist
