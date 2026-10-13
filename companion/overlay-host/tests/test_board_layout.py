@@ -75,6 +75,31 @@ class BoardLayoutTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'matrix map'):
             geometry_from_definition(missing, (255,) * 12, (255,) * 12)
 
+    def test_pointing_slot_settling_mid_load_does_not_abort(self):
+        # 0x18 reads 0xFF for a pointing slot until the module probe settles.
+        device = FakeDevice()
+        device.definition = fragment_definition()
+        device.definition['fragments'].update({"pointing_none": {"id": 4}, "pmw3389": {"id": 6}})
+        pointing = {"hardware_detect": True, "fragment_options": [
+            {"fragment": "pointing_none", "matrix_map": [], "default": True},
+            {"fragment": "pmw3389", "matrix_map": []}]}
+        device.definition['composition']['instances'] += [copy.deepcopy(pointing), copy.deepcopy(pointing)]
+        device.hardware = (255,) * 12
+        device.selections = (255,) * 10 + (9, 9)  # a stray byte in a slot that has no keys
+        reader = SvalReader(device)
+        def progress(message):
+            if 'labels' in message:
+                device.hardware = (255,) * 10 + (6, 4)
+        profile = reader.read_profile(device.uid, progress)
+        self.assertEqual(len(profile.keys), 60)
+        # A change in a slot that has keys still aborts the load.
+        device.hardware = (255,) * 12
+        def keyed(message):
+            if 'labels' in message:
+                device.selections = (0,) * 10 + (9, 9)
+        with self.assertRaisesRegex(ProtocolError, 'Cluster selection changed'):
+            reader.read_profile(device.uid, keyed)
+
     def test_bad_fragment_metadata_never_produces_partial_geometry(self):
         cases = []
         original = fragment_definition()
