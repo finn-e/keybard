@@ -20,6 +20,26 @@ def decode_definition(payload):
     return definition
 
 
+def keyless_instances(definition):
+    """Indices of fragment instances that add no keys, e.g. a pointing module slot.
+
+    Their 0x18 byte reads 0xFF until the module probe settles, so they never
+    affect the layout and are left out of any before/after comparison.
+    """
+    instances = (definition.get("composition") or {}).get("instances")
+    if not isinstance(instances, list):
+        return frozenset()
+    keyless = set()
+    for index, instance in enumerate(instances):
+        if not isinstance(instance, dict):
+            continue
+        options = [instance] if "fragment" in instance else instance.get("fragment_options")
+        if (isinstance(options, list) and options
+                and all(isinstance(o, dict) and o.get("matrix_map") == [] for o in options)):
+            keyless.add(index)
+    return frozenset(keyless)
+
+
 def geometry_from_definition(definition, hardware=(), selections=()):
     if "fragment_schema_version" not in definition and "fragments" not in definition:
         # Older definitions lack fragments. This remains explicitly a schematic.
@@ -36,9 +56,12 @@ def geometry_from_definition(definition, hardware=(), selections=()):
     if len(hardware) != len(instances) or len(selections) != len(instances):
         raise ValueError("Fragment state does not match board definition")
     positions = set()
+    keyless = keyless_instances(definition)
     for index, instance in enumerate(instances):
         if not isinstance(instance, dict):
             raise ValueError("Invalid fragment instance")
+        if index in keyless:
+            continue  # no keys, so neither its hardware byte nor a stray selection matters
         option = instance
         if "fragment" not in instance:
             options = instance.get("fragment_options")

@@ -4,7 +4,7 @@ import secrets
 import sys
 import time
 
-from .board_layout import decode_definition, geometry_from_definition
+from .board_layout import decode_definition, geometry_from_definition, keyless_instances
 from .model import Profile, legend
 
 USAGE_PAGE, USAGE = 0xFF61, 0x62
@@ -156,12 +156,21 @@ class SvalReader:
     def _exchange(self, request, accept):
         self.checkpoint()
         sizes = (self.report_size,) if self.report_size else SUPPORTED_REPORT_SIZES
+        sent = False
         for size in sizes:
             if len(request) > size:
                 raise ProtocolError("Oversized request")
             packet = b"\0" + request.ljust(size, b"\0")
-            if self.device.write(packet) != len(packet):
-                raise ProtocolError("Incomplete HID write")
+            written = self.device.write(packet)
+            # Windows hidapi pads a short write to the device's report length and
+            # returns that count, so more than asked is a complete write. While the
+            # size is unknown, any other count means this is not the device's size.
+            if self.report_size:
+                if written < len(packet):
+                    raise ProtocolError("Incomplete HID write")
+            elif written != len(packet):
+                continue
+            sent = True
             deadline = self.clock() + .25
             while self.clock() < deadline:
                 self.checkpoint()
@@ -175,6 +184,8 @@ class SvalReader:
                 if result is not None:
                     self.report_size = self.report_size or len(reply)
                     return result
+        if not sent:
+            raise ProtocolError("Incomplete HID write")
         raise ProtocolError("Svalboard response timed out")
 
     def chunk_size(self):
@@ -397,8 +408,13 @@ class SvalReader:
             # Recheck identity and geometry selection around the transfer.
             if self.info()[1] != uid:
                 raise ProtocolError("Board identity changed during loading")
-            if has_fragments and (hardware != self.fragment_state(0x18) or selections != self.fragment_state(0x19)):
-                raise ProtocolError("Cluster selection changed during loading; reload")
+            if has_fragments:
+                keyless = keyless_instances(definition)
+                def keyed(state):
+                    return tuple(v for i, v in enumerate(state) if i not in keyless)
+                if (keyed(hardware) != keyed(self.fragment_state(0x18))
+                        or keyed(selections) != keyed(self.fragment_state(0x19))):
+                    raise ProtocolError("Cluster selection changed during loading; reload")
             return replace(profile, keys=keys, layer_names=tuple(layer_names.items()),
                            code_labels=tuple(code_labels.items()), from_board=True)
         finally:

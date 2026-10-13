@@ -25,7 +25,7 @@ Use Chrome or Edge. **Open Keybard** in the tray menu takes you back to the Over
 - **Tray menu:** show or hide the overlay, drag or place it at the bottom of the screen, reload the layout, open Keybard, or quit. Closing the browser leaves the overlay running.
 - **After you edit your layout in Keybard**, the overlay updates by itself about a second after the change reaches the keyboard, as long as Keybard is connected to Keybard Host (the Overlay dialog's **Connect**, once). For changes made elsewhere, choose **Reload layout** from the tray.
 - **Held keys:** the keys you're holding are highlighted. Turn this off with **Highlight held keys** in the overlay's menu. Very short taps can be missed.
-- **Shift and Caps Lock** on your Svalboard change the letters and symbols shown, using the keyboard language chosen in Keybard. Other keyboards on the computer don't. The board reports them itself, so this needs Svalboard firmware that does; older firmware shows plain legends.
+- **Shift and Caps Lock** on your Svalboard change the letters and symbols shown, using the keyboard language chosen in Keybard. Firmware from vNext1 on reports them itself, so other keyboards on the computer don't change the legends. On older firmware the overlay follows the computer's Shift and Caps Lock instead, which doesn't work on Wayland.
 
 ## What it doesn't do
 
@@ -86,7 +86,7 @@ On macOS the Host:
 
 The Host shouldn't need any privacy permission, but these are the ones to look at if something doesn't work (System Settings → Privacy & Security):
 
-- **Input Monitoring:** the Host reads the board's layer, held keys, Shift and Caps Lock through the board's own Raw HID interface, not its keyboard interface, and never watches keystrokes. That shouldn't need Input Monitoring. If the overlay never finds the board, check whether macOS has listed Terminal (or your Python) here, and allow it.
+- **Input Monitoring:** the Host reads the board's layer, held keys, Shift and Caps Lock through the board's own Raw HID interface, not its keyboard interface, and never watches keystrokes. On firmware older than vNext1 it reads Shift and Caps Lock from the system's modifier flags instead. Neither should need Input Monitoring. If the overlay never finds the board, or Shift and Caps Lock never change the legends, check whether macOS has listed Terminal (or your Python) here, and allow it.
 - **Accessibility:** not used. The Host doesn't move other apps' windows or send input.
 - **Local Network:** the Host only listens on `127.0.0.1`, which macOS doesn't ask about.
 

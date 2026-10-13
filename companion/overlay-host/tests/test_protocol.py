@@ -41,6 +41,8 @@ class FakeDevice:
         self.chunk_cap = 22
         # Ignore writes of another length (as hidraw does) rather than pad them (as Windows does)
         self.strict_size = False
+        # Windows hidapi pads a short write to the report length and returns the padded count
+        self.padded_count = False
 
     def write(self, packet):
         self.writes.append(packet)
@@ -109,7 +111,7 @@ class FakeDevice:
             other[1:5] = (9999).to_bytes(4, "little")
             self.queue.append(other)
         self.queue.append(reply)
-        return len(packet)
+        return max(len(packet), self.size + 1) if self.padded_count else len(packet)
 
     def read(self, size, timeout):
         return self.queue.pop(0) if self.queue else []
@@ -362,6 +364,28 @@ class ReportSizeTests(unittest.TestCase):
             self.assertEqual(reader.report_size, size)
             self.assertEqual(len(device.writes[0]), 33)
             self.assertTrue(all(len(p) == size + 1 for p in device.writes[1:]))
+
+    def test_windows_padded_write_count_is_a_complete_write(self):
+        # hidapi on Windows returns the padded length (65) for any write to a 64-byte board.
+        device = DescribedDevice(64)
+        device.strict_size, device.padded_count = False, True
+        reader = SvalReader(device)
+        _, uid = reader.info()
+        reader.read_profile(uid)
+        # More than was asked for is still a complete write.
+        device = FakeDevice()
+        device.write_count = device.write
+        device.write = lambda packet: device.write_count(packet) + 32
+        self.assertEqual(SvalReader(device, report_size=32).info(), (3, device.uid))
+
+    def test_probe_moves_on_when_the_write_count_shows_another_size(self):
+        device = FakeDevice()
+        device.size, device.padded_count = 64, True
+        reader = SvalReader(device)
+        reader.info()
+        self.assertEqual(reader.report_size, 64)
+        # The 33-byte write came back as 65, so the probe went straight to 64 bytes.
+        self.assertEqual([len(p) for p in device.writes[:2]], [33, 65])
 
     def test_reply_of_the_wrong_length_rejected(self):
         device = FakeDevice()
