@@ -26,6 +26,7 @@ import { useLayoutLibrary } from "@/contexts/LayoutLibraryContext";
 import { PasteLayerDialog } from "@/components/PasteLayerDialog";
 import { DragReplaceLayerDialog } from "@/components/DragReplaceLayerDialog";
 import { StorageResetDialog } from "@/components/StorageResetDialog";
+import { TrackballMismatchDialog } from "@/components/TrackballMismatchDialog";
 import type { LayerEntry } from "@/types/layer-library";
 
 import { LayoutSettingsProvider, useLayoutSettings } from "@/contexts/LayoutSettingsContext";
@@ -1549,6 +1550,7 @@ const EditorLayoutInner = () => {
                 onCancel={handleDragReplaceCancel}
             />
             <StorageResetDialog />
+            <TrackballMismatchDialog />
             </div>
         </div >
     );

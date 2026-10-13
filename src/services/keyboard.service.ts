@@ -7,6 +7,7 @@ import { LE16 } from "./utils";
 
 import LZMA from "js-lzma";
 import { assertSupportedSvilProto } from "@/utils/unsupported-firmware";
+import { parsePointingHardware, SVIL_FLAG2_POINTING_HARDWARE } from "@/utils/pointing-hardware";
 import type { KeyboardInfo, AltRepeatKeyEntry, LeaderEntry } from "../types/keyboard.types";
 
 // Svil feature flags (from protocol info response)
@@ -196,6 +197,8 @@ export class KeyboardService {
                 console.warn("One-shot settings not available:", e);
             }
         }
+
+        await this.getPointingHardware(kbinfo);
 
         // Load fragment data (hardware detection and EEPROM selections)
         if (this.fragment.hasFragments(kbinfo)) {
@@ -517,6 +520,23 @@ export class KeyboardService {
         const view = new DataView(reply.buffer, reply.byteOffset, reply.byteLength);
         const hasDefault = ((kbinfo.feature_flags ?? 0) & SVIL_FLAG_DEFAULT_LAYER_STATE) !== 0;
         return { active: view.getUint32(1, true), default: hasDefault ? view.getUint32(5, true) : null };
+    }
+
+    /**
+     * Each half's side and trackball sensor, so Keybard can warn about the wrong
+     * trackball firmware. Skipped on firmware that doesn't advertise it; a failed
+     * read just leaves it unset.
+     */
+    async getPointingHardware(kbinfo: KeyboardInfo): Promise<void> {
+        delete kbinfo.pointing_hardware;
+        if (((kbinfo.feature_flags2 ?? 0) & SVIL_FLAG2_POINTING_HARDWARE) === 0) return;
+        try {
+            const reply = await this.usb.sendSvil(SvilUSB.CMD_SVIL_POINTING_HARDWARE, [], { uint8: true }) as Uint8Array;
+            const report = parsePointingHardware(reply, SvilUSB.CMD_SVIL_POINTING_HARDWARE);
+            if (report) kbinfo.pointing_hardware = report;
+        } catch (e) {
+            console.warn("Pointing hardware report not available:", e);
+        }
     }
 
     /** Whether the board can change its saved default layer (DEFAULT_LAYER_SET). */

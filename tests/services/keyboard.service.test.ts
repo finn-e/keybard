@@ -574,6 +574,37 @@ describe('KeyboardService', () => {
     });
   });
 
+  describe('getPointingHardware', () => {
+    it('skips the request on firmware that does not advertise it', async () => {
+      const kb = createTestKeyboardInfo({ feature_flags2: 0x01 });
+      mockUSB.sendSvil.mockClear();
+      await keyboardService.getPointingHardware(kb);
+      expect(mockUSB.sendSvil).not.toHaveBeenCalled();
+      expect(kb.pointing_hardware).toBeUndefined();
+    });
+
+    it('reads each half when GET_INFO advertises it', async () => {
+      const kb = createTestKeyboardInfo({ feature_flags2: 0x03 });
+      mockUSB.sendSvil.mockResolvedValueOnce(new Uint8Array([0x2c, 1, 0x03, 1, 2, 0x47, 0xb8, 0x01, 1, 2, 0x47, 0xb8]));
+      await keyboardService.getPointingHardware(kb);
+      expect(mockUSB.sendSvil).toHaveBeenCalledWith(SvilUSB.CMD_SVIL_POINTING_HARDWARE, [], { uint8: true });
+      expect(kb.pointing_hardware?.halves.map((h) => [h.side, h.builtFor, h.detected])).toEqual([
+        ['left', 'pmw3360', 'pmw3389'],
+        ['right', 'pmw3360', 'pmw3389'],
+      ]);
+    });
+
+    it('leaves it unset when the board refuses or reports nothing', async () => {
+      const kb = createTestKeyboardInfo({ feature_flags2: 0x02 });
+      mockUSB.sendSvil.mockRejectedValueOnce(new Error('USB Command Timeout'));
+      await expect(keyboardService.getPointingHardware(kb)).resolves.toBeUndefined();
+      expect(kb.pointing_hardware).toBeUndefined();
+      mockUSB.sendSvil.mockResolvedValueOnce(new Uint8Array([0x2c, 0]));
+      await keyboardService.getPointingHardware(kb);
+      expect(kb.pointing_hardware).toBeUndefined();
+    });
+  });
+
   describe('layer state helpers', () => {
     it('gets layer state mask as unsigned integer', async () => {
       mockUSB.sendSvil.mockResolvedValueOnce(-1);
