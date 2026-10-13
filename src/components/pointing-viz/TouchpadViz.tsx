@@ -1,13 +1,19 @@
-// Touchpad visualization: a small rounded pad (aspect 1.3:1) with one or two finger
-// dots and fading trails. Touch positions are used when the firmware reports them;
-// otherwise relative deltas are integrated into a wandering dot that drifts back to
-// the centre, and quickly so when idle. See docs/pointing-fragments-spec.md (C5, D).
+// Touchpad visualization: a dark glass touchpad (rounded rect, about 1.15:1, like the
+// near-square Azoteq pad) with glowing finger contacts. Touch positions are used when
+// the firmware reports them; otherwise relative deltas are integrated into a wandering
+// point that drifts back to the centre, and quickly so when idle. See
+// docs/pointing-fragments-spec.md (C5, D).
 //
-// Modes: pointer = one dot + 600 ms trail; scroll = two parallel dots + accent
-// chevrons streaming along the scroll axis in an edge lane; precision = smaller dot
-// with a crosshair; boost = larger dot, accent halo, 1200 ms trail. A button press
-// flashes the pad outline (150 ms) and pulses the dot. Idle = empty pad with a faint
-// dot grid.
+// The glass: a soft drop shadow, a top-to-bottom gradient, a bright bevel on the upper
+// edge and a darker lower edge, a faint diagonal sheen band and a faint etched grid.
+// Contacts are accent glows (halo + core + white hot centre) drawn with 'lighter'
+// over the glass, trailing tapered light streaks.
+//
+// Modes: pointer = one contact + 600 ms streak; scroll = two contacts with parallel
+// streaks and chevrons streaming ahead of the pair along the scroll axis; precision =
+// smaller, sharper contact under a fine etched crosshair; boost = bigger glow, 1200 ms
+// streak. A button press sends a ripple ring through the glass from the contact and
+// lights the rim; a held button rings the contact. Idle = the glass alone.
 //
 // All animation state lives in a ref; the canvas is redrawn from requestAnimationFrame
 // and the loop stops when idle, when off-screen, and on unmount.
@@ -28,8 +34,8 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Pad aspect, width / height. */
-const PAD_ASPECT = 1.3;
+/** Pad aspect, width / height (the real pad is close to square). */
+const PAD_ASPECT = 1.15;
 /** Integrated raw counts that move the wandering dot across the full pad width. */
 const COUNTS_PER_PAD = 2400;
 /** The dot centre never goes closer to the pad edge than this (pad units). */
@@ -55,14 +61,14 @@ const TRAIL_BOOST_MS = 1200;
 /** Ring buffer capacity per finger and the minimum time between trail points. */
 const TRAIL_CAP = 160;
 const TRAIL_MIN_STEP_MS = 9;
-/** Button feedback. */
-const FLASH_MS = 150;
-const PULSE_MS = 380;
+/** Button feedback: rim flash, and the ripple ring spreading through the glass. */
+const FLASH_MS = 160;
+const PULSE_MS = 650;
 /** Reduced motion: at most one static frame per this many ms. */
 const STATIC_FRAME_MS = 250;
-/** Chevron lane travel speed at full magnitude, lane lengths per ms. */
-const CHEVRON_SPEED = 0.0012;
-/** Grid shown on the pad (columns x rows of dots). */
+/** Chevron travel speed at full magnitude, chevron spacings per ms. */
+const CHEVRON_SPEED = 0.0036;
+/** Grid etched in the glass (cells across x down). */
 const GRID_COLS = 5;
 const GRID_ROWS = 4;
 
@@ -458,43 +464,108 @@ export function needsAnimation(state: TouchpadState, now: number): boolean {
     return now - state.lastActiveT <= POINTING_IDLE_MS;
 }
 
+
 export interface PadRect {
     x: number;
     y: number;
     w: number;
     h: number;
     r: number;
-    /** Base finger dot radius, CSS px. */
+    /** Base contact core radius, CSS px. */
     dot: number;
 }
 
-/** The pad rectangle (aspect 1.3:1) centred in the drawing area, CSS px. */
+/**
+ * The pad rectangle (aspect PAD_ASPECT, near square like the TPS43) in the drawing area, CSS px: centred
+ * across, with a little more room below than above for the slab's shadow.
+ */
 export function padRect(width: number, height: number): PadRect {
-    const m = Math.max(2, Math.min(width, height) * 0.06);
-    const aw = Math.max(1, width - 2 * m);
-    const ah = Math.max(1, height - 2 * m);
+    // The pad fills the slot: on the board a TPS43 is the widest pointing module.
+    const mx = Math.max(2, width * 0.015);
+    const top = Math.max(2, height * 0.02);
+    const bottom = Math.max(3, height * 0.05);
+    const aw = Math.max(1, width - 2 * mx);
+    const ah = Math.max(1, height - top - bottom);
     const w = Math.min(aw, ah * PAD_ASPECT);
     const h = w / PAD_ASPECT;
     const s = Math.min(w, h);
     return {
         x: (width - w) / 2,
-        y: (height - h) / 2,
+        y: top + (ah - h) / 2,
         w,
         h,
-        r: Math.max(3, s * 0.16),
+        r: Math.max(3, s * 0.14),
         dot: Math.max(2.5, s * 0.075),
     };
 }
 
-/** Dot radius for a mode at a magnitude. */
+/** Contact core radius for a mode at a magnitude. */
 export function dotRadius(base: number, mode: PointingMode, magnitude: number): number {
-    const m = mode === "precision" ? 0.62 : mode === "boost" ? 1.35 : 1;
+    const m = mode === "precision" ? 0.62 : mode === "boost" ? 1.3 : 1;
     return base * m * (1 + 0.15 * clamp(magnitude, 0, 1));
+}
+
+/** How far a contact's glow reaches, as a multiple of its core radius. */
+export function haloScale(mode: PointingMode, magnitude: number): number {
+    const m = clamp(magnitude, 0, 1);
+    if (mode === "precision") return 2.1;
+    if (mode === "boost") return 3.6 + 1.2 * m;
+    return 2.8 + 0.6 * m;
+}
+
+/**
+ * Half-width of a streak at position u along it (0 = tail, 1 = head), as a fraction
+ * of the full width: a smooth taper to a point at the tail.
+ */
+export function streakTaper(u: number): number {
+    const v = clamp(u, 0, 1);
+    return Math.sqrt(v) * (0.35 + 0.65 * v);
+}
+
+/**
+ * The button ripple at `sinceMs` after a press: ring radius (CSS px) and its 0..1
+ * strength, or strength 0 once it has spread out. `reach` is how far it travels.
+ */
+export function rippleAt(sinceMs: number, coreR: number, reach: number): { radius: number; strength: number } {
+    if (sinceMs < 0 || sinceMs >= PULSE_MS) return { radius: coreR, strength: 0 };
+    const p = sinceMs / PULSE_MS;
+    // Fast out, slowing as it spreads (ease-out cubic).
+    const e = 1 - (1 - p) * (1 - p) * (1 - p);
+    return { radius: coreR * 1.1 + e * reach, strength: (1 - p) * (1 - p) };
+}
+
+/**
+ * Positions of the scroll chevrons along the axis, in chevron spacings ahead of
+ * the leading edge, for a 0..1 phase: `count` values in [0, count), each with a
+ * fade that rises then falls so chevrons appear and vanish softly.
+ */
+export function chevronSlots(phase: number, count: number, out: Float32Array, fade: Float32Array): void {
+    const p = phase - Math.floor(phase);
+    for (let i = 0; i < count; i++) {
+        const t = i + p;
+        out[i] = t;
+        fade[i] = Math.sin((Math.PI * t) / count);
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Drawing
 // ---------------------------------------------------------------------------
+
+/** Glass colours are fixed: dark glass reads on both light and dark pages. */
+const GLASS_TOP = "#2b3547";
+const GLASS_BOTTOM = "#0f1521";
+const TRANSPARENT = "rgba(0,0,0,0)";
+const WHITE_0 = "rgba(255,255,255,0)";
+
+const CHEVRON_COUNT = 3;
+/** Streak points nearer than this (CSS px, Manhattan) are merged. */
+const STREAK_MIN_STEP = 1.2;
+/** Scratch buffers (no per-frame allocation). */
+const streakX = new Float32Array(TRAIL_CAP);
+const streakY = new Float32Array(TRAIL_CAP);
+const chevPos = new Float32Array(CHEVRON_COUNT);
+const chevFade = new Float32Array(CHEVRON_COUNT);
 
 function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
     const rr = Math.min(r, w / 2, h / 2);
@@ -507,58 +578,230 @@ function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
     ctx.closePath();
 }
 
-function drawTrail(
-    ctx: CanvasRenderingContext2D,
-    trail: TouchpadTrail,
-    pad: PadRect,
-    now: number,
-    maxAgeMs: number,
-    width: number,
-    color: string,
-    alpha: number,
-): void {
-    const n = trailLiveCount(trail, now, maxAgeMs);
-    if (n < 2) return;
-    ctx.strokeStyle = color;
-    ctx.lineCap = "round";
-    const start = trail.count - n;
-    let pi = trailIndex(trail, start);
-    let px = pad.x + trail.xs[pi] * pad.w;
-    let py = pad.y + trail.ys[pi] * pad.h;
-    for (let i = start + 1; i < trail.count; i++) {
-        const ci = trailIndex(trail, i);
-        const cx = pad.x + trail.xs[ci] * pad.w;
-        const cy = pad.y + trail.ys[ci] * pad.h;
-        const fresh = 1 - clamp((now - trail.ts[ci]) / maxAgeMs, 0, 1);
-        ctx.globalAlpha = alpha * fresh * fresh;
-        ctx.lineWidth = Math.max(0.75, width * (0.35 + 0.65 * fresh));
+/** Slab, shadow, gradient, vignette and sheen (everything under the contacts). */
+function drawGlass(ctx: CanvasRenderingContext2D, pad: PadRect, theme: PointingVizTheme, a: number): void {
+    const s = Math.min(pad.w, pad.h);
+
+    // Soft shadow under the slab, then the body.
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.38)";
+    ctx.shadowBlur = Math.max(3, s * 0.11);
+    ctx.shadowOffsetY = Math.max(1.5, s * 0.045);
+    const body = ctx.createLinearGradient(0, pad.y, 0, pad.y + pad.h);
+    body.addColorStop(0, GLASS_TOP);
+    body.addColorStop(1, GLASS_BOTTOM);
+    ctx.fillStyle = body;
+    roundRectPath(ctx, pad.x, pad.y, pad.w, pad.h, pad.r);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    roundRectPath(ctx, pad.x, pad.y, pad.w, pad.h, pad.r);
+    ctx.clip();
+
+    // A whisper of the accent in the glass, a touch more while a finger is on it.
+    ctx.fillStyle = theme.accent;
+    ctx.globalAlpha = 0.07 + 0.05 * a;
+    ctx.fillRect(pad.x, pad.y, pad.w, pad.h);
+    ctx.globalAlpha = 1;
+
+    // Depth: edges a little darker than the middle.
+    const cx = pad.x + pad.w / 2;
+    const cy = pad.y + pad.h / 2;
+    const vig = ctx.createRadialGradient(cx, cy - pad.h * 0.1, s * 0.25, cx, cy, Math.hypot(pad.w, pad.h) * 0.6);
+    vig.addColorStop(0, TRANSPARENT);
+    vig.addColorStop(1, "rgba(0,0,0,0.35)");
+    ctx.fillStyle = vig;
+    ctx.fillRect(pad.x, pad.y, pad.w, pad.h);
+
+    // Diagonal reflection band, upper left to lower right, plus a fainter echo.
+    const sheen = ctx.createLinearGradient(pad.x, pad.y, pad.x + pad.w, pad.y + pad.h);
+    sheen.addColorStop(0, "rgba(255,255,255,0.10)");
+    sheen.addColorStop(0.2, "rgba(255,255,255,0.03)");
+    sheen.addColorStop(0.3, WHITE_0);
+    sheen.addColorStop(0.36, "rgba(255,255,255,0.09)");
+    sheen.addColorStop(0.44, "rgba(255,255,255,0.025)");
+    sheen.addColorStop(0.5, WHITE_0);
+    sheen.addColorStop(0.53, "rgba(255,255,255,0.04)");
+    sheen.addColorStop(0.57, WHITE_0);
+    sheen.addColorStop(1, WHITE_0);
+    ctx.fillStyle = sheen;
+    ctx.fillRect(pad.x, pad.y, pad.w, pad.h);
+
+    // Faint etched grid: a dark groove with a light lip below/right of it.
+    const lw = 1;
+    const fadeGrid = 1 - 0.45 * a;
+    ctx.lineWidth = lw;
+    for (let pass = 0; pass < 2; pass++) {
+        ctx.strokeStyle = pass === 0 ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.045)";
+        ctx.globalAlpha = fadeGrid;
+        const off = pass === 0 ? 0 : 1;
         ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.lineTo(cx, cy);
+        for (let i = 1; i < GRID_COLS; i++) {
+            const x = Math.round(pad.x + (i / GRID_COLS) * pad.w) + 0.5 + off;
+            ctx.moveTo(x, pad.y);
+            ctx.lineTo(x, pad.y + pad.h);
+        }
+        for (let j = 1; j < GRID_ROWS; j++) {
+            const y = Math.round(pad.y + (j / GRID_ROWS) * pad.h) + 0.5 + off;
+            ctx.moveTo(pad.x, y);
+            ctx.lineTo(pad.x + pad.w, y);
+        }
         ctx.stroke();
-        px = cx;
-        py = cy;
-        pi = ci;
     }
+    ctx.globalAlpha = 1;
+    ctx.restore();
 }
 
-function drawChevron(
+/** Bevel and rim, drawn last so they sit over the glows. `flash` 0..1 lights the rim. */
+function drawBevel(ctx: CanvasRenderingContext2D, pad: PadRect, theme: PointingVizTheme, flash: number): void {
+    const s = Math.min(pad.w, pad.h);
+    const bw = s > 80 ? 1.5 : 1;
+    // Upper edge catches the light; the lower edge falls into shade.
+    const bevel = ctx.createLinearGradient(0, pad.y, 0, pad.y + pad.h);
+    bevel.addColorStop(0, "rgba(255,255,255,0.55)");
+    bevel.addColorStop(0.14, "rgba(255,255,255,0.16)");
+    bevel.addColorStop(0.45, WHITE_0);
+    bevel.addColorStop(0.75, TRANSPARENT);
+    bevel.addColorStop(1, "rgba(0,0,0,0.55)");
+    ctx.strokeStyle = bevel;
+    ctx.lineWidth = bw;
+    const i = bw / 2 + 0.25;
+    roundRectPath(ctx, pad.x + i, pad.y + i, pad.w - 2 * i, pad.h - 2 * i, pad.r - i);
+    ctx.stroke();
+    // Outer rim in the theme's border colour, so the slab has an edge on any page.
+    ctx.strokeStyle = theme.border;
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = 1;
+    roundRectPath(ctx, pad.x - 0.5, pad.y - 0.5, pad.w + 1, pad.h + 1, pad.r + 0.5);
+    ctx.stroke();
+    if (flash > 0) {
+        ctx.strokeStyle = theme.accent;
+        ctx.globalAlpha = flash;
+        ctx.lineWidth = s > 80 ? 2 : 1.5;
+        ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+}
+
+/** One glowing contact: halo, accent core and a white hot centre (additive). */
+function drawContact(
     ctx: CanvasRenderingContext2D,
-    cx: number,
-    cy: number,
-    axis: ScrollAxis,
-    dir: number,
-    size: number,
+    x: number,
+    y: number,
+    r: number,
+    halo: number,
+    intensity: number,
+    sharp: boolean,
+    theme: PointingVizTheme,
 ): void {
-    // Unit vector along the axis (pointing in dir) and its normal.
-    const ux = axis === "horizontal" ? dir : 0;
-    const uy = axis === "vertical" ? dir : 0;
+    const R = r * halo;
+    const g1 = ctx.createRadialGradient(x, y, 0, x, y, R);
+    g1.addColorStop(0, theme.accent);
+    g1.addColorStop(1, TRANSPARENT);
+    ctx.fillStyle = g1;
+    ctx.globalAlpha = 0.55 * intensity;
+    ctx.beginPath();
+    ctx.arc(x, y, R, 0, Math.PI * 2);
+    ctx.fill();
+
+    const cr = r * (sharp ? 1.15 : 1.45);
+    const g2 = ctx.createRadialGradient(x, y, 0, x, y, cr);
+    g2.addColorStop(0, theme.accent);
+    g2.addColorStop(sharp ? 0.78 : 0.5, theme.accent);
+    g2.addColorStop(1, TRANSPARENT);
+    ctx.fillStyle = g2;
+    ctx.globalAlpha = intensity;
+    ctx.beginPath();
+    ctx.arc(x, y, cr, 0, Math.PI * 2);
+    ctx.fill();
+
+    const hr = r * (sharp ? 0.6 : 0.8);
+    const g3 = ctx.createRadialGradient(x, y, 0, x, y, hr);
+    g3.addColorStop(0, "rgba(255,255,255,0.95)");
+    g3.addColorStop(sharp ? 0.6 : 0.35, "rgba(255,255,255,0.55)");
+    g3.addColorStop(1, WHITE_0);
+    ctx.fillStyle = g3;
+    ctx.globalAlpha = intensity;
+    ctx.beginPath();
+    ctx.arc(x, y, hr, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+/**
+ * Fills a tapered streak through points (streakX/Y, n of them, tail first) with a
+ * gradient from transparent at the tail to `color` at the head.
+ */
+function fillStreak(ctx: CanvasRenderingContext2D, n: number, width: number, color: string, alpha: number): void {
+    if (n < 2) return;
+    const tx = streakX[0];
+    const ty = streakY[0];
+    const hx = streakX[n - 1];
+    const hy = streakY[n - 1];
+    if (Math.abs(hx - tx) + Math.abs(hy - ty) < 0.5) return;
+    // Left side forward, right side back.
+    ctx.beginPath();
+    for (let pass = 0; pass < 2; pass++) {
+        const side = pass === 0 ? 1 : -1;
+        for (let k = 0; k < n; k++) {
+            const i = pass === 0 ? k : n - 1 - k;
+            // Tangent over a few neighbours, so the edges stay smooth.
+            const a = i > 1 ? i - 2 : 0;
+            const b = i < n - 2 ? i + 2 : n - 1;
+            let dx = streakX[b] - streakX[a];
+            let dy = streakY[b] - streakY[a];
+            const len = Math.hypot(dx, dy);
+            if (len > 1e-6) {
+                dx /= len;
+                dy /= len;
+            } else {
+                dx = 1;
+                dy = 0;
+            }
+            const hw = 0.5 * width * streakTaper(i / (n - 1));
+            const px = streakX[i] - dy * hw * side;
+            const py = streakY[i] + dx * hw * side;
+            if (pass === 0 && k === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+    }
+    ctx.closePath();
+    const g = ctx.createLinearGradient(tx, ty, hx, hy);
+    g.addColorStop(0, TRANSPARENT);
+    g.addColorStop(1, color);
+    ctx.fillStyle = g;
+    ctx.globalAlpha = alpha;
+    ctx.fill();
+}
+
+/** Loads a trail's live points (pixel coords) into the scratch buffers; returns the count. */
+function loadStreak(trail: TouchpadTrail, pad: PadRect, now: number, maxAgeMs: number, headX: number, headY: number): number {
+    const live = trailLiveCount(trail, now, maxAgeMs);
+    let n = 0;
+    for (let i = trail.count - live; i < trail.count && n < TRAIL_CAP - 1; i++) {
+        const ci = trailIndex(trail, i);
+        const x = pad.x + trail.xs[ci] * pad.w;
+        const y = pad.y + trail.ys[ci] * pad.h;
+        // Points closer than a pixel only make the outline ragged.
+        if (n > 0 && Math.abs(x - streakX[n - 1]) + Math.abs(y - streakY[n - 1]) < STREAK_MIN_STEP) continue;
+        streakX[n] = x;
+        streakY[n] = y;
+        n++;
+    }
+    // End exactly on the contact (replacing a last point that sits on top of it).
+    if (n > 0 && Math.abs(headX - streakX[n - 1]) + Math.abs(headY - streakY[n - 1]) < STREAK_MIN_STEP) n--;
+    streakX[n] = headX;
+    streakY[n] = headY;
+    return n + 1;
+}
+
+function drawChevron(ctx: CanvasRenderingContext2D, cx: number, cy: number, ux: number, uy: number, size: number): void {
     const nx = -uy;
     const ny = ux;
     ctx.beginPath();
-    ctx.moveTo(cx - ux * size * 0.5 + nx * size, cy - uy * size * 0.5 + ny * size);
-    ctx.lineTo(cx + ux * size * 0.5, cy + uy * size * 0.5);
-    ctx.lineTo(cx - ux * size * 0.5 - nx * size, cy - uy * size * 0.5 - ny * size);
+    ctx.moveTo(cx - ux * size * 0.55 + nx * size, cy - uy * size * 0.55 + ny * size);
+    ctx.lineTo(cx + ux * size * 0.45, cy + uy * size * 0.45);
+    ctx.lineTo(cx - ux * size * 0.55 - nx * size, cy - uy * size * 0.55 - ny * size);
     ctx.stroke();
 }
 
@@ -574,170 +817,170 @@ export function drawTouchpad(ctx: CanvasRenderingContext2D, state: TouchpadState
     const { theme } = o;
     ctx.clearRect(0, 0, o.width, o.height);
     ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
     const pad = padRect(o.width, o.height);
     const s = Math.min(pad.w, pad.h);
     const a = state.activity;
     const mode = drawnMode(state, now);
-
-    // Pad body.
-    roundRectPath(ctx, pad.x, pad.y, pad.w, pad.h, pad.r);
-    ctx.fillStyle = theme.muted;
-    ctx.globalAlpha = 0.06 + 0.06 * a;
-    ctx.fill();
-    ctx.strokeStyle = theme.muted;
-    ctx.lineWidth = s > 80 ? 1.5 : 1;
-    ctx.globalAlpha = 0.35 + 0.4 * a;
-    ctx.stroke();
-
-    // Button flash on the outline.
     const sincePress = now - state.pressT;
-    if (sincePress >= 0 && sincePress < FLASH_MS) {
-        ctx.strokeStyle = theme.accent;
-        ctx.lineWidth = s > 80 ? 2.5 : 2;
-        ctx.globalAlpha = 1 - sincePress / FLASH_MS;
-        ctx.stroke();
-    }
+
+    drawGlass(ctx, pad, theme, a);
 
     ctx.save();
     roundRectPath(ctx, pad.x, pad.y, pad.w, pad.h, pad.r);
     ctx.clip();
 
-    // Faint dot grid (the idle image); dims further while active.
-    ctx.fillStyle = theme.muted;
-    ctx.globalAlpha = 0.35 * (1 - a) + 0.15 * a;
-    const gr = Math.max(0.6, s * 0.012);
-    for (let gx = 1; gx <= GRID_COLS; gx++) {
-        const x = pad.x + (gx / (GRID_COLS + 1)) * pad.w;
-        for (let gy = 1; gy <= GRID_ROWS; gy++) {
-            const y = pad.y + (gy / (GRID_ROWS + 1)) * pad.h;
+    const mag = state.magnitude;
+    const r = dotRadius(pad.dot, mode, mag);
+    const fingers = state.fingers;
+    const d0x = pad.x + state.dotX[0] * pad.w;
+    const d0y = pad.y + state.dotY[0] * pad.h;
+
+    // Precision: a fine crosshair etched in the glass through the contact.
+    if (a > 0.001 && mode === "precision") {
+        const gap = r * 2.6;
+        for (let pass = 0; pass < 2; pass++) {
+            ctx.strokeStyle = pass === 0 ? "rgba(0,0,0,0.45)" : "rgba(255,255,255,0.4)";
+            ctx.globalAlpha = a;
+            ctx.lineWidth = 1;
+            const off = pass === 0 ? 0.75 : 0;
+            const x = Math.round(d0x) + 0.5 + off;
+            const y = Math.round(d0y) + 0.5 + off;
             ctx.beginPath();
-            ctx.arc(x, y, gr, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.moveTo(pad.x, y);
+            ctx.lineTo(d0x - gap, y);
+            ctx.moveTo(d0x + gap, y);
+            ctx.lineTo(pad.x + pad.w, y);
+            ctx.moveTo(x, pad.y);
+            ctx.lineTo(x, d0y - gap);
+            ctx.moveTo(x, d0y + gap);
+            ctx.lineTo(x, pad.y + pad.h);
+            ctx.stroke();
         }
+        // Tick marks every eighth of the pad along both hairlines.
+        ctx.strokeStyle = "rgba(255,255,255,0.28)";
+        ctx.beginPath();
+        const t = Math.max(1.5, s * 0.025);
+        for (let i = 1; i < 8; i++) {
+            const x = pad.x + (i / 8) * pad.w;
+            const y = pad.y + (i / 8) * pad.h;
+            if (Math.abs(x - d0x) > gap) {
+                ctx.moveTo(x, d0y - t);
+                ctx.lineTo(x, d0y + t);
+            }
+            if (Math.abs(y - d0y) > gap) {
+                ctx.moveTo(d0x - t, y);
+                ctx.lineTo(d0x + t, y);
+            }
+        }
+        ctx.stroke();
     }
+
+    // Everything that glows is added onto the glass.
+    ctx.globalCompositeOperation = "lighter";
 
     if (a > 0.001) {
-        const mag = state.magnitude;
-        const r = dotRadius(pad.dot, mode, mag);
-        const fingers = state.fingers;
+        const intensity = a * (0.8 + 0.2 * mag);
 
-        // Scroll lane with streaming chevrons, on the inboard edge (towards the
-        // keyboard's centre) for vertical scroll, or the bottom edge for horizontal.
-        if (mode === "scroll") {
-            const dir = state.scrollRate < 0 ? -1 : 1;
-            const size = Math.max(2, s * 0.07);
-            const inset = pad.r * 0.9;
-            const vertical = state.axis === "vertical";
-            const laneX = vertical ? (o.side === "left" ? pad.x + pad.w - size * 2 : pad.x + size * 2) : 0;
-            const laneY = vertical ? 0 : pad.y + pad.h - size * 2;
-            const len = vertical ? pad.h - 2 * inset : pad.w - 2 * inset;
-            const base = vertical ? pad.y + inset : pad.x + inset;
-            ctx.strokeStyle = theme.accent;
-            ctx.lineWidth = Math.max(1, s * 0.022);
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
-            const phase = o.reducedMotion ? 0 : state.scrollPhase;
-            const strength = 0.3 + 0.7 * mag;
-            for (let i = 0; i < 3; i++) {
-                const t = o.reducedMotion ? (i + 1) / 4 : (phase + i / 3) % 1;
-                const fade = Math.sin(Math.PI * t);
-                ctx.globalAlpha = a * strength * (o.reducedMotion ? 0.9 : fade);
-                const p = base + t * len;
-                drawChevron(ctx, vertical ? laneX : p, vertical ? p : laneY, state.axis, dir, size);
-            }
-        }
-
-        // Trails (not in reduced motion).
+        // Light streaks behind the contacts.
         if (!o.reducedMotion) {
             const trailMs = trailMsFor(mode);
-            const trailColor = mode === "boost" ? theme.accent : mode === "scroll" ? theme.muted : theme.foreground;
-            const trailAlpha = a * (mode === "scroll" ? 0.75 : 0.45);
-            const tw = r * (mode === "precision" ? 0.7 : 1.1);
+            const width = r * (mode === "precision" ? 1.3 : mode === "boost" ? 1.9 : 1.6);
             for (let f = 0; f < fingers; f++) {
-                drawTrail(ctx, state.trails[f], pad, now, trailMs, tw, trailColor, trailAlpha);
+                const n = loadStreak(state.trails[f], pad, now, trailMs, pad.x + state.dotX[f] * pad.w, pad.y + state.dotY[f] * pad.h);
+                fillStreak(ctx, n, width, theme.accent, a * (mode === "boost" ? 0.95 : 0.7));
+                fillStreak(ctx, n, width * 0.3, "rgba(255,255,255,0.8)", a * 0.55);
             }
-        }
-
-        const d0x = pad.x + state.dotX[0] * pad.w;
-        const d0y = pad.y + state.dotY[0] * pad.h;
-
-        // Precision: crosshair through the dot.
-        if (mode === "precision") {
-            const gap = r * 2.2;
-            ctx.strokeStyle = theme.muted;
-            ctx.lineWidth = 1;
-            ctx.globalAlpha = a * 0.75;
-            ctx.beginPath();
-            ctx.moveTo(pad.x, d0y);
-            ctx.lineTo(d0x - gap, d0y);
-            ctx.moveTo(d0x + gap, d0y);
-            ctx.lineTo(pad.x + pad.w, d0y);
-            ctx.moveTo(d0x, pad.y);
-            ctx.lineTo(d0x, d0y - gap);
-            ctx.moveTo(d0x, d0y + gap);
-            ctx.lineTo(d0x, pad.y + pad.h);
-            ctx.stroke();
-            ctx.strokeStyle = theme.accent;
-            ctx.globalAlpha = a * 0.9;
-            ctx.beginPath();
-            ctx.arc(d0x, d0y, gap, 0, Math.PI * 2);
-            ctx.stroke();
-        }
-
-        // Boost: accent halo behind the dot(s), growing with magnitude.
-        if (mode === "boost") {
-            ctx.fillStyle = theme.accent;
-            for (let f = 0; f < fingers; f++) {
-                const x = pad.x + state.dotX[f] * pad.w;
-                const y = pad.y + state.dotY[f] * pad.h;
-                ctx.globalAlpha = a * (0.18 + 0.22 * mag);
-                ctx.beginPath();
-                ctx.arc(x, y, r * (1.9 + 0.6 * mag), 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        // Dots.
-        ctx.fillStyle = theme.foreground;
-        ctx.globalAlpha = a;
-        for (let f = 0; f < fingers; f++) {
-            ctx.beginPath();
-            ctx.arc(pad.x + state.dotX[f] * pad.w, pad.y + state.dotY[f] * pad.h, r, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        // Reduced motion: a still direction tick from the dot instead of a trail.
-        if (o.reducedMotion && mode !== "scroll" && mag > 0.02) {
+        } else if (mode !== "scroll" && mag > 0.02) {
+            // Reduced motion: a still streak behind the contact, against the motion.
             const len = Math.hypot(state.rateX, state.rateY);
             if (len > 0) {
-                const ux = state.rateX / len;
-                const uy = state.rateY / len;
-                const l = r + mag * s * 0.3;
-                ctx.strokeStyle = theme.foreground;
-                ctx.lineWidth = Math.max(1, r * 0.5);
-                ctx.lineCap = "round";
-                ctx.globalAlpha = a * 0.7;
-                ctx.beginPath();
-                ctx.moveTo(d0x + ux * r, d0y + uy * r);
-                ctx.lineTo(d0x + ux * l, d0y + uy * l);
-                ctx.stroke();
+                const l = r * 1.5 + mag * s * 0.35;
+                streakX[0] = d0x - (state.rateX / len) * l;
+                streakY[0] = d0y - (state.rateY / len) * l;
+                streakX[1] = d0x;
+                streakY[1] = d0y;
+                const width = r * 1.6;
+                fillStreak(ctx, 2, width, theme.accent, a * 0.7);
+                fillStreak(ctx, 2, width * 0.3, "rgba(255,255,255,0.8)", a * 0.55);
             }
         }
 
-        // Tap / click pulse ring.
-        if (sincePress >= 0 && sincePress < PULSE_MS && !o.reducedMotion) {
-            const p = sincePress / PULSE_MS;
+        // Scroll: chevrons streaming ahead of the pair along the axis.
+        if (mode === "scroll") {
+            const vertical = state.axis === "vertical";
+            const dir = state.scrollRate < 0 ? -1 : 1;
+            const ux = vertical ? 0 : dir;
+            const uy = vertical ? dir : 0;
+            let mx = d0x;
+            let my = d0y;
+            if (fingers === 2) {
+                mx = (d0x + pad.x + state.dotX[1] * pad.w) / 2;
+                my = (d0y + pad.y + state.dotY[1] * pad.h) / 2;
+            }
+            const size = Math.max(2, s * 0.06);
+            const spacing = size * 1.25;
+            const lead = r * 2.1;
+            chevronSlots(o.reducedMotion ? 0.5 : state.scrollPhase, CHEVRON_COUNT, chevPos, chevFade);
             ctx.strokeStyle = theme.accent;
-            ctx.lineWidth = Math.max(1, r * 0.45);
-            ctx.globalAlpha = (1 - p) * a;
+            ctx.lineWidth = Math.max(1.2, s * 0.024);
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            const strength = a * (0.45 + 0.55 * normalizeSpeed(Math.abs(state.scrollRate)));
+            for (let i = 0; i < CHEVRON_COUNT; i++) {
+                const d = lead + chevPos[i] * spacing;
+                ctx.globalAlpha = strength * chevFade[i];
+                drawChevron(ctx, mx + ux * d, my + uy * d, ux, uy, size);
+            }
+        }
+
+        // Contacts.
+        const halo = haloScale(mode, mag);
+        const sharp = mode === "precision";
+        for (let f = 0; f < fingers; f++) {
+            drawContact(ctx, pad.x + state.dotX[f] * pad.w, pad.y + state.dotY[f] * pad.h, r, halo, intensity, sharp, theme);
+        }
+
+        // A held button rings the contact.
+        if (state.prevButtons !== 0) {
+            ctx.strokeStyle = theme.accent;
+            ctx.lineWidth = Math.max(1, r * 0.3);
+            ctx.globalAlpha = a * 0.8;
             for (let f = 0; f < fingers; f++) {
                 ctx.beginPath();
-                ctx.arc(pad.x + state.dotX[f] * pad.w, pad.y + state.dotY[f] * pad.h, r * (1.2 + 1.6 * p), 0, Math.PI * 2);
+                ctx.arc(pad.x + state.dotX[f] * pad.w, pad.y + state.dotY[f] * pad.h, r * 1.9, 0, Math.PI * 2);
                 ctx.stroke();
             }
         }
     }
+
+    // Button press: a ripple through the glass from the contact, and a brief glow.
+    if (!o.reducedMotion && sincePress >= 0 && sincePress < PULSE_MS) {
+        const reach = Math.hypot(pad.w, pad.h) * 0.55;
+        ctx.strokeStyle = theme.accent;
+        for (let ring = 0; ring < 2; ring++) {
+            const rp = rippleAt(sincePress - ring * PULSE_MS * 0.18, r, reach);
+            if (rp.strength <= 0) continue;
+            ctx.lineWidth = Math.max(1, r * (ring === 0 ? 0.55 : 0.35) * (0.4 + 0.6 * rp.strength));
+            ctx.globalAlpha = rp.strength * (ring === 0 ? 0.9 : 0.5);
+            for (let f = 0; f < fingers; f++) {
+                ctx.beginPath();
+                ctx.arc(pad.x + state.dotX[f] * pad.w, pad.y + state.dotY[f] * pad.h, rp.radius, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+        const glow = 1 - sincePress / PULSE_MS;
+        ctx.fillStyle = theme.accent;
+        ctx.globalAlpha = 0.12 * glow * glow;
+        ctx.fillRect(pad.x, pad.y, pad.w, pad.h);
+    }
+
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1;
     ctx.restore();
+
+    const flash = sincePress >= 0 && sincePress < FLASH_MS ? 1 - sincePress / FLASH_MS : 0;
+    drawBevel(ctx, pad, theme, o.reducedMotion ? 0 : flash);
     ctx.globalAlpha = 1;
 }
 
@@ -897,6 +1140,10 @@ export const _testTrailLiveCount = trailLiveCount;
 export const _testTrailMs = trailMsFor;
 export const _testPadRect = padRect;
 export const _testDotRadius = dotRadius;
+export const _testHaloScale = haloScale;
+export const _testStreakTaper = streakTaper;
+export const _testRipple = rippleAt;
+export const _testChevronSlots = chevronSlots;
 export const _testNeedsAnimation = needsAnimation;
 export const _testIsActive = isActiveSample;
 export const _testDraw = drawTouchpad;

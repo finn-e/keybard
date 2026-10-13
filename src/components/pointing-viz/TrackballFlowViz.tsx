@@ -29,8 +29,12 @@ import {
 const DOT_COUNT = 150;
 /** Dot radius as a fraction of the ball's radius. */
 const DOT_RADIUS = 0.05;
-/** Ball radius as a fraction of the smaller side of the slot. */
-const BALL_RADIUS = 0.36;
+/**
+ * Ball radius as a fraction of the smaller side of the drawing area. The slot hands
+ * the trackball the largest circle the keys leave free, so the ball, its socket lip
+ * and shadow fill it; scroll and precision marks are drawn on the ball.
+ */
+const BALL_RADIUS = 0.44;
 /** Ball radii of surface travel per second at full speed, per mode. */
 const ROLL_GAIN: Record<PointingMode, number> = { pointer: 3.2, scroll: 2.6, precision: 1.3, boost: 5 };
 /** Wheel units are much coarser than counts; scale them to counts for speed. */
@@ -256,20 +260,20 @@ const DEPTH_ALPHA = [0.22, 0.45, 0.7];
 function drawSocket(ctx: CanvasRenderingContext2D, g: Geometry, theme: PointingVizTheme, flash: number): void {
     const { cx, cy, r } = g;
     // Shadow the ball throws into the socket, offset away from the light.
-    const sx = cx + r * 0.08, sy = cy + r * 0.12;
-    const shadow = ctx.createRadialGradient(sx, sy, r * 0.7, sx, sy, r * 1.18);
+    const sx = cx + r * 0.05, sy = cy + r * 0.08;
+    const shadow = ctx.createRadialGradient(sx, sy, r * 0.75, sx, sy, r * 1.12);
     shadow.addColorStop(0, "rgba(0,0,0,0.3)");
     shadow.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = shadow;
     ctx.beginPath();
-    ctx.arc(sx, sy, r * 1.18, 0, Math.PI * 2);
+    ctx.arc(sx, sy, r * 1.12, 0, Math.PI * 2);
     ctx.fill();
     // The socket's lip.
-    ctx.lineWidth = Math.max(1, r * 0.06);
+    ctx.lineWidth = Math.max(1, r * 0.045);
     ctx.strokeStyle = flash > 0 ? theme.accent : theme.border;
     ctx.globalAlpha = flash > 0 ? 0.6 + 0.4 * flash : 1;
     ctx.beginPath();
-    ctx.arc(cx, cy, r * 1.14, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r * 1.07, 0, Math.PI * 2);
     ctx.stroke();
     ctx.globalAlpha = 1;
 }
@@ -368,38 +372,38 @@ function drawGloss(ctx: CanvasRenderingContext2D, g: Geometry): void {
     ctx.restore();
 }
 
-/** Scroll: chevrons outside the ball along the axis, pointing the way the content moves. */
-function drawScrollGuides(ctx: CanvasRenderingContext2D, s: BallState, g: Geometry, theme: PointingVizTheme, now: number): void {
+/** Scroll: chevrons on the ball along the axis, pointing the way the content moves. */
+function drawScrollGuides(ctx: CanvasRenderingContext2D, s: BallState, g: Geometry, now: number): void {
     const { cx, cy, r } = g;
     const along = s.axis === "vertical" ? s.vy : s.vx;
     const dir = along >= 0 ? 1 : -1;
     const strength = normalizeSpeed(along);
-    const size = r * 0.14;
-    const gap = r * 1.24;
-    ctx.strokeStyle = theme.accent;
+    const size = r * 0.16;
     ctx.lineWidth = Math.max(1.2, r * 0.07);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    // Two chevrons at each end; when scrolling, the leading ones brighten in turn.
-    const phase = strength > 0.02 ? (now / 400) % 1 : 0;
-    for (const end of [-1, 1]) {
-        for (let k = 0; k < 2; k++) {
-            const offset = gap + k * size * 0.6;
-            const lead = end === dir;
-            const pulse = lead && strength > 0.02 ? 0.35 + 0.65 * Math.abs(Math.sin((phase + k * 0.5) * Math.PI)) : 0.3;
-            ctx.globalAlpha = pulse;
-            const pointing = end; // chevrons point outward
+    // A column of chevrons through the middle; while scrolling they run in the scroll direction.
+    const phase = strength > 0.02 ? ((now / 450) % 1) * dir : 0;
+    for (let k = -2; k <= 2; k++) {
+        const pos = (k + phase) * size * 1.25;
+        if (Math.abs(pos) > r * 0.62) continue;
+        const fade = 1 - Math.abs(pos) / (r * 0.62);
+        // Dark under-stroke then a light stroke, so the marks read on any ball colour.
+        for (const [style, w, a] of [["rgba(0,0,0,0.35)", 1.6, 0.8], ["rgba(255,255,255,0.95)", 1, 1]] as const) {
+            ctx.strokeStyle = style;
+            ctx.lineWidth = Math.max(1.2, r * 0.06) * w;
+            ctx.globalAlpha = (0.35 + 0.55 * (strength > 0.02 ? 1 : 0.4)) * fade * a;
             ctx.beginPath();
             if (s.axis === "vertical") {
-                const y = cy + end * offset;
-                ctx.moveTo(cx - size, y - pointing * size * 0.55);
+                const y = cy + pos;
+                ctx.moveTo(cx - size, y - dir * size * 0.55);
                 ctx.lineTo(cx, y);
-                ctx.lineTo(cx + size, y - pointing * size * 0.55);
+                ctx.lineTo(cx + size, y - dir * size * 0.55);
             } else {
-                const x = cx + end * offset;
-                ctx.moveTo(x - pointing * size * 0.55, cy - size);
+                const x = cx + pos;
+                ctx.moveTo(x - dir * size * 0.55, cy - size);
                 ctx.lineTo(x, cy);
-                ctx.lineTo(x - pointing * size * 0.55, cy + size);
+                ctx.lineTo(x - dir * size * 0.55, cy + size);
             }
             ctx.stroke();
         }
@@ -408,21 +412,22 @@ function drawScrollGuides(ctx: CanvasRenderingContext2D, s: BallState, g: Geomet
 }
 
 /** Precision: a fine reticle over the ball. */
-function drawReticle(ctx: CanvasRenderingContext2D, g: Geometry, theme: PointingVizTheme): void {
+function drawReticle(ctx: CanvasRenderingContext2D, g: Geometry): void {
     const { cx, cy, r } = g;
-    ctx.strokeStyle = theme.foreground;
-    ctx.globalAlpha = 0.55;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        ctx.moveTo(cx + dx * r * 0.3, cy + dy * r * 0.3);
-        ctx.lineTo(cx + dx * r * 1.25, cy + dy * r * 1.25);
+    // Etched light on the ball, with a dark edge so it reads on any ball colour.
+    for (const [style, w] of [["rgba(0,0,0,0.3)", 2.2], ["rgba(255,255,255,0.85)", 1]] as const) {
+        ctx.strokeStyle = style;
+        ctx.lineWidth = Math.max(1, r * 0.018) * w;
+        ctx.beginPath();
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            ctx.moveTo(cx + dx * r * 0.22, cy + dy * r * 0.22);
+            ctx.lineTo(cx + dx * r * 0.85, cy + dy * r * 0.85);
+        }
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * 0.22, 0, Math.PI * 2);
+        ctx.stroke();
     }
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(cx, cy, r * 0.3, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
 }
 
 /** Boost: a ring expanding from the ball as boost starts. */
@@ -433,7 +438,7 @@ function drawPulse(ctx: CanvasRenderingContext2D, g: Geometry, theme: PointingVi
     ctx.globalAlpha = 0.7 * (1 - t);
     ctx.lineWidth = Math.max(1, g.r * 0.08 * (1 - t));
     ctx.beginPath();
-    ctx.arc(g.cx, g.cy, g.r * (1.05 + 0.25 * t), 0, Math.PI * 2);
+    ctx.arc(g.cx, g.cy, g.r * (1.0 + 0.12 * t), 0, Math.PI * 2);
     ctx.stroke();
     ctx.globalAlpha = 1;
 }
@@ -445,8 +450,8 @@ function drawBallFrame(ctx: CanvasRenderingContext2D, s: BallState, width: numbe
     drawBody(ctx, g, theme);
     drawDots(ctx, s, g, s.mode === "boost" ? 2 : 1);
     drawGloss(ctx, g);
-    if (s.mode === "scroll") drawScrollGuides(ctx, s, g, theme, now);
-    if (s.mode === "precision") drawReticle(ctx, g, theme);
+    if (s.mode === "scroll") drawScrollGuides(ctx, s, g, now);
+    if (s.mode === "precision") drawReticle(ctx, g);
     drawPulse(ctx, g, theme, s.pulseMs);
 }
 
@@ -472,8 +477,8 @@ function drawStaticFrame(ctx: CanvasRenderingContext2D, s: BallState, sample: Po
     drawBody(ctx, g, theme);
     drawDots(ctx, s, g, blur);
     drawGloss(ctx, g);
-    if (s.mode === "scroll") drawScrollGuides(ctx, s, g, theme, 0);
-    if (s.mode === "precision") drawReticle(ctx, g, theme);
+    if (s.mode === "scroll") drawScrollGuides(ctx, s, g, 0);
+    if (s.mode === "precision") drawReticle(ctx, g);
 }
 
 // ---------------------------------------------------------------------------

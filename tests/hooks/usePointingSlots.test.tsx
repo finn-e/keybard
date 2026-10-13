@@ -62,9 +62,9 @@ describe('usePointingSlots', () => {
         const { result } = renderHook(() => usePointingSlots());
         expect(kinds(result.current)).toEqual(['left:trackball', 'right:touchpad']);
         expect(result.current[0]).toMatchObject({ sensor: 'pmw3360', description: 'PMW3360 trackball' });
-        expect(result.current[0].w).toBeCloseTo(3.5, 5);
-        expect(result.current[0].h).toBeCloseTo(2.2, 5);
-        expect(result.current[0].x).toBeCloseTo(4.65, 5);
+        expect(result.current[0].w).toBeCloseTo(3.8, 5);
+        expect(result.current[0].h).toBeCloseTo(3.8, 5);
+        expect(result.current[0].x).toBeCloseTo(3.85, 5);
         expect(result.current[0].y).toBeCloseTo(4.15, 5);
         await tick();
         expect(getFragmentHardware).not.toHaveBeenCalled();
@@ -129,7 +129,7 @@ describe('usePointingSlots', () => {
             const { result } = renderHook(() => usePointingSlots());
             expect(kinds(result.current)).toEqual(['left:trackball', 'right:touchpad']);
             expect(result.current[1]).toMatchObject({ demo: true });
-            expect(result.current[1].x).toBeCloseTo(16.85, 5);
+            expect(result.current[1].x).toBeCloseTo(17.35, 5);
             expect(result.current[1].y).toBeCloseTo(4.15, 5);
             await tick();
             expect(getFragmentHardware).not.toHaveBeenCalled();
@@ -140,10 +140,10 @@ describe('usePointingSlots', () => {
             ctx.keyboard = createSvalboardPointingKbinfo({ withPointing: false });
             const { result } = renderHook(() => usePointingSlots());
             expect(kinds(result.current)).toEqual(['left:trackpoint', 'right:trackpoint']);
-            expect(result.current[0].w).toBeCloseTo(3.5, 5);
-            expect(result.current[0].h).toBeCloseTo(2.2, 5);
-            expect(result.current[0].x).toBeCloseTo(4.65, 5);
-            expect(result.current[1].x).toBeCloseTo(16.85, 5);
+            expect(result.current[0].w).toBeCloseTo(3.8, 5);
+            expect(result.current[0].h).toBeCloseTo(3.8, 5);
+            expect(result.current[0].x).toBeCloseTo(3.85, 5);
+            expect(result.current[1].x).toBeCloseTo(17.35, 5);
         });
 
         it("falls back to the fixed positions when the pocket can't be found", () => {

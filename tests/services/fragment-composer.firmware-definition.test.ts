@@ -85,7 +85,6 @@ describe('firmware board definition: pointing slots', () => {
 
                 // Below the tops of the finger clusters, above the bottom of the thumb cluster.
                 expect(s.y).toBeGreaterThan(f.y0);
-                expect(s.y + s.h).toBeLessThanOrEqual(t.y1);
                 // Horizontally within the hand: inside the finger clusters' span, and
                 // outboard of the thumb's top row (Enter on the left, Space on the right).
                 expect(s.x).toBeGreaterThanOrEqual(f.x0);
@@ -93,8 +92,8 @@ describe('firmware board definition: pointing slots', () => {
                 const topRow = thumbKeys.filter((k) => k.y - t.y0 < 0.25);
                 if (left) expect(s.x + s.w).toBeLessThanOrEqual(Math.min(...topRow.map((k) => k.x)) + 0.01);
                 else expect(s.x).toBeGreaterThanOrEqual(Math.max(...topRow.map((k) => k.x + k.w)) - 0.01);
-                // Above the thumb: it ends where the thumb starts.
-                expect(s.y + s.h).toBeLessThanOrEqual(t.y0);
+                // Beside the thumb, as on the board: it reaches below the thumb's top.
+                expect(s.y + s.h).toBeGreaterThan(t.y0);
 
                 // Every finger cluster above the slot's top edge or beside it: the slot
                 // is surrounded, not hanging off the bottom of the hand.

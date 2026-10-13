@@ -1,17 +1,7 @@
 import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-    TrackpointViz,
-    _testArrowGeometry,
-    _testCreateArrowGeometry,
-    _testCreateState,
-    _testDraw,
-    _testIsSettled,
-    _testSampleRate,
-    _testScrollAxis,
-    _testStep,
-} from "@/components/pointing-viz/TrackpointViz";
+import { TrackpointViz, _testTrackpoint as T, type TrackpointState } from "@/components/pointing-viz/TrackpointViz";
 import { simulateSample } from "@/components/pointing-viz/simulate";
 import {
     DEFAULT_POINTING_VIZ_THEME,
@@ -21,7 +11,7 @@ import {
     type PointingSampleSource,
 } from "@/components/pointing-viz/types";
 
-function sample(over: Partial<PointingLiveSample> = {}): PointingLiveSample {
+function sample(over: Partial<PointingLiveSample> & { pressure?: number } = {}): PointingLiveSample {
     const mode: PointingMode = over.mode ?? "pointer";
     return {
         t: 0,
@@ -44,195 +34,354 @@ function sample(over: Partial<PointingLiveSample> = {}): PointingLiveSample {
 }
 
 /** Holds a constant push of `s` (re-stamped every frame) for `ms`, stepping at 16 ms. */
-function hold(st: ReturnType<typeof _testCreateState>, s: Partial<PointingLiveSample>, fromMs: number, ms: number): number {
+function hold(st: TrackpointState, s: Partial<PointingLiveSample> & { pressure?: number }, fromMs: number, ms: number): number {
     let now = fromMs;
     for (let t = 0; t < ms; t += 16) {
         now += 16;
-        _testStep(st, sample({ ...s, t: now }), now, 16);
+        T.step(st, sample({ ...s, t: now }), now, 16);
     }
     return now;
 }
 
-function release(st: ReturnType<typeof _testCreateState>, fromMs: number, ms: number): number {
+/** Lets go: the last sample stays the latest (stale, motionless) while frames run. */
+function release(st: TrackpointState, fromMs: number, ms: number, onFrame?: (st: TrackpointState) => void): number {
     const last = sample({ t: fromMs });
     let now = fromMs;
     for (let t = 0; t < ms; t += 16) {
         now += 16;
-        _testStep(st, last, now, 16);
+        T.step(st, last, now, 16);
+        onFrame?.(st);
     }
     return now;
 }
 
-describe("TrackpointViz math", () => {
-    it("smooths toward the push and grows an arrow in its direction", () => {
-        const st = _testCreateState();
-        const g = _testCreateArrowGeometry();
+/** Counts sign changes of a series, ignoring values within `eps` of zero. */
+function zeroCrossings(xs: number[], eps = 1e-3): number {
+    let n = 0;
+    let prev = 0;
+    for (const x of xs) {
+        if (Math.abs(x) < eps) continue;
+        const sgn = Math.sign(x);
+        if (prev !== 0 && sgn !== prev) n++;
+        prev = sgn;
+    }
+    return n;
+}
+
+function stubCtx(calls: string[] = []): CanvasRenderingContext2D {
+    const gradient = { addColorStop() {} };
+    return new Proxy(
+        {},
+        {
+            get: (_t, prop: string) => {
+                if (prop === "createRadialGradient" || prop === "createLinearGradient") return () => gradient;
+                if (["globalAlpha", "fillStyle", "strokeStyle", "lineWidth", "lineCap", "lineJoin", "shadowBlur", "shadowColor"].includes(prop)) return 0;
+                return (..._args: unknown[]) => {
+                    calls.push(prop);
+                };
+            },
+            set: () => true,
+        },
+    ) as unknown as CanvasRenderingContext2D;
+}
+
+describe("TrackpointViz bend spring", () => {
+    it("smooths toward the push and bends the stalk in its direction", () => {
+        const st = T.createState();
         let now = hold(st, { dx: 66, dy: 0 }, 0, 40);
-        const early = Math.hypot(st.ax, st.ay);
+        const early = st.bx;
         now = hold(st, { dx: 66, dy: 0 }, now, 800);
         expect(st.vx).toBeCloseTo(2, 1); // 66 counts / 33 ms
-        expect(Math.hypot(st.ax, st.ay)).toBeGreaterThan(early);
-        expect(st.angle).toBeCloseTo(0, 2);
+        expect(st.bx).toBeGreaterThan(early);
+        expect(st.bx).toBeGreaterThan(0.5);
+        expect(Math.abs(st.by)).toBeLessThan(1e-6);
+        // Held steadily, it settles on the target (force × pointer gain) without wobbling.
+        expect(st.bx).toBeCloseTo(st.fx * T.MODE_GAIN.pointer, 2);
         expect(st.idle).toBe(0);
-        _testArrowGeometry(st.ax, st.ay, st.angle, "pointer", 100, g);
-        expect(g.visible).toBe(true);
-        expect(g.length).toBeLessThanOrEqual(45 + 1e-6);
         expect(now).toBeGreaterThan(0);
     });
 
-    it("points up for a negative dy push (screen coordinates)", () => {
-        const st = _testCreateState();
-        hold(st, { dx: 0, dy: -50 }, 0, 600);
-        expect(st.angle).toBeCloseTo(-Math.PI / 2, 2);
+    it("bends toward the viewer for +dy and away for -dy", () => {
+        const toward = T.createState();
+        hold(toward, { dy: 50 }, 0, 600);
+        expect(toward.by).toBeGreaterThan(0.3);
+        const away = T.createState();
+        hold(away, { dy: -50 }, 0, 600);
+        expect(away.by).toBeLessThan(-0.3);
     });
 
-    it("springs back past zero on release, then settles to an idle dot", () => {
-        const st = _testCreateState();
-        let now = hold(st, { dx: 80, dy: 0 }, 0, 800);
-        expect(st.ax).toBeGreaterThan(0.5);
-        let minAx = Infinity;
-        const last = sample({ t: now });
-        for (let i = 0; i < 40; i++) {
-            now += 16;
-            _testStep(st, last, now, 16);
-            minAx = Math.min(minAx, st.ax);
+    it("bends less in precision and more in boost", () => {
+        const bend = (mode: PointingMode) => {
+            const st = T.createState();
+            hold(st, { mode, dx: 40 }, 0, 800);
+            return st.bx;
+        };
+        expect(bend("precision")).toBeLessThan(bend("pointer") * 0.5);
+        expect(bend("boost")).toBeGreaterThan(bend("pointer"));
+    });
+
+    it("sways back and forth with decaying amplitude on release, like a palm after a gust", () => {
+        const st = T.createState();
+        const now = hold(st, { dx: 80 }, 0, 800);
+        const start = st.bx;
+        const xs: number[] = [];
+        release(st, now, 1500, (s) => xs.push(s.bx));
+        // At least two swings past upright...
+        expect(zeroCrossings(xs)).toBeGreaterThanOrEqual(2);
+        // ...each smaller than the last.
+        const peaks: number[] = [];
+        for (let i = 1; i < xs.length - 1; i++) {
+            if (Math.abs(xs[i]) >= Math.abs(xs[i - 1]) && Math.abs(xs[i]) > Math.abs(xs[i + 1]) && Math.abs(xs[i]) > 1e-3) peaks.push(Math.abs(xs[i]));
         }
-        expect(minAx).toBeLessThan(0); // overshoot: it springs, not just fades
-        now = release(st, now, POINTING_IDLE_MS + 600);
-        expect(Math.abs(st.ax)).toBeLessThan(1e-3);
-        expect(st.idle).toBe(1);
-        expect(_testIsSettled(st, now)).toBe(true);
+        expect(peaks.length).toBeGreaterThanOrEqual(2);
+        expect(peaks[0]).toBeLessThan(start);
+        for (let i = 1; i < peaks.length; i++) expect(peaks[i]).toBeLessThan(peaks[i - 1]);
+        expect(Math.abs(xs[xs.length - 1])).toBeLessThan(0.02);
     });
 
-    it("eases into idle over ~400 ms rather than snapping", () => {
-        const st = _testCreateState();
-        let now = hold(st, { dx: 20 }, 0, 300);
-        now = release(st, now, POINTING_IDLE_MS + 100);
-        expect(st.idle).toBeGreaterThan(0);
-        expect(st.idle).toBeLessThan(1);
-        release(st, now, 400);
-        expect(st.idle).toBe(1);
+    it("damps hard while pushing and lightly after release", () => {
+        expect(T.PUSH_ZETA).toBeGreaterThan(T.SWAY_ZETA * 3);
+        // springBend picks the damping from the target: zero target = sway damping.
+        const a = T.createState();
+        const b = T.createState();
+        a.bx = b.bx = 0.5;
+        a.bvx = b.bvx = 2;
+        T.springBend(a, 0, 0, 0.008);
+        T.springBend(b, 0.5, 0, 0.008);
+        // Same displacement from target is not the point; the pushed one loses more velocity to damping.
+        expect(b.bvx).toBeLessThan(2);
+        expect(a.bvx).toBeLessThan(2);
+        const dampA = 2 * T.SWAY_ZETA * Math.sqrt(T.SPRING_K) * 2 * 0.008;
+        expect(a.bvx).toBeCloseTo(2 + (T.SPRING_K * -0.5 * 0.008) - dampA, 6);
     });
 
-    it("draws saturated samples at full magnitude", () => {
-        const st = _testCreateState();
+    it("settles: the nub stands straight and still, and the loop may stop", () => {
+        const st = T.createState();
+        let now = hold(st, { dx: 80 }, 0, 600);
+        expect(T.isSettled(st, now)).toBe(false);
+        now = release(st, now, POINTING_IDLE_MS + 2500);
+        expect(Math.abs(st.bx)).toBeLessThan(2e-3);
+        expect(Math.abs(st.bvx)).toBeLessThan(2e-2);
+        expect(st.idle).toBe(1);
+        expect(T.isSettled(st, now)).toBe(true);
+    });
+
+    it("is settled from the start with no samples", () => {
+        expect(T.isSettled(T.createState(), 0)).toBe(true);
+    });
+
+    it("bends saturated samples at full force", () => {
+        const st = T.createState();
         hold(st, { dx: 1, dy: 0, saturated: true }, 0, 1000);
-        expect(Math.hypot(st.ax, st.ay)).toBeCloseTo(1, 2);
+        expect(Math.hypot(st.fx, st.fy)).toBeCloseTo(1, 2);
+        expect(st.bx).toBeCloseTo(T.MODE_GAIN.pointer, 2);
     });
 
-    it("gives every mode a distinct arrow", () => {
-        const g = _testCreateArrowGeometry();
-        const size = 100;
-        const pointer = { ..._testArrowGeometry(0.8, 0, 0, "pointer", size, g) };
-        const precision = { ..._testArrowGeometry(0.8, 0, 0, "precision", size, g) };
-        const boost = { ..._testArrowGeometry(0.8, 0, 0, "boost", size, g) };
-        const scroll = { ..._testArrowGeometry(0.8, 0, 0, "scroll", size, g) };
-
-        expect(precision.shaftWidth).toBe(1);
-        expect(precision.ticks).toBe(3);
-        expect(precision.length).toBeLessThan(pointer.length);
-        expect(boost.shaftWidth).toBeGreaterThan(pointer.shaftWidth);
-        expect(boost.glow).toBe(6);
-        expect(pointer.glow).toBe(0);
-        expect(scroll.headLength).toBe(0);
-        expect(pointer.length).toBeCloseTo(0.8 * 45, 5);
+    it("snaps straight to the bent pose for reduced-motion frames", () => {
+        const st = T.createState();
+        T.step(st, sample({ t: 100, dx: 66 }), 100, 0, true);
+        expect(st.vx).toBeCloseTo(2, 6);
+        expect(st.bx).toBeCloseTo(st.fx * T.MODE_GAIN.pointer, 9);
+        expect(st.bvx).toBe(0);
+        expect(st.idle).toBe(0);
     });
+});
 
-    it("scales head width with magnitude and caps length at 45% of size", () => {
-        const g = _testCreateArrowGeometry();
-        const small = { ..._testArrowGeometry(0.3, 0, 0, "pointer", 140, g) };
-        const big = { ..._testArrowGeometry(1, 0, 0, "pointer", 140, g) };
-        expect(big.headWidth).toBeGreaterThan(small.headWidth);
-        expect(big.length).toBeCloseTo(0.45 * 140, 5);
-    });
-
-    it("stays legible at a 60 px drawing area", () => {
-        const g = _testArrowGeometry(1, 0, 0, "pointer", 60, _testCreateArrowGeometry());
-        expect(g.nubRadius).toBeGreaterThanOrEqual(3);
-        expect(g.headWidth).toBeGreaterThanOrEqual(5);
-        expect(g.length).toBeGreaterThan(g.nubRadius * 3);
-    });
-
-    it("hides the arrow while it is still inside the nub", () => {
-        const g = _testArrowGeometry(0.02, 0, 0, "pointer", 100, _testCreateArrowGeometry());
-        expect(g.visible).toBe(false);
-    });
-
+describe("TrackpointViz scroll", () => {
     it("picks the scroll axis per the spec", () => {
-        expect(_testScrollAxis("free", 0.1, 2)).toBe("vertical");
-        expect(_testScrollAxis("free", 3, 2)).toBe("horizontal");
-        expect(_testScrollAxis("vertical", 3, 0)).toBe("vertical");
-        expect(_testScrollAxis("horizontal", 0, 3)).toBe("horizontal");
+        expect(T.scrollAxisFor("free", 0.1, 2)).toBe("vertical");
+        expect(T.scrollAxisFor("free", 3, 2)).toBe("horizontal");
+        expect(T.scrollAxisFor("vertical", 3, 0)).toBe("vertical");
+        expect(T.scrollAxisFor("horizontal", 0, 3)).toBe("horizontal");
     });
 
     it("uses driver wheel units in scroll mode, dx/dy otherwise", () => {
         const out = { x: 0, y: 0 };
-        _testSampleRate(sample({ mode: "scroll", dx: 0, dy: 33, v: 2 }), out);
+        T.sampleRate(sample({ mode: "scroll", dx: 0, dy: 33, v: 2 }), out);
         expect(out.y).toBeCloseTo((-2 * 8) / 33, 6); // +v = up
-        _testSampleRate(sample({ mode: "pointer", dx: 33, dy: 66, v: 2 }), out);
+        T.sampleRate(sample({ mode: "pointer", dx: 33, dy: 66, v: 2 }), out);
         expect(out.x).toBeCloseTo(1, 6);
         expect(out.y).toBeCloseTo(2, 6);
     });
 
-    it("locks the scroll arrow to the axis and streams chevrons in the push direction", () => {
-        const st = _testCreateState();
-        hold(st, { mode: "scroll", dx: 30, dy: 60, axisLock: "vertical" }, 0, 500);
+    it("bends only along the locked axis", () => {
+        const st = T.createState();
+        hold(st, { mode: "scroll", dx: 60, dy: 30, axisLock: "vertical" }, 0, 600);
         expect(st.scrollAxis).toBe("vertical");
-        expect(Math.abs(st.ax)).toBeLessThan(1e-3);
-        expect(st.ay).toBeGreaterThan(0.3);
+        expect(st.fx).toBe(0);
+        expect(Math.abs(st.bx)).toBeLessThan(1e-6);
+        expect(st.by).toBeGreaterThan(0.2);
         expect(st.scrollSign).toBe(1);
-        const p0 = st.scrollPhase;
-        hold(st, { mode: "scroll", dx: 30, dy: 60, axisLock: "vertical" }, 500, 100);
-        expect(st.scrollPhase).not.toBeCloseTo(p0, 4);
+
+        const h = T.createState();
+        hold(h, { mode: "scroll", dx: -20, dy: 60, axisLock: "horizontal" }, 0, 600);
+        expect(h.scrollAxis).toBe("horizontal");
+        expect(Math.abs(h.by)).toBeLessThan(1e-6);
+        expect(h.bx).toBeLessThan(-0.1);
+        expect(h.scrollSign).toBe(-1);
     });
 
-    it("reverses the drawn scroll direction under natural scrolling", () => {
-        const st = _testCreateState();
-        hold(st, { mode: "scroll", dy: 60, naturalScroll: true }, 0, 500);
-        expect(st.ay).toBeLessThan(-0.3);
-        expect(st.scrollSign).toBe(-1);
+    it("advances the chevron phase while scrolling", () => {
+        const st = T.createState();
+        const now = hold(st, { mode: "scroll", dy: 60, axisLock: "vertical" }, 0, 300);
+        const p0 = st.phase;
+        hold(st, { mode: "scroll", dy: 60, axisLock: "vertical" }, now, 100);
+        expect(st.phase).not.toBeCloseTo(p0, 4);
     });
 
-    it("flashes on button presses for 150 ms", () => {
-        const st = _testCreateState();
-        _testStep(st, sample({ t: 10, buttons: 1 }), 10, 16);
-        expect(st.flashUntil).toBe(160);
-        expect(_testIsSettled(st, 100)).toBe(false);
+    it("flips the chevrons, not the bend, under natural scrolling", () => {
+        const st = T.createState();
+        hold(st, { mode: "scroll", dy: 60, naturalScroll: true }, 0, 600);
+        expect(st.by).toBeGreaterThan(0.2); // the finger still pushes toward the viewer
+        expect(st.scrollSign).toBe(-1); // the content scrolls the other way
+    });
+});
+
+describe("TrackpointViz squish (Z pressure)", () => {
+    it("squishes on a button press, then boings back past rest", () => {
+        const st = T.createState();
+        let now = hold(st, { buttons: 1 }, 0, 300);
+        expect(st.squish).toBeGreaterThan(0.8);
+        expect(T.isSettled(st, now)).toBe(false);
+        let min = Infinity;
+        now = release(st, now, 600, (s) => {
+            min = Math.min(min, s.squish);
+        });
+        expect(min).toBeLessThan(-0.1); // overshoot: it stretches up before settling
+        expect(min).toBeGreaterThan(-0.9);
+        now = release(st, now, POINTING_IDLE_MS + 600);
+        expect(st.squish).toBe(0);
+        expect(T.isSettled(st, now)).toBe(true);
     });
 
-    it("snaps straight to the target for reduced-motion frames", () => {
-        const st = _testCreateState();
-        _testStep(st, sample({ t: 100, dx: 66 }), 100, 0, true);
-        expect(st.vx).toBeCloseTo(2, 6);
-        expect(st.idle).toBe(0);
-        expect(st.avx).toBe(0);
+    it("keeps the cap pressed while the button is held", () => {
+        const st = T.createState();
+        hold(st, { buttons: 1 }, 0, 1500);
+        expect(st.squish).toBeCloseTo(1, 2);
     });
 
-    it("draws every mode through a canvas context without throwing", () => {
-        const calls: string[] = [];
-        const ctx = new Proxy(
-            {},
-            {
-                get: (_t, prop: string) => {
-                    if (prop in { globalAlpha: 1, fillStyle: 1, strokeStyle: 1, lineWidth: 1, lineCap: 1, lineJoin: 1, shadowBlur: 1, shadowColor: 1 }) return 0;
-                    return (..._args: unknown[]) => {
-                        calls.push(prop);
-                    };
-                },
-                set: () => true,
-            },
-        ) as unknown as CanvasRenderingContext2D;
-        const g = _testCreateArrowGeometry();
-        for (const mode of ["pointer", "scroll", "precision", "boost"] as const) {
-            const st = _testCreateState();
-            const now = hold(st, { mode, dx: 40, dy: -30, buttons: 1 }, 0, 300);
-            calls.length = 0;
-            expect(() => _testDraw(ctx, st, g, DEFAULT_POINTING_VIZ_THEME, 80, 80, now, true)).not.toThrow();
-            expect(calls).toContain("clearRect");
-            expect(calls).toContain("fill");
+    it("reads an optional pressure 0..1 off the sample to set the depth", () => {
+        expect(T.samplePressure(sample())).toBe(-1);
+        expect(T.samplePressure(sample({ pressure: 0.4 }))).toBeCloseTo(0.4, 9);
+        expect(T.samplePressure(sample({ pressure: 7 }))).toBe(1);
+        expect(T.samplePressure(sample({ pressure: Number.NaN }))).toBe(-1);
+        expect(T.samplePressure({ ...sample(), pressure: "x" } as unknown as PointingLiveSample)).toBe(-1);
+        const st = T.createState();
+        hold(st, { pressure: 0.4 }, 0, 1500);
+        expect(st.squish).toBeCloseTo(0.4, 2);
+        // Pressure wins over a button press when both are present.
+        hold(st, { pressure: 0.2, buttons: 1 }, 1500, 1500);
+        expect(st.squish).toBeCloseTo(0.2, 2);
+    });
+
+    it("is underdamped (boings) but stable", () => {
+        expect(T.SQUISH_ZETA).toBeGreaterThan(0.1);
+        expect(T.SQUISH_ZETA).toBeLessThan(0.5);
+        const st = T.createState();
+        st.squish = 1;
+        for (let i = 0; i < 1000; i++) T.springSquish(st, 0, 0.008);
+        expect(Math.abs(st.squish)).toBeLessThan(1e-3);
+    });
+});
+
+describe("TrackpointViz geometry", () => {
+    it("plants the base and bends the tip the push direction, keeping the stalk length", () => {
+        const pose = T.createSpinePose();
+        const n = T.SPINE_SEGMENTS;
+        T.computeSpine(0, 0, 5, 50, pose);
+        expect(pose.pts[0]).toBe(0);
+        expect(pose.pts[1]).toBe(5);
+        expect(pose.pts[n * 3]).toBeCloseTo(0, 9);
+        expect(pose.pts[n * 3 + 1]).toBeCloseTo(55, 9);
+
+        T.computeSpine(0.8, 0, 5, 50, pose);
+        expect(pose.pts[0]).toBe(0);
+        expect(pose.pts[1]).toBe(5);
+        expect(pose.pts[n * 3]).toBeGreaterThan(10); // tip to the right
+        expect(pose.pts[n * 3 + 2]).toBeCloseTo(0, 9);
+        expect(pose.angle).toBeCloseTo(0.8 * T.BEND_MAX_RAD, 9);
+        let len = 0;
+        for (let i = 1; i <= n; i++) {
+            len += Math.hypot(pose.pts[i * 3] - pose.pts[i * 3 - 3], pose.pts[i * 3 + 1] - pose.pts[i * 3 - 2], pose.pts[i * 3 + 2] - pose.pts[i * 3 - 1]);
         }
-        const idle = _testCreateState();
-        expect(() => _testDraw(ctx, idle, g, DEFAULT_POINTING_VIZ_THEME, 60, 60, 0, false)).not.toThrow();
+        expect(len).toBeCloseTo(50, 6);
+        // Palm-like: the base leaves nearly vertical, the top bends most.
+        const lowerSlope = (pose.pts[3] - pose.pts[0]) / (pose.pts[4] - pose.pts[1]);
+        const upperSlope = (pose.pts[n * 3] - pose.pts[n * 3 - 3]) / (pose.pts[n * 3 + 1] - pose.pts[n * 3 - 2]);
+        expect(upperSlope).toBeGreaterThan(lowerSlope * 5);
+
+        T.computeSpine(0, 0.8, 5, 50, pose);
+        expect(pose.pts[n * 3 + 2]).toBeGreaterThan(10); // toward the viewer
+    });
+
+    it("caps the bend angle", () => {
+        expect(T.bendAngle(10, 10)).toBe(T.BEND_LIMIT_RAD);
+        expect(T.bendAngle(0.3, 0.4)).toBeCloseTo(0.5 * T.BEND_MAX_RAD, 9);
+    });
+
+    it("projects toward-the-viewer leans down the screen and foreshortens them", () => {
+        const L = T.nubLayout(160, 160, T.createNubLayout());
+        const out = new Float64Array(3);
+        const pose = T.createSpinePose();
+        const n = T.SPINE_SEGMENTS;
+        const tipScreenY = (bx: number, by: number) => {
+            T.computeSpine(bx, by, L.collarH, L.stalkL, pose);
+            T.projectPoint(L, pose.pts[n * 3], pose.pts[n * 3 + 1], pose.pts[n * 3 + 2], out, 0);
+            return out[1];
+        };
+        const upright = tipScreenY(0, 0);
+        expect(tipScreenY(0, 0.8)).toBeGreaterThan(upright + 10); // toward: top moves down
+        expect(tipScreenY(0, -0.8)).toBeLessThan(upright); // away: top moves up
+        // Upright, the nub is tall within the box and inside it.
+        T.projectPoint(L, 0, 0, 0, out, 0);
+        expect(out[1] - upright).toBeGreaterThan(160 * 0.3);
+        expect(upright).toBeGreaterThan(0);
+    });
+
+    it("never twists the cap: the frame is the world frame upright and is orthonormal when bent", () => {
+        const f = new Float64Array(9);
+        for (const [dx, dz] of [[1, 0], [0, 1], [-0.6, 0.8]]) {
+            T.capFrame(dx, dz, 0, f);
+            [0, 1, 0, 1, 0, 0, 0, 0, 1].forEach((v, i) => expect(f[i]).toBeCloseTo(v, 9));
+        }
+        T.capFrame(0.6, -0.8, 0.9, f);
+        const dot = (i: number, j: number) => f[i] * f[j] + f[i + 1] * f[j + 1] + f[i + 2] * f[j + 2];
+        for (const i of [0, 3, 6]) expect(dot(i, i)).toBeCloseTo(1, 9);
+        expect(dot(0, 3)).toBeCloseTo(0, 9);
+        expect(dot(0, 6)).toBeCloseTo(0, 9);
+        expect(dot(3, 6)).toBeCloseTo(0, 9);
+        // Swinging through upright (bend direction flips) keeps the frame continuous.
+        const a = [...T.capFrame(1, 0, 0.01, f)];
+        const b = [...T.capFrame(-1, 0, 0.01, f)];
+        for (let i = 0; i < 9; i++) expect(Math.abs(a[i] - b[i])).toBeLessThan(0.03);
+    });
+
+    it("reads light and dark themes from the foreground token", () => {
+        expect(T.colorLightness("#000")).toBeCloseTo(0, 6);
+        expect(T.colorLightness("#f1f2f2")).toBeGreaterThan(0.9);
+        expect(T.colorLightness("oklch(0.129 0.042 264.695)")).toBeCloseTo(0.129, 6);
+        expect(T.colorLightness("rgb(255, 255, 255)")).toBeCloseTo(1, 6);
+        expect(T.colorLightness("hsl(0 0% 40%)")).toBeCloseTo(0.4, 6);
+        expect(T.colorLightness("var(--x)")).toBeNull();
+        expect(T.paletteFor({ ...DEFAULT_POINTING_VIZ_THEME, foreground: "#f1f2f2" }).dark).toBe(true);
+        expect(T.paletteFor({ ...DEFAULT_POINTING_VIZ_THEME, foreground: "oklch(0.129 0.042 264.695)" }).dark).toBe(false);
+    });
+
+    it("draws every mode, squish and idle through a canvas context without throwing", () => {
+        const calls: string[] = [];
+        const ctx = stubCtx(calls);
+        for (const mode of ["pointer", "scroll", "precision", "boost"] as const) {
+            for (const size of [60, 100, 220]) {
+                const st = T.createState();
+                const now = hold(st, { mode, dx: 40, dy: -30, buttons: 1 }, 0, 300);
+                calls.length = 0;
+                expect(() => T.draw(ctx, st, DEFAULT_POINTING_VIZ_THEME, size, size, now, true)).not.toThrow();
+                expect(calls).toContain("clearRect");
+                expect(calls).toContain("fill");
+            }
+        }
+        const idle = T.createState();
+        expect(() => T.draw(ctx, idle, { ...DEFAULT_POINTING_VIZ_THEME, foreground: "#f1f2f2" }, 60, 60, 0, false)).not.toThrow();
     });
 });
 

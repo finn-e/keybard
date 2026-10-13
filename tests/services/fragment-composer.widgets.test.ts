@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { FragmentComposerService, isWidgetInstance, POINTING_POCKET_MARGIN, widgetInstanceIndices } from '../../src/services/fragment-composer.service';
+import { FragmentComposerService, isWidgetInstance, POINTING_POCKET_MARGIN, POINTING_SPAN_SHARE, widgetInstanceIndices } from '../../src/services/fragment-composer.service';
 import { FragmentService } from '../../src/services/fragment.service';
 import { KleService } from '../../src/services/kle.service';
 import { fileService } from '../../src/services/file.service';
@@ -32,26 +32,34 @@ describe('widget fragments (pointing slots)', () => {
         expect(withPointing).toEqual(without);
     });
 
-    it('fits each slot to the pocket from X to Enter and from X and C down to the thumb, mirrored about 12.5', () => {
+    it('puts a square under the ring and middle clusters, centred on the gap between X and C, as big as the keys allow', () => {
         for (const sixKey of [false, true]) {
             const kb = createSvalboardPointingKbinfo({ sixKey });
             const keys = Object.values(composer().composeLayout(kb));
+            const byRow = (rows: number[]) => keys.filter((k) => rows.includes(k.row));
             const slots = composer().composeWidgets(kb, new Map());
-            const left = slots.find((s) => s.side === 'left')!;
-            const right = slots.find((s) => s.side === 'right')!;
-            for (const s of [left, right]) {
-                expect(s.w).toBeGreaterThan(s.h); // wider than tall: X to Enter is longer than X to the thumb
-                expect(s.h).toBeGreaterThan(1.5);
-                // Keys directly above end at least a margin above it; the thumb starts at least a margin below.
-                const above = keys.filter((k) => k.x < s.x + s.w && s.x < k.x + k.w && k.y + k.h <= s.y + 1e-6);
-                const below = keys.filter((k) => k.x < s.x + s.w + 1 && s.x - 1 < k.x + k.w && k.y >= s.y + s.h - 1e-6);
-                expect(above.length, `${s.side} has finger keys above (${sixKey ? 6 : 5}-key)`).toBeGreaterThan(0);
-                expect(s.y - Math.max(...above.map((k) => k.y + k.h))).toBeGreaterThanOrEqual(POINTING_POCKET_MARGIN - 1e-6);
-                expect(below.length, `${s.side} has thumb keys below`).toBeGreaterThan(0);
-                expect(Math.min(...below.map((k) => k.y)) - (s.y + s.h)).toBeGreaterThanOrEqual(POINTING_POCKET_MARGIN - 1e-6);
+            for (const s of slots) {
+                const left = s.side === 'left';
+                const [ringRow, middleRow] = left ? [3, 2] : [8, 7];
+                const bottom = (row: number) => byRow([row]).reduce((a, k) => (k.y + k.h > a.y + a.h ? k : a));
+                const ring = bottom(ringRow), middle = bottom(middleRow);
+                const [outer, inner] = left ? [ring, middle] : [middle, ring];
+                expect(s.w).toBeCloseTo(s.h, 9);
+                expect(s.x + s.w / 2).toBeCloseTo((outer.x + outer.w + inner.x) / 2, 9);
+                expect(s.y).toBeCloseTo(Math.max(ring.y + ring.h, middle.y + middle.h) + POINTING_POCKET_MARGIN, 9);
+                const fingers = keys.filter((k) => (left ? [1, 2, 3, 4] : [6, 7, 8, 9]).includes(k.row));
+                const span = Math.max(...fingers.map((k) => k.x + k.w)) - Math.min(...fingers.map((k) => k.x));
+                expect(s.w).toBeLessThanOrEqual(POINTING_SPAN_SHARE * span + 1e-9);
+                expect(s.w).toBeGreaterThan(3); // much bigger than the gap between X and C
+                // As big as it can be: a little bigger would reach a key's margin.
+                const g = s.w + 0.05, gx = s.x + s.w / 2 - g / 2;
+                const blocked = keys.some((k) => k.x < gx + g + POINTING_POCKET_MARGIN && gx - POINTING_POCKET_MARGIN < k.x + k.w && k.y < s.y + g + POINTING_POCKET_MARGIN && s.y - POINTING_POCKET_MARGIN < k.y + k.h);
+                expect(blocked || s.w >= POINTING_SPAN_SHARE * span - 1e-6).toBe(true);
             }
-            expect((left.x + left.w / 2 + right.x + right.w / 2) / 2).toBeCloseTo(12.5, 5);
-            expect(left.y).toBeCloseTo(right.y, 5);
+            const [l, r] = [slots.find((s) => s.side === 'left')!, slots.find((s) => s.side === 'right')!];
+            expect((l.x + l.w / 2 + r.x + r.w / 2) / 2).toBeCloseTo(12.5, 5);
+            expect(l.y).toBeCloseTo(r.y, 9);
+            expect(l.w).toBeCloseTo(r.w, 9);
         }
     });
 

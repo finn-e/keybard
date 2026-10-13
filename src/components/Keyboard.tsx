@@ -743,16 +743,21 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                         }}
                     />
                 )}
-                {/* Pointing slots: the pocket between each hand's fingers and thumb. Squeezed with the finger
-                    clusters that frame it, and moved like thumb keys in 3D. */}
+                {/* Pointing slots: under each hand's ring and middle clusters, beside the thumb. The
+                    finger clusters close in on the thumbs as they squeeze, so the slot moves with
+                    the fingers and gives up the squeeze on its thumb side to stay clear of it. */}
                 {showPointingSlots && !(!is3DMode && isThumb3DOffsetActive) && pointingSlots.map((slot) => {
-                    const squeeze = fingerClusterSqueeze > 0 ? fingerClusterSqueeze : 0;
-                    const xPos = slot.x + (slot.side === "left" ? squeeze : -squeeze) - squeeze + layoutOffsets.offsetX;
+                    const squeeze = fingerClusterSqueeze > 0 ? Math.min(fingerClusterSqueeze, slot.w / 2) : 0;
+                    // Left: fingers stay put and the thumb moves left by the squeeze, so the slot keeps its
+                    // left edge. Right: fingers move left by twice the squeeze and the thumb by once, so
+                    // the slot keeps its right edge with the fingers.
+                    const xPos = slot.x - (slot.side === "left" ? 0 : squeeze) + layoutOffsets.offsetX;
                     const yPos = getYPos(slot.y) + layoutOffsets.offsetY;
+                    const sized = squeeze > 0 ? { ...slot, w: slot.w - squeeze, h: slot.h - squeeze } : slot;
                     return (
                         <PointingSlot
                             key={`pointing-${slot.side}`}
-                            slot={slot}
+                            slot={sized}
                             unitPx={currentUnitSize}
                             style={{
                                 left: xPos * currentUnitSize,

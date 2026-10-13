@@ -184,12 +184,14 @@ describe("Keyboard pointing slots", () => {
     expect(getByTestId("slot-right").dataset.unit).toBe("30");
   });
 
-  it("moves with the finger clusters around it when they squeeze toward the middle", () => {
+  it("keeps clear of the thumb when the finger clusters squeeze toward it", () => {
     mockLayoutSettings.fingerClusterSqueeze = 0.5;
     const { getByTestId } = renderKb();
-    // Finger keys move inward by the squeeze, then everything moves left by it.
-    expect(getByTestId("slot-left").style.left).toBe(`${(4.5 + 0.5 - 0.5) * 60}px`);
-    expect(getByTestId("slot-right").style.left).toBe(`${(18 - 0.5 - 0.5) * 60}px`);
+    // Left: the fingers stay and the thumb moves left by the squeeze, so the slot keeps its left
+    // edge and gives up the squeeze on its right. Right: the slot's right edge moves with the
+    // fingers (twice the squeeze), its left edge with the thumb (once).
+    expect(getByTestId("slot-left").style.left).toBe(`${4.5 * 60}px`);
+    expect(getByTestId("slot-right").style.left).toBe(`${(18 - 0.5) * 60}px`);
   });
 
   it("is hidden for thumbnails and print (showPointingSlots=false)", () => {

@@ -56,16 +56,21 @@ export interface ThumbCorrections {
 
 const NO_DETECTION = 0xff;
 
-/** Space kept between a pointing slot and the keys around its pocket, in key units. */
+/** Space kept between a pointing slot and the keys around it, in key units. */
 export const POINTING_POCKET_MARGIN = 0.15;
 
 /**
- * The rectangle of a hand's pointing pocket, less a margin all round. On the left
- * hand (QWERTY labels) it runs from the inner corner of X (the ring cluster's
- * bottom key) across to the inner corner of Enter (the outer key of the thumb's top
- * row), and from the bottom of X and C (the middle cluster's bottom key) down to
- * the top of the thumb; the right hand mirrors it with ".", "," and Space. Null
- * when the composition doesn't name those clusters.
+ * A pointing module's width as a share of its hand's finger span: on the board an
+ * Azoteq TPS43 touchpad is 43 mm across under finger clusters that span about 90 mm.
+ */
+export const POINTING_SPAN_SHARE = 43 / 90;
+
+/**
+ * The square a hand's pointing module fills, as on the board: right under the ring
+ * and middle finger clusters, centred on the gap between their bottom keys (X and C
+ * on the left in QWERTY, "." and "," on the right), as large as the keys around it
+ * allow (reaching down beside the thumb cluster), up to POINTING_SPAN_SHARE of the
+ * hand's finger span. Null when the composition doesn't name those clusters.
  */
 export function fitPointingPocket(
     kbinfo: KeyboardInfo,
@@ -88,15 +93,26 @@ export function fitPointingPocket(
     const thumb = clusterKeys(`${side}_thumb`);
     if (!ring || !middle || thumb.length === 0) return null;
 
-    const thumbTop = Math.min(...thumb.map((k) => k.y));
-    const topRow = thumb.filter((k) => k.y - thumbTop < 0.25);
-    const left = side === "left" ? ring.x + ring.w : Math.max(...topRow.map((k) => k.x + k.w));
-    const right = side === "left" ? Math.min(...topRow.map((k) => k.x)) : ring.x;
-    const top = Math.max(ring.y + ring.h, middle.y + middle.h);
-    const w = right - left - 2 * POINTING_POCKET_MARGIN;
-    const h = thumbTop - top - 2 * POINTING_POCKET_MARGIN;
-    if (!(w > 0.5 && h > 0.5)) return null;
-    return { x: left + POINTING_POCKET_MARGIN, y: top + POINTING_POCKET_MARGIN, w, h };
+    const fingers = ["pinky", "ring", "middle", "index"].flatMap((f) => clusterKeys(`${side}_${f}`));
+    const span = Math.max(...fingers.map((k) => k.x + k.w)) - Math.min(...fingers.map((k) => k.x));
+    const [outer, inner] = side === "left" ? [ring, middle] : [middle, ring];
+    const cx = (outer.x + outer.w + inner.x) / 2;
+    const top = Math.max(ring.y + ring.h, middle.y + middle.h) + POINTING_POCKET_MARGIN;
+    const all = Object.values(keys);
+    const m = POINTING_POCKET_MARGIN;
+    const fits = (size: number) =>
+        all.every((k) => k.x >= cx + size / 2 + m || k.x + k.w <= cx - size / 2 - m || k.y >= top + size + m || k.y + k.h <= top - m);
+
+    let lo = 0;
+    let hi = POINTING_SPAN_SHARE * span;
+    if (fits(hi)) lo = hi;
+    else for (let i = 0; i < 30; i++) {
+        const mid = (lo + hi) / 2;
+        if (fits(mid)) lo = mid;
+        else hi = mid;
+    }
+    if (lo < 1) return null;
+    return { x: cx - lo / 2, y: top, w: lo, h: lo };
 }
 
 function mapGet<K extends string | number, V>(m: Map<K, V> | Record<string, V> | undefined, k: K): V | undefined {

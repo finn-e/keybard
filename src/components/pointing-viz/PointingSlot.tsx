@@ -59,8 +59,8 @@ export function pointingSlotTitle(slot: PointingSlotState): string {
 }
 
 /**
- * One hand's pointing slot in the layout viewer: a dashed outline with the
- * module's animation driven by live (or demo) motion, or a still icon.
+ * One hand's pointing slot in the layout viewer: the module's animation driven by
+ * live (or demo) motion, or a still icon in a dashed outline.
  */
 export function PointingSlot({ slot, unitPx, style }: { slot: PointingSlotState; unitPx: number; style: React.CSSProperties }): React.JSX.Element {
     const reducedMotion = usePrefersReducedMotion();
@@ -70,6 +70,7 @@ export function PointingSlot({ slot, unitPx, style }: { slot: PointingSlotState;
 
     const outerW = slot.w * unitPx;
     const outerH = slot.h * unitPx;
+    const live = Boolean(Viz && source);
     const width = Math.max(1, outerW - 2 * SLOT_INSET_PX);
     const height = Math.max(1, outerH - 2 * SLOT_INSET_PX);
     const title = pointingSlotTitle(slot);
@@ -88,15 +89,25 @@ export function PointingSlot({ slot, unitPx, style }: { slot: PointingSlotState;
                 style={{
                     position: "absolute",
                     inset: 0,
-                    borderWidth: 1,
+                    // The outline marks an empty or undetected slot; a live module draws its own housing.
+                    borderWidth: live ? 0 : 1,
                     borderStyle: "dashed",
                     borderColor: theme.border,
                     borderRadius: 0.35 * unitPx,
-                    background: theme.background,
+                    background: live ? "transparent" : theme.background,
                     pointerEvents: "auto",
                 }}
             />
-            <div style={{ position: "absolute", left: SLOT_INSET_PX, top: SLOT_INSET_PX, width, height, pointerEvents: "none" }}>
+            <div
+                style={{
+                    position: "absolute",
+                    left: SLOT_INSET_PX,
+                    top: SLOT_INSET_PX,
+                    width,
+                    height,
+                    pointerEvents: "none",
+                }}
+            >
                 {Viz && source ? (
                     <VizBoundary key={slot.kind} fallback={placeholder}>
                         <Suspense fallback={placeholder}>

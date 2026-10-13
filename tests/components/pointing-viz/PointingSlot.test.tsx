@@ -60,7 +60,7 @@ describe('PointingSlot', () => {
         expect(live.calls.every(([, enabled]) => enabled === false)).toBe(true);
     });
 
-    it('lays out in key units: outline, rounded corners, inset drawing area, click-through', async () => {
+    it('lays out in key units: rounded corners, inset drawing area, click-through', async () => {
         const { container } = render(<PointingSlot slot={slot({ kind: 'trackball', sensor: 'pmw3360', description: 'PMW3360 trackball' })} unitPx={60} style={{ left: 270, top: 285 }} />);
         await screen.findByTestId('viz-trackball');
         const root = container.querySelector('[data-pointing-slot="left"]') as HTMLElement;
@@ -70,10 +70,18 @@ describe('PointingSlot', () => {
         const outline = screen.getByRole('img', { name: 'Left: PMW3360 trackball (detected)' });
         expect(outline.getAttribute('title')).toBe('Left: PMW3360 trackball (detected)');
         expect(outline.style.pointerEvents).toBe('auto');
-        expect(outline.style.borderStyle).toBe('dashed');
         expect(outline.style.borderRadius).toBe(`${0.35 * 60}px`);
         expect(vizProps.last).toMatchObject({ side: 'left', width: 142, height: 142, reducedMotion: false, sensor: 'pmw3360', source });
         expect(live.calls).toContainEqual(['left', true]);
+    });
+
+    it('drops the outline for a live module and keeps it for a placeholder', async () => {
+        const { container } = render(<PointingSlot slot={slot({ kind: 'touchpad', w: 3.8, h: 3.8 })} unitPx={40} style={{}} />);
+        await screen.findByTestId('viz-touchpad');
+        expect(vizProps.last).toMatchObject({ width: 144, height: 144 });
+        expect((container.querySelector('[role="img"]') as HTMLElement).style.borderWidth).toBe('0px');
+        const placeholder = render(<PointingSlot slot={slot({ kind: 'none' })} unitPx={40} style={{}} />);
+        expect((placeholder.container.querySelector('[role="img"]') as HTMLElement).style.borderWidth).toBe('1px');
     });
 
     it('sizes the drawing area for the small key size', async () => {

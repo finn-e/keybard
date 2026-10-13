@@ -5,15 +5,19 @@ import {
     _testCreateState,
     _testDotRadius,
     _testDraw,
+    _testChevronSlots,
     _testFingerTargets,
+    _testHaloScale,
     _testIngest,
     _testIsActive,
     _testNeedsAnimation,
     _testPadRect,
+    _testRipple,
     _testScrollAxis,
     _testScrollRate,
     _testSnap,
     _testStep,
+    _testStreakTaper,
     _testTrailLiveCount,
     _testTrailMs,
     _testTrailPush,
@@ -151,14 +155,17 @@ describe("TouchpadViz component", () => {
 });
 
 describe("TouchpadViz geometry", () => {
-    it("keeps the pad at 1.3:1 inside the area, at the slot size and 2x", () => {
-        for (const size of [60, 142, 284]) {
-            const p = _testPadRect(size, size);
-            expect(p.w / p.h).toBeCloseTo(1.3, 5);
+    it("keeps the pad near square (1.15:1) inside square and wide areas", () => {
+        for (const [w, h] of [[60, 60], [95, 95], [130, 130], [150, 95], [284, 284]]) {
+            const p = _testPadRect(w, h);
+            expect(p.w / p.h).toBeCloseTo(1.15, 5);
             expect(p.x).toBeGreaterThanOrEqual(0);
-            expect(p.x + p.w).toBeLessThanOrEqual(size);
-            expect(p.y + p.h).toBeLessThanOrEqual(size);
+            expect(p.y).toBeGreaterThan(0);
+            expect(p.x + p.w).toBeLessThanOrEqual(w);
+            // Room below for the shadow.
+            expect(h - (p.y + p.h)).toBeGreaterThanOrEqual(p.y - 1e-6);
             expect(p.dot).toBeGreaterThanOrEqual(2.5);
+            expect(Math.abs(p.x + p.w / 2 - w / 2)).toBeLessThan(1e-6);
         }
         const small = _testPadRect(60, 60);
         const large = _testPadRect(120, 120);
@@ -169,6 +176,64 @@ describe("TouchpadViz geometry", () => {
         expect(_testDotRadius(4, "precision", 0)).toBeLessThan(_testDotRadius(4, "pointer", 0));
         expect(_testDotRadius(4, "boost", 0)).toBeGreaterThan(_testDotRadius(4, "pointer", 0));
         expect(_testDotRadius(4, "pointer", 1)).toBeGreaterThan(_testDotRadius(4, "pointer", 0));
+    });
+
+    it("spreads the glow per mode: tight in precision, widest in boost", () => {
+        expect(_testHaloScale("precision", 1)).toBeLessThan(_testHaloScale("pointer", 0));
+        expect(_testHaloScale("boost", 0)).toBeGreaterThan(_testHaloScale("pointer", 1));
+        expect(_testHaloScale("pointer", 1)).toBeGreaterThan(_testHaloScale("pointer", 0));
+    });
+
+    it("tapers streaks from a point at the tail to full width at the head", () => {
+        expect(_testStreakTaper(0)).toBe(0);
+        expect(_testStreakTaper(1)).toBeCloseTo(1, 5);
+        let prev = -1;
+        for (let u = 0; u <= 1.0001; u += 0.1) {
+            const v = _testStreakTaper(u);
+            expect(v).toBeGreaterThan(prev);
+            prev = v;
+        }
+        expect(_testStreakTaper(-1)).toBe(0);
+        expect(_testStreakTaper(2)).toBeCloseTo(1, 5);
+    });
+
+    it("spreads the button ripple outward and fades it out", () => {
+        const start = _testRipple(0, 4, 100);
+        const mid = _testRipple(300, 4, 100);
+        const late = _testRipple(600, 4, 100);
+        expect(start.strength).toBeCloseTo(1, 5);
+        expect(mid.radius).toBeGreaterThan(start.radius);
+        expect(late.radius).toBeGreaterThan(mid.radius);
+        expect(late.radius).toBeLessThanOrEqual(4 * 1.1 + 100);
+        expect(mid.strength).toBeLessThan(start.strength);
+        expect(late.strength).toBeLessThan(mid.strength);
+        expect(_testRipple(650, 4, 100).strength).toBe(0);
+        expect(_testRipple(-5, 4, 100).strength).toBe(0);
+    });
+
+    it("streams chevron slots with soft fades at both ends", () => {
+        const pos = new Float32Array(3);
+        const fade = new Float32Array(3);
+        _testChevronSlots(0.25, 3, pos, fade);
+        expect(Array.from(pos)).toEqual([0.25, 1.25, 2.25]);
+        for (const f of fade) {
+            expect(f).toBeGreaterThan(0);
+            expect(f).toBeLessThanOrEqual(1);
+        }
+        expect(fade[1]).toBeGreaterThan(fade[0]);
+        expect(fade[1]).toBeGreaterThan(fade[2]);
+        _testChevronSlots(1.25, 3, pos, fade);
+        expect(pos[0]).toBeCloseTo(0.25, 5);
+        _testChevronSlots(0, 3, pos, fade);
+        expect(fade[0]).toBe(0);
+    });
+
+    it("keeps animating until the ripple has spread out", () => {
+        const st = _testCreateState();
+        st.pressT = 1000;
+        st.lastActiveT = -1e9;
+        expect(_testNeedsAnimation(st, 1600)).toBe(true);
+        expect(_testNeedsAnimation(st, 1700)).toBe(false);
     });
 
     it("uses a 600 ms trail, 1200 ms in boost", () => {
@@ -374,58 +439,99 @@ describe("TouchpadViz reduced motion snapshot", () => {
 describe("TouchpadViz drawing", () => {
     function recordingContext() {
         const calls: string[] = [];
+        const ops = new Set<string>();
+        const gradient = () => ({ addColorStop() {} });
+        const target: Record<string, unknown> = {
+            createRadialGradient: (...args: number[]) => {
+                for (const a of args) expect(Number.isFinite(a)).toBe(true);
+                calls.push("radial");
+                return gradient();
+            },
+            createLinearGradient: (...args: number[]) => {
+                for (const a of args) expect(Number.isFinite(a)).toBe(true);
+                calls.push("linear");
+                return gradient();
+            },
+        };
         const handler: ProxyHandler<Record<string, unknown>> = {
-            get(target, prop: string) {
-                if (prop in target) return target[prop];
+            get(t, prop: string) {
+                if (prop in t) return t[prop];
                 return (..._args: unknown[]) => {
                     calls.push(prop);
                 };
             },
-            set(target, prop: string, value) {
-                target[prop] = value;
-                if (prop === "strokeStyle" || prop === "fillStyle") calls.push(`${prop}=${String(value)}`);
+            set(t, prop: string, value) {
+                t[prop] = value;
+                if (prop === "strokeStyle" || prop === "fillStyle") calls.push(`${prop}=${typeof value === "string" ? value : "gradient"}`);
+                if (prop === "globalCompositeOperation") ops.add(String(value));
                 return true;
             },
         };
-        return { ctx: new Proxy({} as Record<string, unknown>, handler) as unknown as CanvasRenderingContext2D, calls };
+        const ctx = new Proxy(target, handler) as unknown as CanvasRenderingContext2D;
+        return { ctx, calls, ops, state: target };
     }
-    const theme = { ...DEFAULT_POINTING_VIZ_THEME, foreground: "FG", muted: "MU", accent: "AC" };
+    const theme = { ...DEFAULT_POINTING_VIZ_THEME, foreground: "FG", muted: "MU", accent: "AC", border: "BO" };
 
-    const drawFor = (mode: PointingMode | "idle", reducedMotion = false) => {
+    const drawFor = (mode: PointingMode | "idle", reducedMotion = false, size: [number, number] = [95, 95]) => {
         const st = runSim(mode, 1200);
-        const { ctx, calls } = recordingContext();
-        _testDraw(ctx, st, 1200, { width: 100, height: 100, theme, side: "left", reducedMotion });
-        return calls;
+        const rec = recordingContext();
+        _testDraw(rec.ctx, st, 1200, { width: size[0], height: size[1], theme, side: "left", reducedMotion });
+        return rec;
     };
 
-    it("draws only theme colours, and something different for every mode", () => {
-        const sigs = new Set<string>();
-        for (const mode of ["idle", "pointer", "scroll", "precision", "boost"] as const) {
-            const calls = drawFor(mode);
-            for (const c of calls) {
-                if (c.startsWith("strokeStyle=") || c.startsWith("fillStyle=")) {
-                    expect(["FG", "MU", "AC"]).toContain(c.split("=")[1]);
-                }
+    it("draws something different for every mode, at every slot size", () => {
+        for (const size of [[60, 60], [95, 95], [130, 130]] as [number, number][]) {
+            const sigs = new Set<string>();
+            for (const mode of ["idle", "pointer", "scroll", "precision", "boost"] as const) {
+                sigs.add(drawFor(mode, false, size).calls.join(","));
             }
-            sigs.add(calls.join(","));
+            expect(sigs.size).toBe(5);
         }
-        expect(sigs.size).toBe(5);
     });
 
-    it("uses accent for scroll chevrons and boost, not for plain pointer", () => {
-        expect(drawFor("scroll")).toContain("strokeStyle=AC");
-        expect(drawFor("boost")).toContain("fillStyle=AC");
-        expect(drawFor("pointer")).not.toContain("strokeStyle=AC");
+    it("uses only theme tokens or fixed glass/light colours", () => {
+        for (const mode of ["idle", "pointer", "scroll", "precision", "boost"] as const) {
+            for (const c of drawFor(mode).calls) {
+                if (!c.startsWith("strokeStyle=") && !c.startsWith("fillStyle=")) continue;
+                const v = c.split("=")[1];
+                expect(v === "AC" || v === "BO" || v === "gradient" || v.startsWith("rgba(")).toBe(true);
+            }
+        }
     });
 
-    it("draws an idle pad with no dot", () => {
-        const calls = drawFor("idle");
-        expect(calls).not.toContain("fillStyle=FG");
+    it("adds the glows with 'lighter' and restores source-over", () => {
+        const rec = drawFor("pointer");
+        expect(rec.ops.has("lighter")).toBe(true);
+        expect(rec.state.globalCompositeOperation).toBe("source-over");
+        expect(rec.state.globalAlpha).toBe(1);
+    });
+
+    it("draws contact glows (radial gradients) only when active", () => {
+        const idle = drawFor("idle").calls.filter((c) => c === "radial").length;
+        const pointer = drawFor("pointer").calls.filter((c) => c === "radial").length;
+        const scroll = drawFor("scroll").calls.filter((c) => c === "radial").length;
+        // Contact = halo + core + hot centre.
+        expect(pointer - idle).toBe(3);
+        expect(scroll - idle).toBe(6);
+    });
+
+    it("uses accent strokes for scroll chevrons, not for plain pointer", () => {
+        expect(drawFor("scroll").calls).toContain("strokeStyle=AC");
+        expect(drawFor("pointer").calls).not.toContain("strokeStyle=AC");
+    });
+
+    it("draws a ripple ring after a button press", () => {
+        const st = runSim("pointer", 1200);
+        st.pressT = 1100;
+        const rec = recordingContext();
+        _testDraw(rec.ctx, st, 1200, { width: 95, height: 95, theme, side: "left", reducedMotion: false });
+        expect(rec.calls).toContain("strokeStyle=AC");
     });
 
     it("draws a reduced-motion frame without throwing", () => {
         expect(() => drawFor("pointer", true)).not.toThrow();
         expect(() => drawFor("scroll", true)).not.toThrow();
+        expect(() => drawFor("boost", true, [60, 60])).not.toThrow();
     });
 
     it("isActive ignores zero samples", () => {
