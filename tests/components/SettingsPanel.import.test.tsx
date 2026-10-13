@@ -73,7 +73,7 @@ describe('import review', () => {
         await waitFor(() => expect(mocks.loadFromFile).toHaveBeenCalledTimes(1));
         expect(mocks.setKeyboard).not.toHaveBeenCalled();
         expect(mocks.sync).not.toHaveBeenCalled();
-        expect(screen.queryByText('Layout opened offline. No keyboard was changed.')).toBeNull();
+        expect(screen.queryByRole('status')).toBeNull();
     });
     it('requires pending edits to be resolved before reading another file', async () => {
         mocks.pending = { key: {} };
