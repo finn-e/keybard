@@ -63,6 +63,9 @@
     --color-kb-gray-border: var(--kb-gray-border);
     --color-kb-sidebar-base: #3E3E3E;
     --color-kb-sidebar-dark: #000000;
+    --color-kb-combo-row-lit: var(--kb-combo-row-lit);
+    --color-kb-combo-chip: var(--kb-combo-chip);
+    --color-kb-combo-chip-border: var(--kb-combo-chip-border);
 }
 
 :root {
@@ -76,6 +79,35 @@
     --kb-active: #000000;
     --kb-active-fg: #ffffff;
     --kb-popover: #EEEEEE;
+
+    /* Combo folded corner. Each combo hue has a light tone (on mid and dark layer colors) and
+       a deep tone (on orange, yellow, light gray and white keys), the way legends switch
+       between white and black ink. The fold sits on the key's own color, which does not
+       change with the theme, so the hues are the same in both themes; only the crease, seam
+       and chrome tokens are tuned per theme. Values mirror HUES in src/utils/combo-hues.ts. */
+    --kb-combo-fold-amber: #ffb24a;
+    --kb-combo-fold-amber-deep: #d77300;
+    --kb-combo-fold-violet: #bfa2ff;
+    --kb-combo-fold-violet-deep: #7a5ae6;
+    --kb-combo-fold-sky: #74c4ff;
+    --kb-combo-fold-sky-deep: #2b8be0;
+    --kb-combo-fold-lemon: #f6e35a;
+    --kb-combo-fold-lemon-deep: #ad8a00;
+    --kb-combo-fold-orchid: #f59ce6;
+    --kb-combo-fold-orchid-deep: #c24aa8;
+    --kb-combo-fold-mint: #6ee6ac;
+    --kb-combo-fold-mint-deep: #13a86a;
+    --kb-combo-fold-crease: rgb(0 0 0 / 0.42);
+    --kb-combo-fold-crease-strong: rgb(0 0 0 / 0.7);
+    --kb-combo-fold-seam: rgb(0 0 0 / 0.24);
+    /* Second sheet behind the fold (more combos than the cap): a pale strip between two
+       creases; on light keys (deep tones) a light step of the crease ink instead. */
+    --kb-combo-fold-sheet: rgb(255 255 255 / 0.4);
+    --kb-combo-fold-sheet-on-light: rgb(0 0 0 / 0.14);
+    /* Combos list row whose combo is previewed, and the preview readout. */
+    --kb-combo-row-lit: rgb(0 0 0 / 0.045);
+    --kb-combo-chip: #f1f2f2;
+    --kb-combo-chip-border: #d9dadb;
 
     --radius: 0.625rem;
     --background: oklch(1 0 0);
@@ -122,6 +154,13 @@
     --kb-active: #e8e9ea;
     --kb-active-fg: #111214;
     --kb-popover: #33363b;
+
+    --kb-combo-fold-crease: rgb(0 0 0 / 0.5);
+    --kb-combo-fold-crease-strong: rgb(0 0 0 / 0.74);
+    --kb-combo-fold-seam: rgb(0 0 0 / 0.28);
+    --kb-combo-row-lit: rgb(255 255 255 / 0.06);
+    --kb-combo-chip: #2a2c30;
+    --kb-combo-chip-border: #3a3d42;
 
     --background: #1d1e21;
     --foreground: #f1f2f2;
