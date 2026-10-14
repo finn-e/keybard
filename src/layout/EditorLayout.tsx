@@ -1,4 +1,5 @@
 import { useLayerClipboardActions } from "@/hooks/useLayerClipboardActions";
+import { ComboPreviewProvider } from "@/contexts/ComboPreviewContext";
 import { isEditorInput } from "@/utils/editor-input";
 import * as React from "react";
 
@@ -65,7 +66,9 @@ const EditorLayout = () => {
                 <LayoutSettingsProvider>
                     <LayerProvider>
                         <DragProvider onUnhandledDrop={handleUnhandledDrop}>
-                            <EditorLayoutInner />
+                            <ComboPreviewProvider>
+                                <EditorLayoutInner />
+                            </ComboPreviewProvider>
                             <DragOverlay />
                         </DragProvider>
                     </LayerProvider>

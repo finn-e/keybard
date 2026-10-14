@@ -33,6 +33,13 @@ export const SETTINGS: SettingDefinition[] = [
         type: "boolean",
     },
     {
+        name: "show-combo-indicators",
+        label: "Combo Indicators",
+        description: "Fold the corner of keys that are part of a combo. Hover or focus a key to preview its combos.",
+        defaultValue: true,
+        type: "boolean",
+    },
+    {
         name: "serial-assignment",
         label: "Serial Assignment",
         type: "select",
@@ -182,7 +189,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         name: "general",
         label: "General",
         icon: SettingsIcon,
-        settings: [THEME_SETTING_NAME, "typing-binds-key", "serial-assignment", "international-keyboards", "qmk-settings", "print"],
+        settings: [THEME_SETTING_NAME, "typing-binds-key", "show-combo-indicators", "serial-assignment", "international-keyboards", "qmk-settings", "print"],
     },
     {
         name: "fragments",

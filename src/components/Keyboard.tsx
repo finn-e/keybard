@@ -30,7 +30,15 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useChanges } from "@/hooks/useChanges";
 import { usePreviewedLayerColors } from "@/hooks/useLayerColorPreview";
 import { useIsDark } from "@/lib/theme";
+import { useComboPreview, type PreviewFocus } from "@/contexts/ComboPreviewContext";
+import { buildComboMembershipIndex, membershipCode, type ComboMembership } from "@/utils/combo-membership";
+import { assignComboHues } from "@/utils/combo-hues";
+import { keyComboAriaLabel, shortKeyName } from "@/utils/combo-labels";
+import { ComboReadout } from "@/components/combo/ComboReadout";
+import type { KeyComboProps } from "./Key";
 import { dark3DLabelColor, needsDarkIndicatorOutline, screenedBackdropHex } from "./layer3DColors";
+
+const NO_MEMBERSHIPS: ComboMembership[] = [];
 
 const TEXT_CLASS_TO_HEX: Record<string, string> = {
     "text-white": "#ffffff",
@@ -54,6 +62,8 @@ interface KeyboardProps {
     isToggling3D?: boolean;
     showDropTargetHighlight?: boolean;
     isLayerDragActive?: boolean;
+    /** Render the combo preview readout under this view (the primary view only, so it shows once). */
+    showComboReadout?: boolean;
     /** Draw each hand's pointing slot (live module animation). Only the primary layer view does, so stacked and 3D views don't each run their own animations. */
 }
 
@@ -74,6 +84,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
     isToggling3D = false,
     showDropTargetHighlight = false,
     isLayerDragActive = false,
+    showComboReadout = false,
 }) => {
     const {
         selectKeyboardKey,
@@ -85,6 +96,15 @@ export const Keyboard: React.FC<KeyboardProps> = ({
     const { activePanel, itemToEdit } = usePanels();
     const { hasPendingChangeForKey } = useChanges();
     const layerColorNames = usePreviewedLayerColors(keyboard.cosmetic?.layer_colors);
+
+    // Combo folded corners and preview (one setting owns whether they show; see ComboPreviewContext).
+    const comboPreview = useComboPreview();
+    const comboMembershipIndex = useMemo(() => buildComboMembershipIndex(keyboard.combos), [keyboard.combos]);
+    const comboHues = useMemo(
+        () => assignComboHues(keyboard),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [keyboard.combos, keyboard.keymap, keyboard.cosmetic?.layer_colors],
+    );
 
     // Use dynamic keylayout from fragments if available, otherwise fallback to hardcoded layout
     const { keyboardLayout, useFragmentLayout } = useMemo(() => {
@@ -773,6 +793,38 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                     const keycodeName = getKeycodeName(keycode);
                     const label = getLabelForKeycode(keycodeName, internationalLayout) || defaultLabel;
 
+                    // Combos this key triggers. A transparent key shows the combos of the key it falls through to.
+                    let combo: KeyComboProps | undefined;
+                    if (comboPreview.enabled) {
+                        const inherited = keycode === KC_TRNS && selectedLayer > 0 ? findEffectiveKey(selectedLayer, pos)?.keycode : undefined;
+                        const comboCode = membershipCode(Number(keycode), inherited == null ? undefined : Number(inherited));
+                        const memberships = comboMembershipIndex.get(comboCode) ?? NO_MEMBERSHIPS;
+                        const comboKeycode = getKeycodeName(comboCode);
+                        const focus: PreviewFocus = {
+                            kind: "key",
+                            id: `${instanceId ?? "kb"}:${selectedLayer}:${row}:${col}`,
+                            combos: memberships.map(m => m.index),
+                            keycode: comboKeycode,
+                        };
+                        combo = {
+                            memberships,
+                            hues: comboHues,
+                            focusSet: comboPreview.focusSet,
+                            ariaLabel: memberships.length ? keyComboAriaLabel(shortKeyName(comboKeycode), memberships) : undefined,
+                            pinned: comboPreview.isPinned(focus.id),
+                            onEnter: () => comboPreview.enter(focus),
+                            onLeave: comboPreview.leave,
+                            onFocus: (el) => comboPreview.focusIn(focus, el),
+                            onBlur: comboPreview.blurOut,
+                            onToggle: () => {
+                                // A key in no combo has nothing to pin: clicking it clears any pin.
+                                if (!memberships.length) comboPreview.clearPin();
+                                // While a combo editor is open, clicks assign keys; they do not pin.
+                                else if (!isTransmitting) comboPreview.togglePin(focus);
+                            },
+                        };
+                    }
+
                     // Styles for transmitting mode
                     const activeLayerColor = isTransmitting ? "sidebar" : layerColor;
                     const headerClass = headerClasses[activeLayerColor] || headerClasses["primary"];
@@ -841,6 +893,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                             h={layout.h}
                             keycode={keycodeName}
                             label={label}
+                            combo={combo}
                             row={row}
                             col={col}
                             data-key-x={layout.x}
@@ -926,6 +979,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                             h={layout.h}
                             keycode={ghostKeycodeName}
                             label={ghostLabel}
+                            combo={combo && { ...combo, interactive: false }}
                             row={row}
                             col={col}
                             onClick={handleKeyClick} // Clicking ghost selects the key slot on CURRENT layer
@@ -1018,6 +1072,13 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                         </Tooltip>
                     );
                 })}
+                {showComboReadout && comboPreview.enabled && (
+                    <ComboReadout
+                        combos={keyboard.combos || []}
+                        hues={comboHues}
+                        className="absolute left-0 top-full z-30 pointer-events-none"
+                    />
+                )}
             </div>
 
         </div>
