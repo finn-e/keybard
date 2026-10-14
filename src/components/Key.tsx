@@ -9,6 +9,8 @@ import { useLayoutSettings } from "@/contexts/LayoutSettingsContext";
 import { getKeyDisplayText } from "@/utils/key-display";
 import { ComboFold } from "@/components/combo/ComboFold";
 import type { ComboMembership } from "@/utils/combo-membership";
+import type { ComboIndicatorMode } from "@/lib/comboIndicators";
+import type { ComboPalette } from "@/utils/combo-hues";
 
 /** Combo indicator and preview wiring for a layout key (set only while combo indicators are on). */
 export interface KeyComboProps {
@@ -18,6 +20,9 @@ export interface KeyComboProps {
     hues: ReadonlyMap<number, number>;
     /** Combos being previewed, if any. */
     focusSet: ReadonlySet<number> | null;
+    /** Fold size mode and palette (see src/lib/comboIndicators.ts). */
+    mode?: ComboIndicatorMode;
+    palette?: ComboPalette;
     /** Accessible label (keys in a combo only). */
     ariaLabel?: string;
     pinned: boolean;
@@ -246,6 +251,8 @@ export const Key = React.forwardRef<HTMLDivElement, KeyProps>((props, ref) => {
             layerColor={layerColor}
             hues={combo!.hues}
             focusSet={combo!.focusSet}
+            mode={combo!.mode}
+            palette={combo!.palette}
             measureKey={`${keycode}|${label}|${keyContents?.type ?? ""}`}
         />
     ) : null;

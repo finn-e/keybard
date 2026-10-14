@@ -19,20 +19,46 @@ import { comboTriggerCodes } from "./combo-membership";
 
 export interface Hue { name: string; light: string; deep: string }
 
-/** Light and deep tones; the same values live as --kb-combo-fold-* tokens in src/index.css. */
+/**
+ * Default palette (saturated). Hue slot i is the token --kb-combo-fold-<name>; the same values
+ * live in src/index.css.
+ */
 export const HUES: Hue[] = [
-    { name: "amber", light: "#ffb24a", deep: "#d77300" },
-    { name: "violet", light: "#bfa2ff", deep: "#7a5ae6" },
-    { name: "sky", light: "#74c4ff", deep: "#2b8be0" },
-    { name: "lemon", light: "#f6e35a", deep: "#ad8a00" },
-    { name: "orchid", light: "#f59ce6", deep: "#c24aa8" },
-    { name: "mint", light: "#6ee6ac", deep: "#13a86a" },
+    { name: "amber", light: "#ffa923", deep: "#bd6400" },
+    { name: "violet", light: "#b795fe", deep: "#793cfe" },
+    { name: "sky", light: "#5bbbff", deep: "#0584e1" },
+    { name: "lemon", light: "#f8df05", deep: "#9e7e06" },
+    { name: "orchid", light: "#ff7dec", deep: "#ce0caf" },
+    { name: "mint", light: "#08eb9d", deep: "#049a60" },
 ];
+
+/**
+ * Colorblind-friendly palette (Okabe-Ito-derived, spread in lightness so neighbors also differ
+ * in lightness). The "Colorblind-Friendly Combo Colors" setting swaps the same tokens to these
+ * values (src/index.css, :root[data-combo-palette="colorblind"]), so slot i keeps its token name.
+ */
+export const CB_HUES: Hue[] = [
+    { name: "amber", light: "#ffb000", deep: "#5c3200" },
+    { name: "violet", light: "#1f5fbf", deep: "#1556b8" },
+    { name: "sky", light: "#9fd8ff", deep: "#c8eaff" },
+    { name: "lemon", light: "#fffeab", deep: "#fff6b0" },
+    { name: "orchid", light: "#b8410f", deep: "#aa2964" },
+    { name: "mint", light: "#341d6b", deep: "#201048" },
+];
+
+export type ComboPalette = "default" | "colorblind";
+export const paletteHues = (p: ComboPalette = "default") => p === "colorblind" ? CB_HUES : HUES;
 
 export type Tone = "light" | "deep";
 
 export const hueToken = (hue: number, tone: Tone) =>
     `var(--kb-combo-fold-${HUES[hue % HUES.length].name}${tone === "deep" ? "-deep" : ""})`;
+
+/** Texture cue (colorblind palette only): plain, fine lines, dots, by hue slot. Slots sharing a
+ *  texture (1 and 4, 2 and 5, 3 and 6) sit far apart on the colorblind lightness ladder. */
+export type Texture = "plain" | "lines" | "dots";
+const TEXTURES: Texture[] = ["plain", "lines", "dots"];
+export const textureOf = (hue: number): Texture => TEXTURES[hue % TEXTURES.length];
 
 const DEFAULT_LAYER_HEX = "#099e7c";
 const SIDEBAR_HEX = "#3e3e3e";
@@ -69,11 +95,16 @@ function hueAngle(h: string): number | null {
 
 /** Light keys (orange, yellow, light gray, white) take the deep tone. */
 export const toneFor = (layerHex: string): Tone => luminance(layerHex) > 0.4 ? "deep" : "light";
-export const hexFor = (hue: number, layerHex: string) => HUES[hue][toneFor(layerHex)];
+export const hexFor = (hue: number, layerHex: string, palette: ComboPalette = "default") =>
+    paletteHues(palette)[hue % HUES.length][toneFor(layerHex)];
+
+/** Texture ink for a piece: dark ink on light fills, light ink on dark ones. */
+export const cueInk = (fillHex: string) =>
+    luminance(fillHex) > 0.3 ? "var(--kb-combo-fold-cue-dark)" : "var(--kb-combo-fold-cue-light)";
 
 /** 0 = fine, 1 = weak (avoid), 2 = never. */
-export function clash(hue: number, layerHex: string): 0 | 1 | 2 {
-    const c = hexFor(hue, layerHex);
+export function clash(hue: number, layerHex: string, palette: ComboPalette = "default"): 0 | 1 | 2 {
+    const c = hexFor(hue, layerHex, palette);
     const cr = contrast(c, layerHex);
     if (cr < 1.3) return 2;
     const a = hueAngle(c), b = hueAngle(layerHex);
@@ -88,12 +119,16 @@ export interface KeyboardLike {
 }
 
 type CacheEntry = { keymap: unknown; colorsKey: string; hues: Map<number, number> };
-const cache = new WeakMap<object, CacheEntry>();
+const caches: Record<ComboPalette, WeakMap<object, CacheEntry>> = { default: new WeakMap(), colorblind: new WeakMap() };
 
-/** Combo slot -> hue index for the whole keyboard (DSatur-style greedy coloring). */
-export function assignComboHues(kb: KeyboardLike | null | undefined): Map<number, number> {
+/**
+ * Combo slot -> hue index for the whole keyboard (DSatur-style greedy coloring). Clashes with
+ * layer colors are judged against the palette on screen.
+ */
+export function assignComboHues(kb: KeyboardLike | null | undefined, palette: ComboPalette = "default"): Map<number, number> {
     const out = new Map<number, number>();
     if (!kb?.combos?.length) return out;
+    const cache = caches[palette];
     const colorsKey = JSON.stringify(kb.cosmetic?.layer_colors ?? {});
     const hit = cache.get(kb.combos);
     if (hit && hit.keymap === kb.keymap && hit.colorsKey === colorsKey) return hit.hues;
@@ -120,7 +155,7 @@ export function assignComboHues(kb: KeyboardLike | null | undefined): Map<number
         const taken = new Set(nbrs.get(slot)!.filter(m => out.has(m)).map(m => out.get(m)!));
         const score = (h: number) => {
             let worst = 0;
-            shownOn.get(slot)!.forEach(hex => { worst = Math.max(worst, clash(h, hex)); });
+            shownOn.get(slot)!.forEach(hex => { worst = Math.max(worst, clash(h, hex, palette)); });
             return (taken.has(h) ? 100 : 0) + worst * 10 + uses[h] / 100;
         };
         const hue = HUES.map((_, h) => h).sort((a, b) => score(a) - score(b) || a - b)[0];

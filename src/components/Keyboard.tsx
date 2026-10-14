@@ -35,6 +35,7 @@ import { buildComboMembershipIndex, membershipCode, type ComboMembership } from 
 import { assignComboHues } from "@/utils/combo-hues";
 import { keyComboAriaLabel, shortKeyName } from "@/utils/combo-labels";
 import { ComboReadout } from "@/components/combo/ComboReadout";
+import { useFoldMotion } from "@/hooks/useFoldMotion";
 import type { KeyComboProps } from "./Key";
 import { dark3DLabelColor, needsDarkIndicatorOutline, screenedBackdropHex } from "./layer3DColors";
 
@@ -101,10 +102,13 @@ export const Keyboard: React.FC<KeyboardProps> = ({
     const comboPreview = useComboPreview();
     const comboMembershipIndex = useMemo(() => buildComboMembershipIndex(keyboard.combos), [keyboard.combos]);
     const comboHues = useMemo(
-        () => assignComboHues(keyboard),
+        () => assignComboHues(keyboard, comboPreview.palette),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [keyboard.combos, keyboard.keymap, keyboard.cosmetic?.layer_colors],
+        [keyboard.combos, keyboard.keymap, keyboard.cosmetic?.layer_colors, comboPreview.palette],
     );
+    // "Small" folds grow while the pointer moves over the layout (no re-render per move).
+    const layoutRef = useRef<HTMLDivElement>(null);
+    useFoldMotion(layoutRef, comboPreview.mode === "small");
 
     // Use dynamic keylayout from fragments if available, otherwise fallback to hardcoded layout
     const { keyboardLayout, useFragmentLayout } = useMemo(() => {
@@ -659,6 +663,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
     return (
         <div className="p-4 pointer-events-none" data-keyboard-instance={instanceId}>
             <div
+                ref={layoutRef}
                 className="keyboard-layout relative pointer-events-none"
                 style={{
                     width: `${keyboardSize.width}px`,
@@ -810,6 +815,8 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                             memberships,
                             hues: comboHues,
                             focusSet: comboPreview.focusSet,
+                            mode: comboPreview.mode,
+                            palette: comboPreview.palette,
                             ariaLabel: memberships.length ? keyComboAriaLabel(shortKeyName(comboKeycode), memberships) : undefined,
                             pinned: comboPreview.isPinned(focus.id),
                             onEnter: () => comboPreview.enter(focus),

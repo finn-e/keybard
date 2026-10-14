@@ -44,11 +44,11 @@ const CombosPanel: React.FC = () => {
     const [timeoutInput, setTimeoutInput] = useState<string>("");
 
     const isHorizontal = layoutMode === "bottombar";
-    const { enabled: showComboIndicators } = useComboPreview();
+    const { enabled: showComboIndicators, palette: comboPalette } = useComboPreview();
     const comboHues = useMemo(
-        () => assignComboHues(keyboard),
+        () => assignComboHues(keyboard, comboPalette),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [keyboard?.combos, keyboard?.keymap, keyboard?.cosmetic?.layer_colors],
+        [keyboard?.combos, keyboard?.keymap, keyboard?.cosmetic?.layer_colors, comboPalette],
     );
 
     if (!keyboard) return null;

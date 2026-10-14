@@ -10,14 +10,18 @@
 // - Esc clears hover and pin. The focused element does not preview again until it blurs.
 // - An open combo editor counts as the previewed combo, under any hover or pin.
 //
-// The "show-combo-indicators" setting is the one owner of whether any of this shows: when it
-// is off, there are no folds and no previews.
+// The "combo-indicators" setting is the one owner of whether any of this shows and how big
+// the folds are: "off" means no folds and no previews. The "colorblind-combo-colors" setting
+// is the one owner of the palette; the provider mirrors it on the root element
+// (data-combo-palette), where src/index.css swaps the fold tokens.
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { usePanels } from "@/contexts/PanelsContext";
 import { isEditorInput } from "@/utils/editor-input";
+import { COMBO_COLORBLIND_SETTING, COMBO_INDICATOR_SETTING, comboIndicatorMode, type ComboIndicatorMode } from "@/lib/comboIndicators";
+import type { ComboPalette } from "@/utils/combo-hues";
 
-export const COMBO_INDICATOR_SETTING = "show-combo-indicators";
+export { COMBO_INDICATOR_SETTING };
 export const HOVER_DELAY_MS = 250;
 export const LEAVE_DELAY_MS = 90;
 
@@ -33,6 +37,9 @@ export interface PreviewFocus {
 
 export interface ComboPreviewApi {
     enabled: boolean;
+    /** Fold size mode ("off" when disabled). */
+    mode: ComboIndicatorMode;
+    palette: ComboPalette;
     /** Hover or pin (what the readout describes). */
     active: PreviewFocus | null;
     pin: PreviewFocus | null;
@@ -49,7 +56,7 @@ export interface ComboPreviewApi {
 
 const noop = () => { };
 const INERT: ComboPreviewApi = {
-    enabled: false, active: null, pin: null, focusSet: null,
+    enabled: false, mode: "off", palette: "default", active: null, pin: null, focusSet: null,
     enter: noop, leave: noop, focusIn: noop, blurOut: noop, togglePin: noop, clearPin: noop,
     isPinned: () => false,
 };
@@ -63,7 +70,9 @@ const KEEPS_PIN = "[data-combo-preview], button, a, input, select, textarea, lab
 
 export const ComboPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { getSetting } = useSettings();
-    const enabled = !!getSetting(COMBO_INDICATOR_SETTING);
+    const mode = comboIndicatorMode(getSetting(COMBO_INDICATOR_SETTING));
+    const enabled = mode !== "off";
+    const palette: ComboPalette = getSetting(COMBO_COLORBLIND_SETTING) === true ? "colorblind" : "default";
     const { activePanel, itemToEdit } = usePanels();
 
     const [hover, setHoverState] = useState<PreviewFocus | null>(null);
@@ -145,6 +154,14 @@ export const ComboPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     useEffect(() => () => clearTimers(), []);
 
+    // Palette tokens are swapped on the root, so the Combos list glyphs follow too.
+    useEffect(() => {
+        const root = document.documentElement;
+        if (palette === "colorblind") root.dataset.comboPalette = "colorblind";
+        else delete root.dataset.comboPalette;
+        return () => { delete root.dataset.comboPalette; };
+    }, [palette]);
+
     const editorCombo = activePanel === "combos" && typeof itemToEdit === "number" ? itemToEdit : null;
     const active = hover ?? pin;
     const focusSet = useMemo<ReadonlySet<number> | null>(() => {
@@ -156,9 +173,9 @@ export const ComboPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const isPinned = useCallback((id: string) => pin?.id === id, [pin]);
 
     const api = useMemo<ComboPreviewApi>(() => enabled
-        ? { enabled, active, pin, focusSet, enter, leave, focusIn, blurOut, togglePin, clearPin, isPinned }
+        ? { enabled, mode, palette, active, pin, focusSet, enter, leave, focusIn, blurOut, togglePin, clearPin, isPinned }
         : INERT,
-        [enabled, active, pin, focusSet, enter, leave, focusIn, blurOut, togglePin, clearPin, isPinned]);
+        [enabled, mode, palette, active, pin, focusSet, enter, leave, focusIn, blurOut, togglePin, clearPin, isPinned]);
 
     return <ComboPreviewContext.Provider value={api}>{children}</ComboPreviewContext.Provider>;
 };

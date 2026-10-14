@@ -5,6 +5,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { SettingsService } from "@/services/settings.service";
 import { DEFAULT_THEME_PREF, THEME_SETTING_NAME } from "@/lib/theme";
 import { COMBO_EDITOR_PLACEMENT_SETTING, DEFAULT_COMBO_EDITOR_PLACEMENT } from "@/lib/comboEditorPlacement";
+import { COMBO_COLORBLIND_SETTING, COMBO_INDICATOR_SETTING, DEFAULT_COMBO_INDICATOR_MODE } from "@/lib/comboIndicators";
 
 // Settings definitions - single source of truth
 export const SETTINGS: SettingDefinition[] = [
@@ -34,15 +35,27 @@ export const SETTINGS: SettingDefinition[] = [
         type: "boolean",
     },
     {
-        name: "show-combo-indicators",
+        name: COMBO_INDICATOR_SETTING,
         label: "Combo Indicators",
-        description: "Fold the corner of keys that are part of a combo. Hover or focus a key to preview its combos.",
-        defaultValue: true,
+        description: "Fold the corner of keys in a combo. Small grows while you move over the keyboard.",
+        type: "select",
+        items: [
+            { label: "Off", value: "off" },
+            { label: "Small", value: "small" },
+            { label: "Large", value: "large" },
+        ],
+        defaultValue: DEFAULT_COMBO_INDICATOR_MODE,
+    },
+    {
+        name: COMBO_COLORBLIND_SETTING,
+        label: "Colorblind-Friendly Combo Colors",
+        description: "Combo colors that stay apart with color blindness, each with its own texture.",
+        defaultValue: false,
         type: "boolean",
     },
     {
         name: COMBO_EDITOR_PLACEMENT_SETTING,
-        label: "Combo editor placement",
+        label: "Combo Editor Placement",
         description: "Where the combo editor sits while you pick keys on the keyboard.",
         type: "select",
         items: [
@@ -202,7 +215,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         name: "general",
         label: "General",
         icon: SettingsIcon,
-        settings: [THEME_SETTING_NAME, "typing-binds-key", "show-combo-indicators", COMBO_EDITOR_PLACEMENT_SETTING, "serial-assignment", "international-keyboards", "qmk-settings", "print"],
+        settings: [THEME_SETTING_NAME, "typing-binds-key", COMBO_INDICATOR_SETTING, COMBO_COLORBLIND_SETTING, COMBO_EDITOR_PLACEMENT_SETTING, "serial-assignment", "international-keyboards", "qmk-settings", "print"],
     },
     {
         name: "fragments",

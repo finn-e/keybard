@@ -5,9 +5,11 @@ import { Keyboard } from "@/components/Keyboard";
 import { ComboPreviewProvider, HOVER_DELAY_MS, LEAVE_DELAY_MS } from "@/contexts/ComboPreviewContext";
 import { ComboPreviewRow } from "@/components/combo/ComboPreviewRow";
 import { demoKeyboard } from "../utils/combo-test-helpers";
+import { FOLD_IDLE_MS } from "@/lib/comboIndicators";
 
 const state = vi.hoisted(() => ({
-    indicatorsOn: true,
+    mode: "small" as string,
+    colorblind: false,
     panels: { activePanel: null as string | null, itemToEdit: null as number | null },
     selectKeyboardKey: vi.fn(),
 }));
@@ -19,7 +21,10 @@ vi.mock("@/contexts/LayoutSettingsContext", () => ({
     }),
 }));
 vi.mock("@/contexts/SettingsContext", () => ({
-    useSettings: () => ({ getSetting: (name: string) => name === "show-combo-indicators" ? state.indicatorsOn : false }),
+    useSettings: () => ({
+        getSetting: (name: string) => name === "combo-indicators" ? state.mode
+            : name === "colorblind-combo-colors" ? state.colorblind : false,
+    }),
 }));
 vi.mock("@/contexts/KeyBindingContext", () => ({
     useKeyBinding: () => ({ selectKeyboardKey: state.selectKeyboardKey, selectedTarget: null, clearSelection: vi.fn(), assignKeycode: vi.fn() }),
@@ -59,7 +64,8 @@ const tick = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
 
 beforeEach(() => {
     vi.useFakeTimers();
-    state.indicatorsOn = true;
+    state.mode = "small";
+    state.colorblind = false;
     state.panels = { activePanel: null, itemToEdit: null };
 });
 afterEach(() => { vi.useRealTimers(); });
@@ -69,11 +75,75 @@ describe("combo folded corner on the layout", () => {
         renderAll();
         expect(order("KC_J")).toBe("0");
         expect(order("KC_K")).toBe("0,1,4");
-        // D is in combos 2, 3, 4 and 5: the lowest three plus the second sheet.
+        // D is in combos 2, 3, 4 and 5: the lowest three, and nothing else.
         expect(order("KC_D")).toBe("2,3,4");
-        expect(foldOf("KC_D")!.querySelector('[data-fold-part="sheet"]')).not.toBeNull();
-        expect(foldOf("KC_K")!.querySelector('[data-fold-part="sheet"]')).toBeNull();
+        expect(foldOf("KC_D")!.querySelectorAll("[data-fold-piece]")).toHaveLength(3);
         expect(foldOf("KC_Q")).toBeNull();
+    });
+
+    it("draws no overflow mark on a key with more than three combos", () => {
+        renderAll();
+        for (const code of ["KC_D", "KC_E"]) {
+            const fold = foldOf(code)!;
+            expect(fold.querySelector('[data-fold-part="sheet"], [data-fold-part="sheet-edge"]')).toBeNull();
+            // The crease is the only part besides the pieces and seams.
+            const parts = [...fold.querySelectorAll("[data-fold-part]")].map(e => e.getAttribute("data-fold-part"));
+            expect(parts).toEqual(["crease"]);
+            expect(fold.querySelectorAll("[data-fold-piece]")).toHaveLength(3);
+            expect(fold.querySelectorAll("line")).toHaveLength(2);
+        }
+    });
+
+    it("Small scales folds toward the corner at rest; Large keeps them large", () => {
+        const { unmount } = renderAll();
+        const restOf = (code: string) => (foldOf(code)!.querySelector("[data-fold-scale]") as SVGGElement).style.getPropertyValue("--kb-fold-rest");
+        const rest = Number(restOf("KC_J"));
+        expect(rest).toBeGreaterThan(0.4);
+        expect(rest).toBeLessThan(1);
+        unmount();
+        state.mode = "large";
+        renderAll();
+        expect(restOf("KC_J")).toBe("1.0000");
+    });
+
+    it("pointer movement over the keyboard marks it active until the idle delay, without re-rendering", () => {
+        renderAll();
+        const layout = document.querySelector(".keyboard-layout") as HTMLElement;
+        const fold = foldOf("KC_J");
+        fireEvent.pointerMove(keyEl("KC_Q"), { pointerType: "mouse" });
+        expect(layout.getAttribute("data-combo-motion")).toBe("active");
+        tick(FOLD_IDLE_MS - 10);
+        expect(layout.getAttribute("data-combo-motion")).toBe("active");
+        tick(20);
+        expect(layout.hasAttribute("data-combo-motion")).toBe(false);
+        // Moving off the keyboard rests at once.
+        fireEvent.pointerMove(keyEl("KC_Q"), { pointerType: "mouse" });
+        fireEvent.pointerMove(screen.getByText("elsewhere"), { pointerType: "mouse", clientX: -50, clientY: -50 });
+        expect(layout.hasAttribute("data-combo-motion")).toBe(false);
+        // Keyboard focus on a combo key counts as activity.
+        act(() => keyEl("KC_J").focus());
+        expect(layout.getAttribute("data-combo-motion")).toBe("active");
+        // Same fold element throughout: motion is an attribute, not a render.
+        expect(foldOf("KC_J")).toBe(fold);
+    });
+
+    it("previewed keys stay large", () => {
+        renderAll();
+        const big = (code: string) => foldOf(code)!.querySelector("[data-fold-scale]")!.hasAttribute("data-fold-big");
+        expect(big("KC_J")).toBe(false);
+        fireEvent.mouseEnter(keyEl("KC_J"));
+        tick(HOVER_DELAY_MS);
+        expect(big("KC_J")).toBe(true);
+        expect(big("KC_K")).toBe(true);
+        expect(big("KC_E")).toBe(false);
+    });
+
+    it("Large mode has no motion", () => {
+        state.mode = "large";
+        renderAll();
+        const layout = document.querySelector(".keyboard-layout") as HTMLElement;
+        fireEvent.pointerMove(keyEl("KC_Q"), { pointerType: "mouse" });
+        expect(layout.hasAttribute("data-combo-motion")).toBe(false);
     });
 
     it("gives a combo the same color on every key it is on", () => {
@@ -94,7 +164,7 @@ describe("combo folded corner on the layout", () => {
     });
 
     it("draws nothing and adds no tab stops when the setting is off", () => {
-        state.indicatorsOn = false;
+        state.mode = "off";
         renderAll();
         expect(document.querySelector("svg[data-combo-fold]")).toBeNull();
         expect(keyEl("KC_J").getAttribute("tabindex")).toBeNull();
@@ -221,13 +291,46 @@ describe("combo preview", () => {
     });
 });
 
+describe("palette", () => {
+    it("the colorblind setting swaps the palette tokens and adds the texture cue", () => {
+        const { unmount } = renderAll();
+        expect(document.documentElement.dataset.comboPalette).toBeUndefined();
+        expect(document.querySelector("[data-fold-texture]")).toBeNull();
+        unmount();
+        state.colorblind = true;
+        renderAll();
+        expect(document.documentElement.dataset.comboPalette).toBe("colorblind");
+        const textured = [...document.querySelectorAll("svg[data-combo-fold] [data-fold-texture]")];
+        expect(textured.length).toBeGreaterThan(0);
+        for (const el of textured) {
+            expect(["lines", "dots"]).toContain(el.getAttribute("data-fold-texture"));
+            const id = /url\(#(.+)\)/.exec(el.getAttribute("fill")!)![1];
+            expect(el.closest("svg")!.querySelector(`pattern[id="${id}"]`)).not.toBeNull();
+        }
+        // Fills still come from the same hue tokens; the root attribute swaps their values.
+        expect(foldOf("KC_J")!.querySelector("[data-fold-piece]")!.getAttribute("fill")).toMatch(/^var\(--kb-combo-fold-/);
+    });
+});
+
 describe("readout", () => {
+    it("lists every combo on a key with more than three, marking those not drawn", () => {
+        renderAll();
+        fireEvent.mouseEnter(keyEl("KC_E"));
+        tick(HOVER_DELAY_MS);
+        const lines = [...readout()!.querySelectorAll("[data-readout-combo]")];
+        expect(lines.map(l => l.getAttribute("data-readout-combo"))).toEqual(["6", "7", "8", "9", "10"]);
+        const notShown = lines.filter(l => l.querySelector("[data-readout-not-shown]")).map(l => l.getAttribute("data-readout-combo"));
+        expect(notShown).toEqual(["9", "10"]);
+        expect(lines[3].textContent).toContain("not shown on key");
+    });
+
     it("lists chord keys and output for each combo", () => {
         renderAll();
         fireEvent.mouseEnter(keyEl("KC_E"));
         tick(HOVER_DELAY_MS);
         const text = readout()!.textContent!;
-        expect(text).toContain("in 5 combos · 3 shown on the key");
+        expect(text).toContain("in 5 combos");
+        expect(text).not.toContain("shown on the key");
         expect(text).toContain("Combo 10");
         expect(text).toContain("off");
         expect(screen.getByLabelText("Combo 7: W plus E gives =")).toBeTruthy();

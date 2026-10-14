@@ -7,7 +7,7 @@ import type { ComboEntry } from "@/types/keyboard.types";
 import { useComboPreview } from "@/contexts/ComboPreviewContext";
 import { comboInputs, type ComboMembership } from "@/utils/combo-membership";
 import { comboSentence, shortKeyName } from "@/utils/combo-labels";
-import { FOLD_CAP } from "@/utils/combo-fold";
+import { hiddenOnKey } from "@/utils/combo-fold";
 import { ComboOptions } from "@/types/keyboard.types";
 import { FoldGlyph } from "./FoldGlyph";
 
@@ -27,7 +27,7 @@ function Chip({ children, out = false }: { children: React.ReactNode; out?: bool
     );
 }
 
-export function ComboLine({ c, hue }: { c: ComboMembership; hue: number }) {
+export function ComboLine({ c, hue, notShown = false }: { c: ComboMembership; hue: number; notShown?: boolean }) {
     return (
         <li className="flex items-center gap-2 min-h-6 text-[13px]" data-readout-combo={c.index}>
             <span className="inline-flex w-[18px] h-4 items-center justify-center"><FoldGlyph hue={hue} disabled={!c.enabled} /></span>
@@ -43,6 +43,7 @@ export function ComboLine({ c, hue }: { c: ComboMembership; hue: number }) {
                 <Chip out>{shortKeyName(c.output)}</Chip>
             </span>
             {!c.enabled && <span className="text-[11px] text-muted-foreground border border-kb-combo-chip-border rounded-full px-1.5">off</span>}
+            {notShown && <span className="text-[11px] text-muted-foreground" data-readout-not-shown="">not shown on key</span>}
         </li>
     );
 }
@@ -59,6 +60,8 @@ export function ComboReadout({ combos, hues, className }: {
     if (active) {
         const list = active.combos.map(i => membershipOf(combos, i)).filter((c): c is ComboMembership => !!c);
         const pinned = isPinned(active.id);
+        // A key draws its three lowest-numbered combos; the readout names the rest too.
+        const hidden = active.kind === "key" ? hiddenOnKey(list) : new Set<number>();
         let title: string;
         let meta: string;
         if (active.kind === "combo") {
@@ -67,7 +70,7 @@ export function ComboReadout({ combos, hues, className }: {
             meta = c ? `${c.inputs.length} keys${c.enabled ? "" : " · off"}` : "";
         } else {
             title = shortKeyName(active.keycode);
-            meta = `in ${list.length} combo${list.length === 1 ? "" : "s"}` + (list.length > FOLD_CAP ? ` · ${FOLD_CAP} shown on the key` : "");
+            meta = `in ${list.length} combo${list.length === 1 ? "" : "s"}`;
         }
         body = (
             <div
@@ -81,7 +84,7 @@ export function ComboReadout({ combos, hues, className }: {
                 </div>
                 {list.length > 0 && (
                     <ul className="list-none mt-2 p-0 grid gap-1">
-                        {list.map(c => <ComboLine key={c.index} c={c} hue={hues.get(c.index) ?? 0} />)}
+                        {list.map(c => <ComboLine key={c.index} c={c} hue={hues.get(c.index) ?? 0} notShown={hidden.has(c.index)} />)}
                     </ul>
                 )}
             </div>

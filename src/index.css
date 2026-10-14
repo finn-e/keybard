@@ -87,26 +87,26 @@
        a deep tone (on orange, yellow, light gray and white keys), the way legends switch
        between white and black ink. The fold sits on the key's own color, which does not
        change with the theme, so the hues are the same in both themes; only the crease, seam
-       and chrome tokens are tuned per theme. Values mirror HUES in src/utils/combo-hues.ts. */
-    --kb-combo-fold-amber: #ffb24a;
-    --kb-combo-fold-amber-deep: #d77300;
-    --kb-combo-fold-violet: #bfa2ff;
-    --kb-combo-fold-violet-deep: #7a5ae6;
-    --kb-combo-fold-sky: #74c4ff;
-    --kb-combo-fold-sky-deep: #2b8be0;
-    --kb-combo-fold-lemon: #f6e35a;
-    --kb-combo-fold-lemon-deep: #ad8a00;
-    --kb-combo-fold-orchid: #f59ce6;
-    --kb-combo-fold-orchid-deep: #c24aa8;
-    --kb-combo-fold-mint: #6ee6ac;
-    --kb-combo-fold-mint-deep: #13a86a;
+       and chrome tokens are tuned per theme. Values mirror HUES in src/utils/combo-hues.ts;
+       the colorblind-friendly palette (CB_HUES) swaps them below. */
+    --kb-combo-fold-amber: #ffa923;
+    --kb-combo-fold-amber-deep: #bd6400;
+    --kb-combo-fold-violet: #b795fe;
+    --kb-combo-fold-violet-deep: #793cfe;
+    --kb-combo-fold-sky: #5bbbff;
+    --kb-combo-fold-sky-deep: #0584e1;
+    --kb-combo-fold-lemon: #f8df05;
+    --kb-combo-fold-lemon-deep: #9e7e06;
+    --kb-combo-fold-orchid: #ff7dec;
+    --kb-combo-fold-orchid-deep: #ce0caf;
+    --kb-combo-fold-mint: #08eb9d;
+    --kb-combo-fold-mint-deep: #049a60;
     --kb-combo-fold-crease: rgb(0 0 0 / 0.42);
     --kb-combo-fold-crease-strong: rgb(0 0 0 / 0.7);
     --kb-combo-fold-seam: rgb(0 0 0 / 0.24);
-    /* Second sheet behind the fold (more combos than the cap): a pale strip between two
-       creases; on light keys (deep tones) a light step of the crease ink instead. */
-    --kb-combo-fold-sheet: rgb(255 255 255 / 0.4);
-    --kb-combo-fold-sheet-on-light: rgb(0 0 0 / 0.14);
+    /* Texture cue ink (colorblind palette only), picked per piece by its lightness. */
+    --kb-combo-fold-cue-dark: rgb(0 0 0 / 0.42);
+    --kb-combo-fold-cue-light: rgb(255 255 255 / 0.72);
     /* Combos list row whose combo is previewed, and the preview readout. */
     --kb-combo-row-lit: rgb(0 0 0 / 0.045);
     --kb-combo-chip: #f1f2f2;
@@ -202,6 +202,50 @@
 
 html.dark {
     color-scheme: dark;
+}
+
+/* Colorblind-friendly combo colors (the "Colorblind-Friendly Combo Colors" setting sets the
+   attribute). Okabe-Ito-derived; mirrors CB_HUES in src/utils/combo-hues.ts. */
+:root[data-combo-palette="colorblind"] {
+    --kb-combo-fold-amber: #ffb000;
+    --kb-combo-fold-amber-deep: #5c3200;
+    --kb-combo-fold-violet: #1f5fbf;
+    --kb-combo-fold-violet-deep: #1556b8;
+    --kb-combo-fold-sky: #9fd8ff;
+    --kb-combo-fold-sky-deep: #c8eaff;
+    --kb-combo-fold-lemon: #fffeab;
+    --kb-combo-fold-lemon-deep: #fff6b0;
+    --kb-combo-fold-orchid: #b8410f;
+    --kb-combo-fold-orchid-deep: #aa2964;
+    --kb-combo-fold-mint: #341d6b;
+    --kb-combo-fold-mint-deep: #201048;
+}
+
+/* Combo fold size. Each fold is drawn at its large size and scaled toward the key corner by
+   --kb-fold-rest (its compact size) while at rest. Pointer movement over the keyboard sets
+   data-combo-motion="active" on the layout, and a previewed key's fold carries data-fold-big;
+   both grow it to full size. One transform per fold, no layout. */
+[data-fold-scale] {
+    transform: scale(var(--kb-fold-rest, 1));
+    transition: transform 450ms ease-in-out;
+}
+[data-combo-motion="active"] [data-fold-scale],
+[data-fold-scale][data-fold-big] {
+    transform: none;
+    transition: transform 160ms ease-out;
+}
+/* Touch and other pointers that cannot hover: always large. */
+@media (hover: none), (pointer: coarse) {
+    [data-fold-scale] {
+        transform: none;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    [data-fold-scale],
+    [data-combo-motion="active"] [data-fold-scale],
+    [data-fold-scale][data-fold-big] {
+        transition: none;
+    }
 }
 
 /* Printed output stays light even when the editor is in dark mode.
