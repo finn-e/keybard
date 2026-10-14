@@ -13,7 +13,7 @@ Sign conventions everywhere: dx +right, dy +down (HID). v +up, h +right (HID whe
 ---
 
 
-> **What ships.** Keybard's `main` draws each hand's detected module as a still icon in its pointing slot and lists the slot, locked, in the Fragments panel. The live `0x2D` motion poll, the three animations and the demo pages are not on `main`: they are kept on the `feat/pointing-motion` branch of `morganvenable/keybard`. Sections C4, C5's animation components, D and the animation tests in E describe that branch.
+> **What ships.** Keybard's `main` records each hand's detected module in the fragments and lists it, locked, in the Fragments panel. The layout draws nothing for it (owner decision, 2026-10-14): the slot drawing came off `main` with the animations. The live `0x2D` motion poll, the three animations and the demo pages are not on `main`: they are kept on the `feat/pointing-motion` branch of `morganvenable/keybard`. Sections C4, C5's animation components, D and the animation tests in E describe that branch.
 
 ## A. Board definition (sval.json)
 
