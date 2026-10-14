@@ -104,9 +104,10 @@ export const ComboPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     const clearPin = useCallback(() => { if (pinRef.current) commitPin(null); }, [commitPin]);
 
-    // Esc clears the preview. Runs in the capture phase so that, when it clears a pin, it can
-    // keep "typing binds a key" from also binding Esc to the selected key. It never consumes
-    // Esc while a dialog is open, in a text field, or when there is nothing to clear.
+    // Esc clears the preview. Runs in the capture phase so that, when it clears a preview, it
+    // keeps "typing binds a key" from also binding Esc to the selected key (clicking a key both
+    // selects and pins it). It never consumes Esc while a dialog is open, in a text field, or
+    // when there is nothing to clear, so a second Esc behaves as before.
     useEffect(() => {
         if (!enabled) return;
         const onKey = (e: KeyboardEvent) => {
@@ -115,7 +116,7 @@ export const ComboPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ 
             clearTimers();
             suppressEl.current = document.activeElement;
             if (!had) return;
-            const consume = !!pinRef.current && !document.querySelector("[role='dialog'], [role='alertdialog']");
+            const consume = !document.querySelector("[role='dialog'], [role='alertdialog']");
             commitPin(null);
             commitHover(null);
             if (consume) e.preventDefault();

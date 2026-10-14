@@ -129,6 +129,14 @@ describe("combo preview", () => {
         expect(foldOf("KC_D")!.style.opacity).toBe("1");
     });
 
+    it("Esc that clears a hover preview is consumed, so it does not bind Esc to a selected key", () => {
+        renderAll();
+        fireEvent.mouseEnter(keyEl("KC_J"));
+        tick(HOVER_DELAY_MS);
+        expect(fireEvent.keyDown(window, { key: "Escape" })).toBe(false);
+        expect(readout()).toBeNull();
+    });
+
     it("pins on click, keeps the pin after the pointer leaves, and Esc clears it", () => {
         renderAll();
         fireEvent.click(keyEl("KC_K"));
