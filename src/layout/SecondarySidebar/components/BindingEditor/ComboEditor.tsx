@@ -11,15 +11,21 @@ import { useBindingChanges } from "@/hooks/useBindingChanges";
 import EditorKey from "./EditorKey";
 import { ComboEntry } from "@/types/keyboard.types";
 
-const ComboEditor: FC = () => {
+interface ComboEditorProps {
+    /** One compact row for the underslung placements (dock, anchored, float). */
+    strip?: boolean;
+}
+
+const ComboEditor: FC<ComboEditorProps> = ({ strip = false }) => {
     const { keyboard, setKeyboard } = useKeyboard();
     const persistBinding = useBindingChanges();
     const { setPanelToGoBack, setAlternativeHeader, itemToEdit, initialEditorSlot } = usePanels();
     const { selectComboKey, selectedTarget } = useKeyBinding();
     const { layoutMode } = useLayoutSettings();
     const isHorizontal = layoutMode === "bottombar";
-    const keySize = isHorizontal ? "w-[45px] h-[45px]" : "w-[50px] h-[50px]";
-    const keyVariant = isHorizontal ? "medium" : "default";
+    const isCompact = strip || isHorizontal;
+    const keySize = isCompact ? "w-[45px] h-[45px]" : "w-[50px] h-[50px]";
+    const keyVariant = isCompact ? "medium" : "default";
 
     // Fix type assertion
     const currCombo = keyboard?.combos?.[itemToEdit!] as ComboEntry;
@@ -115,11 +121,11 @@ const ComboEditor: FC = () => {
 
     const renderComboKey = (keycode: string, slot: number) => {
         const isSelected = isSlotSelected(slot);
-        const trashOffset = isHorizontal ? "-left-8" : "-left-9";
-        const trashSize = isHorizontal ? "w-3 h-3" : "w-4 h-4";
+        const trashOffset = strip ? "-left-7" : isHorizontal ? "-left-8" : "-left-9";
+        const trashSize = isCompact ? "w-3 h-3" : "w-4 h-4";
 
         return (
-            <div className="flex flex-col items-center gap-1">
+            <div className="flex flex-col items-center gap-1" role="group" aria-label={slot < 4 ? `Trigger key ${slot + 1}` : "Combo output"}>
                 <EditorKey
                     keycode={keycode}
                     selected={isSelected}
@@ -148,6 +154,25 @@ const ComboEditor: FC = () => {
     };
 
     if (!currCombo) return <div className="p-5">Combo entry not found</div>;
+
+    // Strip layout: one compact row, [k1] + [k2] + [k3] + [k4] -> output.
+    // It wraps between keys when the space is narrow.
+    if (strip) {
+        return (
+            <div className="combo-strip flex flex-row flex-wrap items-center gap-x-2 gap-y-2 px-2 py-1" aria-label="Combo keys">
+                {[0, 1, 2, 3].map((slotIdx) => (
+                    <div key={slotIdx} className="flex flex-row items-center gap-2">
+                        {slotIdx > 0 && <Plus aria-hidden="true" className="w-4 h-4 shrink-0 text-kb-ink" />}
+                        {renderComboKey(currCombo.keys[slotIdx], slotIdx)}
+                    </div>
+                ))}
+                <div className="flex flex-row items-center gap-2">
+                    <ArrowRightFromLine aria-hidden="true" className="w-4 h-4 shrink-0 text-kb-ink" />
+                    {renderComboKey(currCombo.output, 4)}
+                </div>
+            </div>
+        );
+    }
 
     // Horizontal layout: 2x2 grid of input keys + arrow + output
     if (isHorizontal) {
