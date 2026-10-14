@@ -68,8 +68,6 @@
 :root {
     /* kb-* themed tokens: light values equal the literals they replaced. */
     --kb-gray: #f1f2f2;
-    /* Mode cues (scroll/precision/boost) in the pointing slots' animations. */
-    --kb-pointing-accent: #2b88c0;
     --kb-key-border: #f1f2f2;
     --kb-gray-medium: #eaeae9;
     --kb-gray-border: #a7a9ac;
@@ -124,7 +122,6 @@
     --kb-active: #e8e9ea;
     --kb-active-fg: #111214;
     --kb-popover: #33363b;
-    --kb-pointing-accent: #5bb4e6;
 
     --background: #1d1e21;
     --foreground: #f1f2f2;
@@ -229,25 +226,5 @@ html.dark {
 
     .hg-button.hg-functionBtn.hg-button-space {
         width: 350px;
-    }
-}
-
-/* Pointing slot placeholder: "Detecting" spinner (src/components/pointing-viz/PointingPlaceholder.tsx). */
-@keyframes kb-pointing-spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-.kb-pointing-spin {
-    animation: kb-pointing-spin 1.2s linear infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-    .kb-pointing-spin {
-        animation: none;
-    }
-}
-@media print {
-    [data-pointing-slot] {
-        display: none !important;
     }
 }
