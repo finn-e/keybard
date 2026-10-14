@@ -63,6 +63,15 @@ describe('shared panel placement', () => {
   }
   state.itemToEdit = null;
  });
+ it('keeps an unmeasured combo editor focusable so it can take the opening focus', () => {
+  state.activePanel = 'combos';
+  state.itemToEdit = 0;
+  render(<SecondarySidebar comboPlacement="dock" />);
+  const workspace = screen.getByLabelText('Binding editor');
+  expect(workspace.style.visibility).not.toBe('hidden');
+  expect(document.activeElement).toBe(workspace);
+  state.itemToEdit = null;
+ });
  it('leaves other binding editors where they were', () => {
   state.activePanel = 'macros';
   state.itemToEdit = 0;

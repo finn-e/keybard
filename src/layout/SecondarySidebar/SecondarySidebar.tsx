@@ -245,7 +245,9 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                 className="binding-workspace z-30 bg-kb-gray-medium shadow-lg flex min-h-0"
                 aria-label="Binding editor"
                 data-combo-placement={comboActive ? comboPlacement : undefined}
-                style={comboActive ? (comboGeometry.style ?? { visibility: "hidden" }) : undefined}
+                // Until it is measured the editor is transparent, not hidden:
+                // a visibility-hidden element cannot take the opening focus.
+                style={comboActive ? (comboGeometry.style ?? { opacity: 0, pointerEvents: "none" }) : undefined}
                 onPointerDown={comboActive ? comboGeometry.onPointerDown : undefined}
             >
                 {bottom && !comboActive && <div className="shrink-0 bg-kb-surface overflow-y-auto">
