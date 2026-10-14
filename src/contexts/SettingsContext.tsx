@@ -4,6 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 
 import { SettingsService } from "@/services/settings.service";
 import { DEFAULT_THEME_PREF, THEME_SETTING_NAME } from "@/lib/theme";
+import { COMBO_EDITOR_PLACEMENT_SETTING, DEFAULT_COMBO_EDITOR_PLACEMENT } from "@/lib/comboEditorPlacement";
 
 // Settings definitions - single source of truth
 export const SETTINGS: SettingDefinition[] = [
@@ -38,6 +39,18 @@ export const SETTINGS: SettingDefinition[] = [
         description: "Fold the corner of keys that are part of a combo. Hover or focus a key to preview its combos.",
         defaultValue: true,
         type: "boolean",
+    },
+    {
+        name: COMBO_EDITOR_PLACEMENT_SETTING,
+        label: "Combo editor placement",
+        description: "Where the combo editor sits while you pick keys on the keyboard.",
+        type: "select",
+        items: [
+            { label: "Below the keyboard", value: "dock" },
+            { label: "Under the combo's keys", value: "anchored" },
+            { label: "Floating", value: "float" },
+        ],
+        defaultValue: DEFAULT_COMBO_EDITOR_PLACEMENT,
     },
     {
         name: "serial-assignment",
@@ -189,7 +202,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         name: "general",
         label: "General",
         icon: SettingsIcon,
-        settings: [THEME_SETTING_NAME, "typing-binds-key", "show-combo-indicators", "serial-assignment", "international-keyboards", "qmk-settings", "print"],
+        settings: [THEME_SETTING_NAME, "typing-binds-key", "show-combo-indicators", COMBO_EDITOR_PLACEMENT_SETTING, "serial-assignment", "international-keyboards", "qmk-settings", "print"],
     },
     {
         name: "fragments",

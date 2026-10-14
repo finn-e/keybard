@@ -47,6 +47,38 @@ describe('shared panel placement', () => {
   expect(screen.getByLabelText('Binding draft')).toHaveValue('Unfinished name');
   state.itemToEdit = null;
  });
+ it('moves a combo editor between placements without remounting it', () => {
+  state.activePanel = 'combos';
+  state.itemToEdit = 0;
+  const view = render(<SecondarySidebar comboPlacement="dock" />);
+  const workspace = () => screen.getByLabelText('Binding editor');
+  expect(workspace()).toHaveAttribute('data-combo-placement', 'dock');
+  expect(screen.getByLabelText('Combos')).toHaveAttribute('data-combo-placement', 'dock');
+  fireEvent.change(screen.getByLabelText('Binding draft'), {target: {value: 'Half-made combo'}});
+  for (const [placement, bottom] of [['anchored', false], ['float', true], ['dock', true], [undefined, false]] as const) {
+   view.rerender(<SecondarySidebar comboPlacement={placement} bottom={bottom} />);
+   expect(screen.getByLabelText('Binding draft')).toHaveValue('Half-made combo');
+   if (placement) expect(workspace()).toHaveAttribute('data-combo-placement', placement);
+   else expect(workspace()).not.toHaveAttribute('data-combo-placement');
+  }
+  state.itemToEdit = null;
+ });
+ it('keeps an unmeasured combo editor focusable so it can take the opening focus', () => {
+  state.activePanel = 'combos';
+  state.itemToEdit = 0;
+  render(<SecondarySidebar comboPlacement="dock" />);
+  const workspace = screen.getByLabelText('Binding editor');
+  expect(workspace.style.visibility).not.toBe('hidden');
+  expect(document.activeElement).toBe(workspace);
+  state.itemToEdit = null;
+ });
+ it('leaves other binding editors where they were', () => {
+  state.activePanel = 'macros';
+  state.itemToEdit = 0;
+  render(<SecondarySidebar comboPlacement="float" />);
+  expect(screen.getByLabelText('Binding editor')).not.toHaveAttribute('data-combo-placement');
+  state.itemToEdit = null;
+ });
  it('retains local draft when switching between sidebar and bottom', () => {
   state.activePanel = 'settings';
   const view = render(<SecondarySidebar />);

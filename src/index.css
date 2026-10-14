@@ -79,6 +79,9 @@
     --kb-active: #000000;
     --kb-active-fg: #ffffff;
     --kb-popover: #EEEEEE;
+    /* Underslung combo editor card (new; sits beside the brand tokens). */
+    --kb-combo-editor-border: #d6d7d8;
+    --kb-combo-editor-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
 
     /* Combo folded corner. Each combo hue has a light tone (on mid and dark layer colors) and
        a deep tone (on orange, yellow, light gray and white keys), the way legends switch
@@ -154,6 +157,8 @@
     --kb-active: #e8e9ea;
     --kb-active-fg: #111214;
     --kb-popover: #33363b;
+    --kb-combo-editor-border: #3a3d42;
+    --kb-combo-editor-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
 
     --kb-combo-fold-crease: rgb(0 0 0 / 0.5);
     --kb-combo-fold-crease-strong: rgb(0 0 0 / 0.74);

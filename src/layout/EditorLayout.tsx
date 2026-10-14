@@ -15,6 +15,7 @@ import { BOTTOM_PANEL_HEIGHT } from "./BottomPanel";
 
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
+import { useComboEditorPlacement } from "@/hooks/useComboEditorPlacement";
 import LayerSelector from "./LayerSelector";
 import KeyboardViewInstance from "./KeyboardViewInstance";
 import LayersPlusIcon from "@/components/icons/LayersPlusIcon";
@@ -1196,16 +1197,27 @@ const EditorLayoutInner = () => {
 
     const bottomPanelHeight = getDetailPanelHeight(activePanel, dynamicBottomPanelHeight);
 
-    const contentStyle = React.useMemo<React.CSSProperties>(
-        () => ({
+    // Single-combo editing keeps the whole keyboard visible: the editor sits
+    // below it (or floats clear of it) and reserves the height it needs here.
+    const { placement: comboEditorPlacement } = useComboEditorPlacement();
+    const [comboEditorReserve, setComboEditorReserve] = React.useState(0);
+    const getPrimaryKeyboardElement = React.useCallback(
+        () => sceneViewRefs.current.get("primary") ?? layerViewRefs.current.get(selectedLayer) ?? null,
+        [selectedLayer],
+    );
+
+    const contentStyle = React.useMemo<React.CSSProperties>(() => {
+        const panelPadding = showBottomPanel ? bottomPanelHeight : 0;
+        const panelCss = typeof panelPadding === "number" ? `${panelPadding}px` : panelPadding;
+        return {
             marginLeft: contentOffset,
             transition: "margin-left 320ms cubic-bezier(0.22, 1, 0.36, 1), padding-bottom 300ms ease-in-out",
             willChange: "margin-left, padding-bottom",
-            // Add bottom padding when bottom panel is shown
-            paddingBottom: showBottomPanel ? bottomPanelHeight : 0,
-        }),
-        [contentOffset, showBottomPanel, bottomPanelHeight]
-    );
+            // Add bottom padding when bottom panel is shown, plus whatever the
+            // combo editor reserves under the keyboard.
+            paddingBottom: comboEditorReserve > 0 ? `calc(${panelCss} + ${comboEditorReserve}px)` : panelPadding,
+        };
+    }, [contentOffset, showBottomPanel, bottomPanelHeight, comboEditorReserve]);
 
     return (
         <div className={cn("flex flex-1 h-dvh w-full min-w-0 overflow-hidden p-0", showDetailsSidebar && "bg-kb-surface")}>
@@ -1216,7 +1228,15 @@ const EditorLayoutInner = () => {
             <AppSidebar />
             <div className="contents">
             {/* Keep the panel mounted when its placement changes. */}
-            <SecondarySidebar leftOffset={primaryOffset} height={dynamicBottomPanelHeight} bottom={useBottomLayout} />
+            <SecondarySidebar
+                leftOffset={primaryOffset}
+                height={dynamicBottomPanelHeight}
+                bottom={useBottomLayout}
+                comboPlacement={comboEditorPlacement}
+                canvasRef={viewsScrollRef}
+                getKeyboardElement={getPrimaryKeyboardElement}
+                onComboReserveChange={setComboEditorReserve}
+            />
             <div
                 ref={contentContainerRef}
                 className={cn(
@@ -1463,13 +1483,13 @@ const EditorLayoutInner = () => {
                     !useBottomLayout && (
                         <>
                             {activePanel !== "matrixtester" && (
-                                <div className="absolute bottom-9 left-[37px] z-50">
+                                <div data-combo-editor-avoid className="absolute bottom-9 left-[37px] z-50" style={comboEditorReserve > 0 ? { bottom: `calc(2.25rem + ${comboEditorReserve}px)` } : undefined}>
                                     <InfoPanelWidget showInfoPanel={showInfoPanel} setShowInfoPanel={setShowInfoPanel} />
                                 </div>
                             )}
 
-                            <div className="absolute bottom-4 right-2 max-w-[calc(100%-4rem)] flex flex-col items-end gap-1 pointer-events-none">
-                                <div className="pointer-events-auto">
+                            <div className="absolute bottom-4 right-2 max-w-[calc(100%-4rem)] flex flex-col items-end gap-1 pointer-events-none" style={comboEditorReserve > 0 ? { bottom: `calc(1rem + ${comboEditorReserve}px)` } : undefined}>
+                                <div className="pointer-events-auto" data-combo-editor-avoid>
                                     <EditorControls
                                         showInfoPanel={showInfoPanel}
                                         setShowInfoPanel={setShowInfoPanel}

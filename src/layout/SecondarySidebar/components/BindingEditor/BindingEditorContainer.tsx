@@ -5,7 +5,7 @@ import { FC, useCallback, useState, useEffect, useRef, KeyboardEvent } from "rea
 import OnOffToggle from "@/components/ui/OnOffToggle";
 import { usePanels } from "@/contexts/PanelsContext";
 import { cn } from "@/lib/utils";
-import { X, GripHorizontal, Trash2 } from "lucide-react";
+import { X, GripHorizontal, GripVertical, Trash2 } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -34,6 +34,14 @@ import { KeyContent } from "@/types/keyboard.types";
 interface Props {
     shouldClose?: boolean;
     inline?: boolean; // When true, renders inline without absolute positioning (for overlay mode)
+    /** Single-row combo editor for the underslung placements. Combos only. */
+    compact?: boolean;
+    /** Close request for the compact header's close button. */
+    onRequestClose?: () => void;
+    /** Show a move handle in the compact header (floating placement). */
+    movable?: boolean;
+    /** Compact card: title row above the keys instead of one long row. */
+    stacked?: boolean;
 }
 
 
@@ -48,7 +56,7 @@ const labels = {
 
 
 
-const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false }) => {
+const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compact = false, onRequestClose, movable = false, stacked = false }) => {
     const { itemToEdit, handleCloseEditor, bindingTypeToEdit } = usePanels();
     const [isClosing, setIsClosing] = useState(false);
     const [yOffset, setYOffset] = useState(0);
@@ -439,6 +447,108 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false }) => {
         );
     };
 
+    const confirmDialog = (
+        <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle className="text-xl font-bold">
+                        Clear {getEditorTitle()}
+                    </DialogTitle>
+                </DialogHeader>
+                <DialogFooter className="gap-3 sm:gap-4 mt-4">
+                    <Button
+                        variant="outline"
+                        onClick={() => setIsConfirmOpen(false)}
+                        className="rounded-full px-8 py-5 text-base border-slate-300 dark:border-neutral-500 hover:bg-slate-50 dark:hover:bg-neutral-700 transition-colors"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        onClick={handleClearAll}
+                        className="rounded-full px-8 py-5 text-base font-bold bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 transition-colors border-none"
+                    >
+                        Clear
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+
+    const renderComboToggle = () => keyboard?.combos && itemToEdit !== null ? (
+        <OnOffToggle
+            label="Combo enabled"
+            value={(keyboard.combos[itemToEdit]?.options & ComboOptions.ENABLED) !== 0}
+            onToggle={async (enabled) => {
+                const updatedKeyboard = structuredClone(keyboard);
+                let options = updatedKeyboard.combos![itemToEdit].options;
+                if (enabled) options |= ComboOptions.ENABLED;
+                else options &= ~ComboOptions.ENABLED;
+                updatedKeyboard.combos![itemToEdit].options = options;
+                setKeyboard(updatedKeyboard);
+                await persistBinding(updatedKeyboard, "combo", itemToEdit);
+            }}
+        />
+    ) : null;
+
+    // Compact single-combo editor: title, enabled, keys, clear and close in
+    // one row that wraps when narrow. Placement is owned by the sidebar.
+    if (compact && bindingTypeToEdit === "combos") {
+        const title = (
+            <div className="flex flex-row items-center gap-3 shrink-0">
+                {movable && (
+                    <span data-float-drag-handle aria-hidden="true" title="Move" className="cursor-move touch-none text-kb-gray-border dark:text-neutral-400 hover:text-kb-ink">
+                        <GripVertical className="h-4 w-4" />
+                    </span>
+                )}
+                <h3 className="text-base font-semibold leading-none whitespace-nowrap text-kb-ink">{getEditorTitle()}</h3>
+                {renderComboToggle()}
+            </div>
+        );
+        const actions = (
+            <div className="flex flex-row items-center gap-1 shrink-0 ml-auto">
+                {hasContent && (
+                    <DelayedTooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                aria-label={`Clear ${getEditorTitle()}`}
+                                onClick={() => setIsConfirmOpen(true)}
+                                className="rounded-full p-1.5 text-kb-gray-border dark:text-neutral-400 transition-all hover:bg-red-500 hover:text-white dark:hover:text-white focus:outline-none cursor-pointer"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Clear {getEditorTitle()}</p>
+                        </TooltipContent>
+                    </DelayedTooltip>
+                )}
+                {onRequestClose && (
+                    <Button type="button" variant="ghost" size="icon" aria-label="Close binding editor" className="h-8 w-8 rounded-full" onClick={onRequestClose}>
+                        <X className="h-4 w-4" />
+                    </Button>
+                )}
+            </div>
+        );
+        // Compact single-combo editor. Placement is owned by the sidebar; this
+        // only lays out title, enabled, keys, clear and close.
+        return stacked ? (
+            <div className="combo-compact-editor flex flex-col gap-1 w-full min-w-0 px-3 py-2">
+                <div className="flex flex-row items-center gap-3">{title}{actions}</div>
+                <ComboEditor strip />
+                {confirmDialog}
+            </div>
+        ) : (
+            <div className="combo-compact-editor flex flex-row items-center gap-x-4 w-full min-w-0 px-3 py-2">
+                {title}
+                <div className="min-w-0"><ComboEditor strip /></div>
+                {actions}
+                {confirmDialog}
+            </div>
+        );
+    }
+
     return (
         <div
             className={containerClasses}
@@ -537,31 +647,7 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false }) => {
                     )}
                 </div>
             </div>
-            <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
-                <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle className="text-xl font-bold">
-                            Clear {getEditorTitle()}
-                        </DialogTitle>
-                    </DialogHeader>
-                    <DialogFooter className="gap-3 sm:gap-4 mt-4">
-                        <Button
-                            variant="outline"
-                            onClick={() => setIsConfirmOpen(false)}
-                            className="rounded-full px-8 py-5 text-base border-slate-300 dark:border-neutral-500 hover:bg-slate-50 dark:hover:bg-neutral-700 transition-colors"
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            onClick={handleClearAll}
-                            className="rounded-full px-8 py-5 text-base font-bold bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 transition-colors border-none"
-                        >
-                            Clear
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {confirmDialog}
         </div >
     );
 };

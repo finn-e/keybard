@@ -1,0 +1,40 @@
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import type { ReactNode } from 'react';
+
+import { SettingsProvider, useSettings, SETTINGS, SETTINGS_CATEGORIES } from '@/contexts/SettingsContext';
+import { useComboEditorPlacement } from '@/hooks/useComboEditorPlacement';
+import { COMBO_EDITOR_PLACEMENT_SETTING, resolveComboEditorPlacement } from '@/lib/comboEditorPlacement';
+
+const wrapper = ({ children }: { children: ReactNode }) => <SettingsProvider>{children}</SettingsProvider>;
+const setSearch = (search: string) => window.history.replaceState(null, '', `/${search}`);
+
+describe('combo editor placement', () => {
+ afterEach(() => setSearch(''));
+
+ it('defaults to the dock below the keyboard', () => {
+  expect(resolveComboEditorPlacement('', undefined)).toEqual({ placement: 'dock', fromUrl: false });
+  expect(SETTINGS.find(s => s.name === COMBO_EDITOR_PLACEMENT_SETTING)?.defaultValue).toBe('dock');
+  expect(SETTINGS_CATEGORIES.find(c => c.name === 'general')?.settings).toContain(COMBO_EDITOR_PLACEMENT_SETTING);
+ });
+
+ it('lets a valid URL value win over the setting without saving it', () => {
+  expect(resolveComboEditorPlacement('?comboEditor=float', 'anchored')).toEqual({ placement: 'float', fromUrl: true });
+ });
+
+ it('ignores an invalid URL value and an unknown setting', () => {
+  expect(resolveComboEditorPlacement('?comboEditor=sideways', 'anchored')).toEqual({ placement: 'anchored', fromUrl: false });
+  expect(resolveComboEditorPlacement('?comboEditor=sideways', 'beside')).toEqual({ placement: 'dock', fromUrl: false });
+ });
+
+ it('follows the setting, and the URL override never writes to it', () => {
+  const { result } = renderHook(() => ({ p: useComboEditorPlacement(), s: useSettings() }), { wrapper });
+  expect(result.current.p.placement).toBe('dock');
+  act(() => result.current.s.updateSetting(COMBO_EDITOR_PLACEMENT_SETTING, 'anchored'));
+  expect(result.current.p.placement).toBe('anchored');
+  setSearch('?comboEditor=float');
+  const second = renderHook(() => ({ p: useComboEditorPlacement(), s: useSettings() }), { wrapper });
+  expect(second.result.current.p).toEqual({ placement: 'float', fromUrl: true });
+  expect(second.result.current.s.settings[COMBO_EDITOR_PLACEMENT_SETTING]).not.toBe('float');
+ });
+});

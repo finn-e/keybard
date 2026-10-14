@@ -40,7 +40,7 @@
     max-height: calc(100dvh - var(--panel-height) - 16px);
 }
 @media (max-width: 1000px) {
-    .detail-panel[data-placement="side"][data-binding-open="true"] {
+    .detail-panel[data-placement="side"][data-binding-open="true"]:not([data-combo-placement]) {
         top: 50dvh;
     }
     .detail-panel[data-placement="side"] .binding-workspace {
@@ -51,4 +51,22 @@
         bottom: 50dvh;
         width: auto;
     }
+}
+
+/* Underslung combo editor: fixed coordinates come from useComboEditorGeometry,
+   so the editor stays mounted in the panel while it sits out of the keyboard's
+   way. Dock gets an explicit width; anchored and float size to their content. */
+.detail-panel[data-combo-placement] .binding-workspace {
+    position: fixed;
+    right: auto;
+    bottom: auto;
+    width: max-content;
+    max-height: calc(100dvh - 16px);
+    border: 1px solid var(--kb-combo-editor-border);
+    border-radius: 1rem;
+    box-shadow: var(--kb-combo-editor-shadow);
+    overflow: hidden;
+}
+.detail-panel[data-combo-placement="dock"] .binding-workspace {
+    border-radius: 0.75rem;
 }

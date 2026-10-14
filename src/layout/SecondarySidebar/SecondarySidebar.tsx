@@ -19,11 +19,15 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { usePanels } from "@/contexts/PanelsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
+import type { ComboEditorPlacement } from "@/lib/comboEditorPlacement";
 import type { CustomUIMenuItem } from "@/types/keyboard.types";
 
 import { getPanelTitle, PanelContent } from "../PanelContent";
+import { useComboEditorGeometry } from "./comboEditorGeometry";
 
 export const DETAIL_SIDEBAR_WIDTH = "32rem";
+/** Narrower than this, the dock stacks its title row above the keys. */
+const COMBO_DOCK_ONE_ROW_MIN = 660;
 export const getDetailPanelHeight = (panel: string | null | undefined, height: number): string | number =>
     ["settings", "qmksettings", "scanlab", "quickstart", "about", "fragments", "layouts"].includes(panel ?? "")
         ? "min(60dvh, 36rem)" : height;
@@ -69,8 +73,16 @@ interface SecondarySidebarProps {
     leftOffset?: string;
     pickerMode?: PickerMode;
     height?: number;
+    /** Where a single combo's editor sits (resolved by EditorLayout); unset keeps the shared placement. */
+    comboPlacement?: ComboEditorPlacement;
+    /** The keyboard canvas, which the combo editor stays out of. */
+    canvasRef?: React.RefObject<HTMLElement | null>;
+    /** The primary keyboard, whose keys the combo editor avoids or anchors to. */
+    getKeyboardElement?: () => HTMLElement | null;
+    /** Height the combo editor takes from the bottom of the canvas. */
+    onComboReserveChange?: (px: number) => void;
 }
-const SecondarySidebar = ({ bottom = false, leftOffset, height = 230 }: SecondarySidebarProps) => {
+const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlacement, canvasRef, getKeyboardElement, onComboReserveChange }: SecondarySidebarProps) => {
     const primarySidebar = useSidebar("primary-nav", { defaultOpen: false });
     const { activePanel, handleCloseDetails, state, alternativeHeader, itemToEdit, setItemToEdit } = usePanels();
     const { keyboard } = useKeyboard();
@@ -110,6 +122,25 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230 }: Secondar
         };
     }, [showPicker]);
 
+    // A single combo's editor moves out of the keyboard's way (dock, anchored
+    // or float). It stays in this tree; only CSS and fixed coordinates change.
+    const comboActive = showPicker && activePanel === "combos" && !!comboPlacement;
+    const comboEntry = comboActive && itemToEdit !== null ? keyboard?.combos?.[itemToEdit] : undefined;
+    const triggerKeycodes = React.useMemo(
+        () => (comboEntry?.keys ?? []).filter(k => k && k !== "KC_NO"),
+        [comboEntry],
+    );
+    const comboGeometry = useComboEditorGeometry({
+        placement: comboActive ? comboPlacement! : null,
+        bottom,
+        workspaceRef: bindingRef,
+        panelRef,
+        canvasRef,
+        getKeyboardElement,
+        triggerKeycodes,
+        onReserveChange: onComboReserveChange,
+    });
+
     const [pickerMode, setPickerMode] = React.useState<PickerMode>("keyboard");
     const [isClosingEditor, setIsClosingEditor] = React.useState(false);
 
@@ -134,6 +165,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230 }: Secondar
             inert={state !== "expanded"}
             data-binding-open={showPicker ? "true" : undefined}
             data-placement={bottom ? "bottom" : "side"}
+            data-combo-placement={comboActive ? comboPlacement : undefined}
             className={cn("detail-panel fixed z-[60] flex flex-col bg-kb-surface border shadow-lg min-h-0", bottom ? "bottom-panel bottom-0 right-0" : "top-2 bottom-2 rounded-2xl", state !== "expanded" && "hidden")}
             style={{
                 left: leftOffset ?? primaryOffset,
@@ -172,6 +204,9 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230 }: Secondar
                 <div hidden={showPicker}>
                     <PanelContent panel={activePanel} horizontal={bottom} />
                 </div>
+                {bottom && showPicker && comboActive && (
+                    <EditorSidePanel horizontal className="pb-2" activeTab={pickerMode} onTabChange={setPickerMode} showMacros />
+                )}
                 {bottom && showPicker && <PanelContent panel={pickerMode} horizontal isPicker />}
             </div>
 
@@ -204,15 +239,32 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230 }: Secondar
                     {pickerMode === "mouse" && <MousePanel isPicker />}
                 </div>
             </div>
-            {showPicker && <div ref={bindingRef} tabIndex={-1} className="binding-workspace z-30 bg-kb-gray-medium shadow-lg flex min-h-0" aria-label="Binding editor">
-                {bottom && <div className="shrink-0 bg-kb-surface overflow-y-auto">
+            {showPicker && <div
+                ref={bindingRef}
+                tabIndex={-1}
+                className="binding-workspace z-30 bg-kb-gray-medium shadow-lg flex min-h-0"
+                aria-label="Binding editor"
+                data-combo-placement={comboActive ? comboPlacement : undefined}
+                // Until it is measured the editor is transparent, not hidden:
+                // a visibility-hidden element cannot take the opening focus.
+                style={comboActive ? (comboGeometry.style ?? { opacity: 0, pointerEvents: "none" }) : undefined}
+                onPointerDown={comboActive ? comboGeometry.onPointerDown : undefined}
+            >
+                {bottom && !comboActive && <div className="shrink-0 bg-kb-surface overflow-y-auto">
                     <EditorSidePanel activeTab={pickerMode} onTabChange={setPickerMode} showMacros={activePanel !== "macros"} />
                 </div>}
                 <div className="relative min-w-0 flex-1 overflow-auto overscroll-contain" data-binding-scroll-owner>
-                    <Button type="button" variant="ghost" size="icon" aria-label="Close binding editor"
+                    {!comboActive && <Button type="button" variant="ghost" size="icon" aria-label="Close binding editor"
                         className="sticky top-1 left-full z-40 bg-kb-gray-medium"
-                        onClick={() => setIsClosingEditor(true)}><X className="h-4 w-4" /></Button>
-                    <BindingEditorContainer shouldClose={isClosingEditor} inline />
+                        onClick={() => setIsClosingEditor(true)}><X className="h-4 w-4" /></Button>}
+                    <BindingEditorContainer
+                        shouldClose={isClosingEditor}
+                        inline
+                        compact={comboActive}
+                        movable={comboActive && comboPlacement === "float"}
+                        stacked={comboActive && (comboPlacement !== "dock" || (comboGeometry.regionWidth ?? Infinity) < COMBO_DOCK_ONE_ROW_MIN)}
+                        onRequestClose={comboActive ? () => setIsClosingEditor(true) : undefined}
+                    />
                 </div>
             </div>}
         </aside>
