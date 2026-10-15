@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-    backPulseStyle, BINDING_EDITOR_PANELS, bindingEditorHeading, bindingEditorKind, effectivePickerMode, spotlightHint, isBindingEditorOpen, pickerCategoryForRail, usablePickerCategories,
+    BINDING_EDITOR_PANELS, bindingEditorHeading, bindingEditorKind, effectivePickerMode, spotlightHint, isBindingEditorOpen, pickerCategoryForRail, spotStrength, usablePickerCategories,
 } from '@/lib/bindingSpotlight';
 
 const ALL = ['keyboard', 'pointing', 'special', 'layers', 'mouse', 'tapdances', 'macros'];
@@ -56,11 +56,12 @@ describe('back arrow callout', () => {
         expect(bindingEditorHeading('tapdances', 3)).toBe('Editing Tap Dance 3');
     });
 
-    it('picks the pulse style from ?backPulse, ring by default', () => {
-        expect(backPulseStyle('')).toBe('ring');
-        expect(backPulseStyle('?backPulse=glow')).toBe('glow');
-        expect(backPulseStyle('?x=1&backPulse=nudge')).toBe('nudge');
-        expect(backPulseStyle('?backPulse=ring')).toBe('ring');
-        expect(backPulseStyle('?backPulse=sparkle')).toBe('ring');
+    it('picks the scrim strength from ?spot, the prototype strength by default', () => {
+        expect(spotStrength('')).toBe('medium');
+        expect(spotStrength('?spot=soft')).toBe('soft');
+        expect(spotStrength('?x=1&spot=deep')).toBe('deep');
+        expect(spotStrength('?spot=sparkle')).toBe('medium');
+        // The back-arrow cue is the ring; its old review parameter is gone.
+        expect(spotStrength('?backPulse=glow')).toBe('medium');
     });
 });

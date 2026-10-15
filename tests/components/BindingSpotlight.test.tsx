@@ -1,19 +1,25 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import BindingSpotlight from '../../src/layout/BindingSpotlight';
 import { nudgeBindingEditor } from '../../src/lib/bindingSpotlight';
 
 const panels = vi.hoisted(() => ({ activePanel: 'combos' as string | null, itemToEdit: 3 as number | null, handleCloseEditor: vi.fn() }));
-const binding = vi.hoisted(() => ({ selectedTarget: null as object | null }));
+const binding = vi.hoisted(() => ({ selectedTarget: null as { type: string; [key: string]: unknown } | null, clearSelection: vi.fn() }));
 vi.mock('@/contexts/PanelsContext', () => ({ usePanels: () => panels }));
 vi.mock('@/contexts/KeyBindingContext', () => ({ useKeyBinding: () => binding }));
+const settings = vi.hoisted(() => ({ typing: false }));
+vi.mock('@/contexts/SettingsContext', () => ({
+    useSettings: () => ({ getSetting: (name: string) => name === 'typing-binds-key' ? settings.typing : undefined }),
+}));
 
 beforeEach(() => {
     panels.activePanel = 'combos';
     panels.itemToEdit = 3;
     panels.handleCloseEditor.mockClear();
     binding.selectedTarget = null;
+    binding.clearSelection.mockClear();
+    settings.typing = false;
 });
 afterEach(cleanup);
 
@@ -37,7 +43,7 @@ describe('binding editor spotlight', () => {
         expect(screen.getByRole('status')).toHaveTextContent('Done with Combo 3? Go back to use the rest.');
         const back = screen.getByRole('button', { name: 'Go back' });
         expect(back).toHaveClass('binding-back-pulse');
-        expect(back).toHaveAttribute('data-back-pulse', 'ring');
+        expect(back).toHaveAttribute('data-back-cue', 'blocked');
         const callout = document.querySelector('[data-binding-back-callout]')!;
         expect(callout).toHaveAttribute('data-binding-back-callout', 'arrow');
         expect(callout).toHaveTextContent('Done with Combo 3? Go back to use the rest.');
@@ -77,15 +83,6 @@ describe('binding editor spotlight', () => {
         }
     });
 
-    it.each(['ring', 'glow', 'nudge'])('uses the ?backPulse=%s style, with the same callout', style => {
-        window.history.replaceState(null, '', `/?backPulse=${style}`);
-        render(<><button type="button" aria-label="Go back" data-binding-editor-back="" /><BindingSpotlight /></>);
-        act(() => nudgeBindingEditor());
-        expect(screen.getByRole('button', { name: 'Go back' })).toHaveAttribute('data-back-pulse', style);
-        expect(document.querySelector('[data-binding-back-callout]')).toHaveTextContent('Done with Combo 3? Go back to use the rest.');
-        window.history.replaceState(null, '', '/');
-    });
-
     it('clears the pulse and the callout after a moment', () => {
         vi.useFakeTimers();
         try {
@@ -116,11 +113,32 @@ describe('binding editor spotlight', () => {
         expect(panels.handleCloseEditor).toHaveBeenCalledTimes(1);
     });
 
-    it('leaves Esc to Typing Binds a Key when a slot is selected', () => {
-        binding.selectedTarget = { type: 'combo', comboId: 3, comboSlot: 0 };
-        render(<BindingSpotlight />);
+    it('leaves Esc to Typing Binds a Key for a slot the person picked', () => {
+        settings.typing = true;
+        binding.selectedTarget = { type: 'combo', comboId: 3, comboSlot: 1 };
+        render(<><div data-editor-slot="" data-testid="slot" /><BindingSpotlight /></>);
+        fireEvent.pointerDown(screen.getByTestId('slot'));
         esc();
         expect(panels.handleCloseEditor).not.toHaveBeenCalled();
+    });
+
+    it('closes on Esc with only the slot an editor selects on opening', () => {
+        for (const typing of [true, false]) {
+            settings.typing = typing;
+            binding.selectedTarget = { type: 'combo', comboId: 3, comboSlot: 0 };
+            render(<BindingSpotlight />);
+            esc();
+            cleanup();
+        }
+        expect(panels.handleCloseEditor).toHaveBeenCalledTimes(2);
+    });
+
+    it('closes on Esc with a picked slot when Typing Binds a Key is off', () => {
+        binding.selectedTarget = { type: 'combo', comboId: 3, comboSlot: 1 };
+        render(<><div data-editor-slot="" data-testid="slot" /><BindingSpotlight /></>);
+        fireEvent.pointerDown(screen.getByTestId('slot'));
+        esc();
+        expect(panels.handleCloseEditor).toHaveBeenCalledTimes(1);
     });
 
     it('does not close on an Esc something else already handled, in a text field, or with a dialog open', () => {
@@ -177,5 +195,101 @@ describe('binding editor spotlight', () => {
         expect(rename).not.toHaveAttribute('tabindex');
         fireEvent.click(rename);
         expect(onClick).toHaveBeenCalledTimes(2);
+    });
+
+    describe('the opening cue', () => {
+        const steadyBack = () => {
+            const back = screen.getByRole('button', { name: 'Go back' });
+            vi.spyOn(back, 'getBoundingClientRect').mockReturnValue({ left: 10, top: 10, width: 32, height: 32, right: 42, bottom: 42, x: 10, y: 10, toJSON: () => ({}) } as DOMRect);
+            return back;
+        };
+        const Arrow = () => <button type="button" aria-label="Go back" data-binding-editor-back="" />;
+
+        it('rings the back arrow once when an editor opens, with no callout', async () => {
+            panels.itemToEdit = null;
+            const view = render(<><Arrow /><BindingSpotlight /></>);
+            const back = steadyBack();
+            panels.itemToEdit = 3;
+            view.rerender(<><Arrow /><BindingSpotlight /></>);
+            await waitFor(() => expect(back).toHaveAttribute('data-back-cue', 'precue'));
+            expect(back).toHaveClass('binding-back-pulse');
+            expect(document.querySelector('[data-binding-back-callout]')).toBeNull();
+            expect(screen.getByRole('status')).toHaveTextContent('');
+        });
+
+        it('is skipped when going straight from one item to another', async () => {
+            panels.itemToEdit = 2;
+            const view = render(<><Arrow /><BindingSpotlight /></>);
+            const back = steadyBack();
+            await waitFor(() => expect(back).toHaveAttribute('data-back-cue', 'precue'));
+            back.classList.remove('binding-back-pulse');
+            back.removeAttribute('data-back-cue');
+            // Close and open the next item right away.
+            panels.itemToEdit = null;
+            view.rerender(<><Arrow /><BindingSpotlight /></>);
+            panels.itemToEdit = 3;
+            view.rerender(<><Arrow /><BindingSpotlight /></>);
+            await new Promise(r => setTimeout(r, 250));
+            expect(back).not.toHaveAttribute('data-back-cue');
+        });
+
+        it('gives way to a blocked click: two rings and the callout', async () => {
+            render(<><Arrow /><BindingSpotlight /></>);
+            const back = steadyBack();
+            act(() => nudgeBindingEditor());
+            await new Promise(r => setTimeout(r, 150));
+            expect(back).toHaveAttribute('data-back-cue', 'blocked');
+            expect(document.querySelector('[data-binding-back-callout]')).not.toBeNull();
+        });
+    });
+
+    it('drops a slot selection when the editor closes, so Esc closes the next one', () => {
+        binding.selectedTarget = { type: 'combo', comboId: 3, comboSlot: 1 };
+        const view = render(<BindingSpotlight />);
+        panels.itemToEdit = null;
+        view.rerender(<BindingSpotlight />);
+        expect(binding.clearSelection).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a key selection on the layout alone when the editor closes', () => {
+        binding.selectedTarget = { type: 'keyboard', layer: 0, row: 1, col: 2 };
+        const view = render(<BindingSpotlight />);
+        panels.itemToEdit = null;
+        view.rerender(<BindingSpotlight />);
+        expect(binding.clearSelection).not.toHaveBeenCalled();
+    });
+
+    it('treats a click on empty canvas as a blocked click, but not a click on a key or a tab', () => {
+        const onCanvas = vi.fn();
+        const onKey = vi.fn();
+        render(
+            <>
+                <div data-spotlight-canvas="" onClick={onCanvas} data-testid="canvas">
+                    <div data-testid="empty" />
+                    <div data-keycode="KC_A" onClick={onKey}><span data-testid="key">A</span></div>
+                    <button type="button" onClick={onKey}>Layer 2</button>
+                </div>
+                <BindingSpotlight />
+            </>,
+        );
+        fireEvent.click(screen.getByTestId('empty'));
+        expect(onCanvas).not.toHaveBeenCalled();
+        expect(screen.getByRole('status')).toHaveTextContent('Done with Combo 3?');
+        fireEvent.click(screen.getByTestId('key'));
+        fireEvent.click(screen.getByText('Layer 2'));
+        expect(onKey).toHaveBeenCalledTimes(2);
+    });
+
+    it('sets the scrim strength from ?spot while editing', () => {
+        window.history.replaceState(null, '', '/?spot=deep');
+        const view = render(<BindingSpotlight />);
+        expect(document.documentElement.getAttribute('data-spot')).toBe('deep');
+        panels.itemToEdit = null;
+        view.rerender(<BindingSpotlight />);
+        expect(document.documentElement.hasAttribute('data-spot')).toBe(false);
+        window.history.replaceState(null, '', '/');
+        panels.itemToEdit = 3;
+        view.rerender(<BindingSpotlight />);
+        expect(document.documentElement.hasAttribute('data-spot')).toBe(false);
     });
 });

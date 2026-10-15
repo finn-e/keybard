@@ -105,7 +105,6 @@
     /* Translucent tones of the highlight, as plain values: color-mix() inside
        @keyframes falls back to the solid color after the CSS build. */
     --kb-back-highlight-soft: rgb(9 158 124 / 0.22);
-    --kb-back-highlight-halo: rgb(9 158 124 / 0.55);
     --kb-back-highlight-ring: rgb(9 158 124 / 0.85);
     /* Pinned side-panel editor cues (new; beside the brand tokens, owner review: ?pinCue=). */
     --kb-pin-shadow: 0 10px 14px -10px rgb(0 0 0 / 0.28);
@@ -197,7 +196,6 @@
     --kb-back-highlight: #0bb48d;
     --kb-back-highlight-fg: #ffffff;
     --kb-back-highlight-soft: rgb(11 180 141 / 0.22);
-    --kb-back-highlight-halo: rgb(11 180 141 / 0.55);
     --kb-back-highlight-ring: rgb(11 180 141 / 0.85);
     --kb-pin-shadow: 0 10px 14px -10px rgb(0 0 0 / 0.7);
     --kb-pin-divider: #3a3d42;
@@ -497,44 +495,21 @@ html.dark {
     position: relative;
     border-radius: 9999px;
 }
-/* ring: an expanding ring around the arrow button, twice. */
+/* Blocked click: an expanding ring around the arrow button, twice, with the callout. */
 @keyframes bindingBackRing {
     0% { box-shadow: 0 0 0 0 var(--kb-back-highlight-ring), 0 0 0 2px var(--kb-back-highlight); }
     100% { box-shadow: 0 0 0 16px transparent, 0 0 0 2px var(--kb-back-highlight); }
 }
-.binding-back-pulse[data-back-pulse="ring"] {
+.binding-back-pulse[data-back-cue="blocked"] {
     animation: bindingBackRing 650ms ease-out 2;
 }
-/* glow: the button fills with the highlight color and fades back. */
-@keyframes bindingBackGlow {
-    0%, 35% { background-color: var(--kb-back-highlight); box-shadow: 0 0 18px 4px var(--kb-back-highlight-halo); }
-    100% { background-color: transparent; box-shadow: 0 0 0 0 transparent; }
+/* Editor opened: a softer single ring, no outline and no callout. */
+@keyframes bindingBackPrecue {
+    0% { box-shadow: 0 0 0 0 var(--kb-back-highlight-ring); }
+    100% { box-shadow: 0 0 0 12px transparent; }
 }
-@keyframes bindingBackGlowIcon {
-    0%, 35% { color: var(--kb-back-highlight-fg); }
-}
-.binding-back-pulse[data-back-pulse="glow"] {
-    animation: bindingBackGlow 1300ms ease-out 1;
-}
-.binding-back-pulse[data-back-pulse="glow"] svg {
-    animation: bindingBackGlowIcon 1300ms ease-out 1;
-}
-/* nudge: the arrow slides left a few px twice on a highlight background. */
-@keyframes bindingBackNudge {
-    0%, 100% { transform: translateX(0); }
-    30% { transform: translateX(-6px); }
-    60% { transform: translateX(0); }
-}
-@keyframes bindingBackNudgeBg {
-    0%, 75% { background-color: var(--kb-back-highlight-soft); box-shadow: 0 0 0 2px var(--kb-back-highlight); }
-    100% { background-color: transparent; box-shadow: 0 0 0 0 transparent; }
-}
-.binding-back-pulse[data-back-pulse="nudge"] {
-    animation: bindingBackNudgeBg 1300ms ease-out 1;
-}
-.binding-back-pulse[data-back-pulse="nudge"] svg {
-    animation: bindingBackNudge 420ms ease-in-out 2;
-    color: var(--kb-back-highlight);
+.binding-back-pulse[data-back-cue="precue"] {
+    animation: bindingBackPrecue 700ms ease-out 1;
 }
 /* The callout under the arrow. */
 .binding-back-callout {
@@ -558,13 +533,12 @@ html.dark {
     to { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-    /* A static highlight while the callout shows, with no motion. */
-    .binding-back-pulse[data-back-pulse],
-    .binding-back-pulse[data-back-pulse] svg,
+    /* A brief static highlight instead of the rings, with no motion. */
+    .binding-back-pulse[data-back-cue],
     .binding-back-callout { animation: none; }
-    .binding-back-pulse[data-back-pulse] {
+    .binding-back-pulse[data-back-cue] {
         background-color: var(--kb-back-highlight-soft);
         box-shadow: 0 0 0 2px var(--kb-back-highlight);
     }
-    .binding-back-pulse[data-back-pulse] svg { color: var(--kb-back-highlight); }
+    .binding-back-pulse[data-back-cue] svg { color: var(--kb-back-highlight); }
 }

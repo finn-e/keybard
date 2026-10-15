@@ -112,14 +112,17 @@ export function bindingEditorSubtitle(
 /** The callout at the back arrow when something under the spotlight scrim is clicked. */
 export const spotlightHint = (kind: string) => `Done with ${kind}? Go back to use the rest.`;
 
-/** How the back arrow pulses (owner review: ?backPulse=ring|glow|nudge). */
-export const BACK_PULSE_STYLES = ["ring", "glow", "nudge"] as const;
-export type BackPulseStyle = typeof BACK_PULSE_STYLES[number];
-export const BACK_PULSE_PARAM = "backPulse";
+/**
+ * How strongly the scrim dims (owner review: ?spot=soft|deep). The default
+ * matches the prototype; the others only change --kb-scrim-alpha.
+ */
+export const SPOT_STRENGTHS = ["medium", "soft", "deep"] as const;
+export type SpotStrength = typeof SPOT_STRENGTHS[number];
+export const SPOT_PARAM = "spot";
 
-export function backPulseStyle(search: string): BackPulseStyle {
-    const value = new URLSearchParams(search).get(BACK_PULSE_PARAM);
-    return (BACK_PULSE_STYLES as readonly string[]).includes(value ?? "") ? value as BackPulseStyle : "ring";
+export function spotStrength(search: string): SpotStrength {
+    const value = new URLSearchParams(search).get(SPOT_PARAM);
+    return (SPOT_STRENGTHS as readonly string[]).includes(value ?? "") ? value as SpotStrength : "medium";
 }
 
 export const SPOTLIGHT_NUDGE_EVENT = "keybard:binding-spotlight-nudge";

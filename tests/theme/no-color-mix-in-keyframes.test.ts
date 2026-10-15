@@ -31,7 +31,7 @@ describe("keyframes colors", () => {
 
     it("finds the back arrow pulse keyframes", () => {
         const names = keyframeBlocks(css).map(b => b.name);
-        expect(names).toEqual(expect.arrayContaining(["bindingBackRing", "bindingBackGlow", "bindingBackNudgeBg"]));
+        expect(names).toEqual(expect.arrayContaining(["bindingBackRing", "bindingBackPrecue"]));
     });
 
     it("uses no color-mix() inside any @keyframes", () => {
