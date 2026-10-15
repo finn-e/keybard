@@ -130,9 +130,12 @@ export function spotStrength(search: string): SpotStrength {
  * "lift" (the default) keeps the rail's picker categories usable above its
  * scrim. "collapse" puts the whole rail under the scrim and narrows it to its
  * icons, giving that width to the layout; the side panel's own category strip
- * is then the one picker selector. Read from the URL only, never saved.
+ * is then the one picker selector. "modal" turns the whole rail into the
+ * editor's own: its navigation gives way to the editor's picker categories,
+ * the side panel's category strip goes, and the rail's top-left corner is the
+ * way out. Read from the URL only, never saved.
  */
-export const RAIL_MODES = ["lift", "collapse"] as const;
+export const RAIL_MODES = ["lift", "collapse", "modal"] as const;
 export type RailMode = typeof RAIL_MODES[number];
 export const RAIL_MODE_PARAM = "railMode";
 
@@ -145,6 +148,12 @@ export function railModeFrom(search: string): RailMode {
 /** This page load's rail mode. */
 export const currentRailMode = (): RailMode =>
     typeof window === "undefined" ? "lift" : railModeFrom(window.location.search);
+
+/** ?railMode=modal: the rail's top-left exit while an editor is open ("Done with Combo 3"). */
+export const modalRailExitLabel = (kind: string) => `Done with ${kind}`;
+
+/** ?railMode=modal: how long the rail's contents take to swap in place (none with reduced motion). */
+export const RAIL_MODAL_SWAP_MS = 200;
 
 /** How long the rail takes to narrow and to come back (none with reduced motion). */
 export const RAIL_COLLAPSE_MS = 250;

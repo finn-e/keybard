@@ -566,6 +566,18 @@ html.dark {
     transform: rotate(45deg);
     border-radius: 2px;
 }
+/* ?railMode=modal: entering or leaving an editor, the rail's contents swap in
+   place with a short fade (RAIL_MODAL_SWAP_MS). Nothing slides; none with reduced motion. */
+@keyframes railModeSwap {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.rail-mode-swap {
+    animation: railModeSwap 200ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+    .rail-mode-swap { animation: none; }
+}
 @media (prefers-reduced-motion: reduce) {
     .picker-strip-cue { animation: none; background-color: var(--kb-back-highlight-soft); }
 }

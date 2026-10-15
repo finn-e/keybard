@@ -72,3 +72,23 @@ describe('ways out of a binding editor', () => {
         state.activePanel = 'combos';
     });
 });
+
+describe('?railMode=modal: the panel while the rail is the selector and the way out', () => {
+    afterEach(() => window.history.replaceState(null, '', '/'));
+
+    it.each(['panel', 'half'] as const)('drops its category strip and back arrow, keeping the heading (%s)', placement => {
+        window.history.replaceState(null, '', '/?railMode=modal');
+        render(<TooltipProvider><SecondarySidebar comboPlacement={placement} /></TooltipProvider>);
+        expect(document.querySelector('[data-picker-rail]')).toBeNull();
+        expect(document.querySelector('[data-picker-strip]')).toBeNull();
+        expect(screen.queryAllByRole('button', { name: 'Go back' })).toHaveLength(0);
+        expect(document.querySelector('[data-binding-editor-back]')).toBeNull();
+        expect(screen.getAllByRole('heading', { name: 'Editing Combo 2' }).length).toBeGreaterThan(0);
+    });
+
+    it('keeps both without the param', () => {
+        render(<TooltipProvider><SecondarySidebar comboPlacement="panel" /></TooltipProvider>);
+        expect(document.querySelector('[data-picker-rail] [data-picker-strip]')).not.toBeNull();
+        expect(screen.getAllByRole('button', { name: 'Go back' }).length).toBeGreaterThan(0);
+    });
+});
