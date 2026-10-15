@@ -5,6 +5,14 @@
 
 /** GET_INFO second feature byte: the board answers POINTING_MOTION (0x2D). */
 export const SVIL_FLAG2_POINTING_MOTION = 0x08;
+/**
+ * GET_INFO second feature byte: 0x2D keeps counts per reader id, so Keybard and
+ * Keybard Host polling one board each see all of the motion, and reports each
+ * hand's CPI.
+ */
+export const SVIL_FLAG2_POINTING_MOTION_READERS = 0x10;
+/** The reader id Keybard names in its 0x2D requests (Keybard Host is 2). */
+export const KEYBARD_MOTION_READER = 1;
 
 /** Format byte this parser understands. 0 means the firmware has nothing to report. */
 export const POINTING_MOTION_FORMAT = 1;
@@ -32,6 +40,8 @@ export interface PointingMotionHalf {
     /** 0..255; only meaningful when touchValid. */
     touchX: number;
     touchY: number;
+    /** The hand's sensor CPI when the board reports it (a trackball on newer firmware). */
+    cpi?: number;
 }
 
 export interface PointingMotionReport {
@@ -51,6 +61,8 @@ export interface PointingMotionReport {
 const HALF_BYTES = 10;
 /** Command echo + 24 payload bytes. */
 const REPLY_BYTES = 2 + 24;
+/** Command echo + the 24 bytes + reader id and each hand's CPI (64-byte reports). */
+const EXT_REPLY_BYTES = 2 + 29;
 
 function parseHalf(view: DataView, off: number): PointingMotionHalf {
     const flags = view.getUint8(off);
@@ -69,6 +81,13 @@ function parseHalf(view: DataView, off: number): PointingMotionHalf {
         touchX: view.getUint8(off + 8),
         touchY: view.getUint8(off + 9),
     };
+}
+
+/** Adds the extension's CPI (0 means none) when the reply carries it. */
+function withCpi(half: PointingMotionHalf, view: DataView, off: number): PointingMotionHalf {
+    if (view.byteLength < EXT_REPLY_BYTES) return half;
+    const cpi = view.getUint16(off, true);
+    return cpi > 0 ? { ...half, cpi } : half;
 }
 
 /**
@@ -90,7 +109,7 @@ export function parsePointingMotion(reply: Uint8Array, cmd = 0x2d): PointingMoti
         scrollKey: (mode & 0x20) !== 0,
         elapsedMs: view.getUint8(p + 2),
         axisLock: axis === 1 ? "vertical" : axis === 2 ? "horizontal" : "free",
-        left: parseHalf(view, p + 3),
-        right: parseHalf(view, p + 3 + HALF_BYTES),
+        left: withCpi(parseHalf(view, p + 3), view, p + 25),
+        right: withCpi(parseHalf(view, p + 3 + HALF_BYTES), view, p + 27),
     };
 }

@@ -167,9 +167,10 @@ export function PointingDevice(props: PointingDeviceProps) {
             if (!moved) return;
             if (!s.reduce) {
                 if (p.placement.kind === "ball") {
-                    // The ball's physical size, not its drawn size, and never the DPI setting.
+                    // The ball's physical size, not its drawn size, at the CPI the board
+                    // reports for this hand (the firmware default on older boards).
                     const mm = BALLS[p.ball].mm;
-                    roll(s.M, ballRollRadians(half.dx, mm), ballRollRadians(half.dy, mm));
+                    roll(s.M, ballRollRadians(half.dx, mm, half.cpi), ballRollRadians(half.dy, mm, half.cpi));
                     s.dirty = true;
                 } else {
                     const c = s.contact;

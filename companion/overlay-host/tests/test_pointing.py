@@ -8,6 +8,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from keybard_host.device.protocol import (READ_COMMANDS, POINTING_MOTION, POINTING_MOTION_FLAG2, SvalReader,
+                                          POINTING_MOTION_READERS_FLAG2, HOST_MOTION_READER,
                                           parse_pointing_motion, pointing_kinds)
 from keybard_host.host_pointing import demo_motion
 from keybard_host.server import REMOTE_ORIGINS, make_server
@@ -16,11 +17,15 @@ from keybard_host.device.model import demo_profile
 from test_protocol import FakeDevice
 
 
-def motion_payload(modes=0, ms=16, left=(0, 0, 0), right=(0, 0, 0)):
-    """format, modes, ms, left block, right block, axis: what follows the 0x2D echo."""
+def motion_payload(modes=0, ms=16, left=(0, 0, 0), right=(0, 0, 0), ext=None):
+    """format, modes, ms, left block, right block, axis: what follows the 0x2D echo.
+    ext=(reader, left_cpi, right_cpi) appends the per-reader extension."""
     def hand(flags, dx, dy):
         return bytes((flags,)) + dx.to_bytes(2, 'little', signed=True) + dy.to_bytes(2, 'little', signed=True) + bytes(5)
-    return bytes((1, modes, ms)) + hand(*left) + hand(*right) + bytes((0,))
+    out = bytes((1, modes, ms)) + hand(*left) + hand(*right) + bytes((0,))
+    if ext:
+        out += bytes((ext[0],)) + ext[1].to_bytes(2, 'little') + ext[2].to_bytes(2, 'little')
+    return out
 
 
 class MotionDevice(FakeDevice):
@@ -40,7 +45,7 @@ class MotionDevice(FakeDevice):
 
 class MotionTests(unittest.TestCase):
     def test_read_only_allowlist_gains_only_the_motion_read(self):
-        self.assertEqual(READ_COMMANDS[0xDF][0x2D], 0)
+        self.assertEqual(READ_COMMANDS[0xDF][0x2D], 1)  # the reader id
         self.assertEqual(set(READ_COMMANDS[0xDF]), {0x00, 0x01, 0x0D, 0x0E, 0x16, 0x18, 0x19, 0x1B, 0x2D})
         self.assertNotIn(0x1A, READ_COMMANDS[0xDF])  # the fragment write stays out
         self.assertEqual(POINTING_MOTION_FLAG2, 0x08)
@@ -67,6 +72,30 @@ class MotionTests(unittest.TestCase):
         m = reader.pointing_motion()
         self.assertTrue(m['sniper'])
         self.assertEqual((m['right']['dx'], m['right']['dy']), (300, -2))
+
+    def test_parse_cpi_extension(self):
+        m = parse_pointing_motion(motion_payload(left=(1, 4, 0), right=(1, 0, 0), ext=(2, 1600, 0)))
+        self.assertEqual(m['left']['cpi'], 1600)
+        self.assertNotIn('cpi', m['right'])  # 0: no CPI-based sensor
+        self.assertNotIn('cpi', parse_pointing_motion(motion_payload(left=(1, 4, 0)))['left'])  # 32-byte reports
+        self.assertNotIn('cpi', parse_pointing_motion(motion_payload().ljust(52, b'\0'))['left'])  # older firmware: zeros
+
+    def test_reader_two_with_the_readers_flag(self):
+        self.assertEqual((POINTING_MOTION_READERS_FLAG2, HOST_MOTION_READER), (0x10, 2))
+        device = MotionDevice(); device.size = 64; device.feature_flags2 = POINTING_MOTION_FLAG2 | POINTING_MOTION_READERS_FLAG2
+        device.motion = motion_payload(left=(1, 9, 0), ext=(2, 1200, 0))
+        reader = SvalReader(device)
+        reader.info()
+        m = reader.pointing_motion()
+        self.assertEqual(device.writes[-1][8], HOST_MOTION_READER)
+        self.assertEqual((m['left']['dx'], m['left']['cpi']), (9, 1200))
+
+    def test_reader_zero_without_the_readers_flag(self):
+        device = MotionDevice(); device.feature_flags2 = POINTING_MOTION_FLAG2
+        reader = SvalReader(device)
+        reader.info()
+        reader.pointing_motion()
+        self.assertEqual(device.writes[-1][8], 0)
 
     def test_kinds_from_widget_fragments(self):
         definition = {"fragments": {"tb": {"id": 9, "widget": {"module": "trackball"}}, "tp": {"id": 7, "widget": {"module": "touchpad"}}},

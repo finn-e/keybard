@@ -57,6 +57,7 @@ export function hostPointingEvent(detail: unknown): PointingMotionReport | null 
             valid: o.valid === true, scrolling: o.scrolling === true, saturated: false, autoMouse: false,
             touchValid: o.touchValid === true, fingers: n('fingers'), dx: n('dx'), dy: n('dy'), h: 0, v: 0, buttons: 0,
             touchX: n('touchX'), touchY: n('touchY'),
+            ...(n('cpi') > 0 ? { cpi: n('cpi') } : {}),
         };
     };
     return {

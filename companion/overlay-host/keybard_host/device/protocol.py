@@ -25,10 +25,16 @@ MODIFIER_STATE_FLAG2 = 1 << 2
 # returns and clears each hand's pointing motion since the last read.
 POINTING_MOTION_FLAG2 = 1 << 3
 POINTING_MOTION = 0x2D
+# Second feature byte, bit 4: 0x2D keeps counts per reader id (the request's one
+# argument byte) and reports each hand's CPI, so the Host and Keybard polling one
+# board each see all of the motion. The Host reads as reader 2 (Keybard is 1);
+# without the flag it sends 0, which every firmware treats as the one shared reader.
+POINTING_MOTION_READERS_FLAG2 = 1 << 4
+HOST_MOTION_READER = 2
 SHIFT_BITS = 0x22  # left and right Shift in the HID modifier byte
 # Protocol -> command -> exact request argument length. No setter is expressible.
 READ_COMMANDS = {
-    0xDF: {0x00: 0, 0x01: 2, 0x0D: 0, 0x0E: 3, 0x16: 0, 0x18: 0, 0x19: 0, 0x1B: 3, 0x2D: 0},
+    0xDF: {0x00: 0, 0x01: 2, 0x0D: 0, 0x0E: 3, 0x16: 0, 0x18: 0, 0x19: 0, 0x1B: 3, 0x2D: 1},
     0xFE: {0x02: 2, 0x11: 0, 0x12: 3},
 }
 
@@ -46,7 +52,9 @@ def parse_pointing_motion(data):
     """A POINTING_MOTION reply's payload (after the command echo) as a dict, or None.
 
     format(1) modes(1) ms(1) left(10) right(10) axis(1); each hand: flags(1) dx(2) dy(2)
-    h(1) v(1) buttons(1) touch_x(1) touch_y(1). Counts are raw sensor counts.
+    h(1) v(1) buttons(1) touch_x(1) touch_y(1). Counts are raw sensor counts. Newer
+    firmware on 64-byte reports adds reader(1) left_cpi(2) right_cpi(2); a hand's
+    'cpi' is set only when the board reports one (non-zero).
     """
     data = bytes(data or b"")
     if len(data) < 24 or data[0] != 1:
@@ -60,8 +68,14 @@ def parse_pointing_motion(data):
                     dy=int.from_bytes(data[offset + 3:offset + 5], "little", signed=True),
                     touchX=data[offset + 8], touchY=data[offset + 9])
     modes = data[1]
+    left, right = hand(3), hand(13)
+    if len(data) >= 29:
+        for block, offset in ((left, 25), (right, 27)):
+            cpi = int.from_bytes(data[offset:offset + 2], "little")
+            if cpi:
+                block['cpi'] = cpi
     return dict(sniper=bool(modes & 1), boost=bool(modes & 2), elapsedMs=data[2],
-                left=hand(3), right=hand(13))
+                left=left, right=right)
 
 
 def pointing_kinds(definition, hardware):
@@ -326,7 +340,8 @@ class SvalReader:
         """Each hand's motion since the last read, or None on firmware without 0x2D (never sent there)."""
         if not self.feature_flags2 & POINTING_MOTION_FLAG2:
             return None
-        return parse_pointing_motion(self._read(POINTING_MOTION))
+        reader = HOST_MOTION_READER if self.feature_flags2 & POINTING_MOTION_READERS_FLAG2 else 0
+        return parse_pointing_motion(self._read(POINTING_MOTION, bytes((reader,))))
 
     def pressed_keys(self):
         # VIA GET_KEYBOARD_VALUE / SWITCH_MATRIX_STATE, row offset zero.

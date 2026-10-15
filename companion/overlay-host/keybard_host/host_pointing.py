@@ -5,9 +5,11 @@ PointingOverlayLayer); the Host only forwards the board's POINTING_MOTION (0x2D)
 """
 import math
 
-# Counts a board reports per mm of trackball surface travel; the same value as
-# TRACKBALL_COUNTS_PER_MM in Keybard (src/components/pointing-viz/ball-gearing.ts).
-TRACKBALL_COUNTS_PER_MM = 400 / 25.4
+# Counts per mm of trackball surface the demo reports, as a sensor at the default
+# CPI would; the demo reports no CPI, so the overlay assumes the same default
+# (DEFAULT_TRACKBALL_CPI in Keybard's src/components/pointing-viz/ball-gearing.ts).
+DEFAULT_TRACKBALL_CPI = 800
+TRACKBALL_COUNTS_PER_MM = DEFAULT_TRACKBALL_CPI / 25.4
 
 
 def demo_motion(t, dt):

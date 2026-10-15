@@ -8,7 +8,7 @@ import { _setWebGLDisabledForTest, drawDevice, rotFromEuler, unpremultiplyFlippe
 import { demoReport, pointingDemoFromSearch } from "@/features/pointing-demo";
 import { freeCircle, MM_PER_U, placeDevice, placedKeyRects, type KeyRect } from "@/utils/pointing-geometry";
 import { boostLabel, multiplierLabels, pointingFactors, sniperLabel } from "@/utils/pointing-multiplier";
-import { parsePointingMotion, SVIL_FLAG2_POINTING_MOTION } from "@/utils/pointing-motion";
+import { KEYBARD_MOTION_READER, parsePointingMotion, SVIL_FLAG2_POINTING_MOTION, SVIL_FLAG2_POINTING_MOTION_READERS } from "@/utils/pointing-motion";
 
 const QK_USER_0 = 0x7e40;
 
@@ -147,6 +147,20 @@ describe("POINTING_MOTION (0x2D)", () => {
         expect(parsePointingMotion(reply().slice(0, 25))).toBeNull();
         const noData = reply(); noData[1] = 0;
         expect(parsePointingMotion(noData)).toBeNull();
+    });
+    it("per-reader counts are advertised by bit 4; Keybard reads as reader 1", () => {
+        expect(SVIL_FLAG2_POINTING_MOTION_READERS).toBe(0x10);
+        expect(KEYBARD_MOTION_READER).toBe(1);
+    });
+    it("reads each hand's CPI from the extension, when the board reports one", () => {
+        const buf = new Uint8Array(64); buf.set(reply(0, [1, 10, 0], [1, 0, 0]));
+        const view = new DataView(buf.buffer);
+        buf[25] = 1; view.setUint16(26, 1600, true); view.setUint16(28, 0, true);
+        const r = parsePointingMotion(buf)!;
+        expect(r.left.cpi).toBe(1600);
+        expect(r.right.cpi).toBeUndefined(); // 0: no CPI-based sensor
+        expect(parsePointingMotion(reply(0, [1, 1, 1]).slice(0, 26))!.left.cpi).toBeUndefined(); // 32-byte wrapped reply
+        expect(parsePointingMotion(new Uint8Array(64).fill(0).map((_, i) => (i === 0 ? 0x2d : i === 1 ? 1 : 0)))!.left.cpi).toBeUndefined(); // older firmware: zeros
     });
 });
 

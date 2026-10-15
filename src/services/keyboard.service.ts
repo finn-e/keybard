@@ -9,7 +9,7 @@ import { payloadCapacity } from "./hid-report";
 import LZMA from "js-lzma";
 import { assertSupportedSvilProto } from "@/utils/unsupported-firmware";
 import { parsePointingHardware, SVIL_FLAG2_POINTING_HARDWARE } from "@/utils/pointing-hardware";
-import { parsePointingMotion, SVIL_FLAG2_POINTING_MOTION, type PointingMotionReport } from "@/utils/pointing-motion";
+import { KEYBARD_MOTION_READER, parsePointingMotion, SVIL_FLAG2_POINTING_MOTION, SVIL_FLAG2_POINTING_MOTION_READERS, type PointingMotionReport } from "@/utils/pointing-motion";
 import type { KeyboardInfo, AltRepeatKeyEntry, LeaderEntry } from "../types/keyboard.types";
 
 // Svil feature flags (from protocol info response)
@@ -559,13 +559,16 @@ export class KeyboardService {
 
     /**
      * Each hand's pointing motion since the previous read (POINTING_MOTION, 0x2D,
-     * read-and-clear; a read, never a write). Null without sending on firmware
-     * that doesn't advertise it, and null on a failed or empty read.
+     * read-and-clear; a read, never a write). Where the board keeps counts per
+     * reader, Keybard reads as reader 1, so Keybard Host polling the same board
+     * doesn't take half of the motion. Null without sending on firmware that
+     * doesn't advertise it, and null on a failed or empty read.
      */
     async getPointingMotion(kbinfo: KeyboardInfo): Promise<PointingMotionReport | null> {
         if (!this.hasPointingMotion(kbinfo)) return null;
+        const perReader = ((kbinfo.feature_flags2 ?? 0) & SVIL_FLAG2_POINTING_MOTION_READERS) !== 0;
         try {
-            const reply = await this.usb.sendSvil(SvilUSB.CMD_SVIL_POINTING_MOTION, [], { uint8: true }) as Uint8Array;
+            const reply = await this.usb.sendSvil(SvilUSB.CMD_SVIL_POINTING_MOTION, perReader ? [KEYBARD_MOTION_READER] : [], { uint8: true }) as Uint8Array;
             return parsePointingMotion(reply, SvilUSB.CMD_SVIL_POINTING_MOTION);
         } catch {
             return null;
