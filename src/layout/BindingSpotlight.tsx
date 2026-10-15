@@ -4,7 +4,8 @@ import { useKeyBinding } from "@/contexts/KeyBindingContext";
 import { usePanels } from "@/contexts/PanelsContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import {
-    bindingEditorKind, isBindingEditorOpen, nudgeBindingEditor, SPOTLIGHT_NUDGE_EVENT, spotlightHint, spotStrength,
+    bindingEditorKind, currentRailMode, isBindingEditorOpen, nudgeBindingEditor, PICKER_STRIP_HINT, PICKER_STRIP_HINT_SR,
+    SPOTLIGHT_NUDGE_EVENT, spotlightHint, spotStrength, type NudgeDetail, type NudgeSource,
     reviewChoice, SPOT_LIGHTS, SPOT_LIGHT_PARAM, RAIL_JOINS, RAIL_JOIN_PARAM,
 } from "@/lib/bindingSpotlight";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
@@ -21,7 +22,7 @@ export function useBindingSpotlight(): boolean {
  * The spotlight scrim: the one place its color is drawn. Clicking it never
  * leaves the editor: it pulses the back arrow and points to it.
  */
-export function SpotlightScrim({ className }: { className?: string }) {
+export function SpotlightScrim({ className, source }: { className?: string; source?: NudgeSource }) {
     return (
         <div
             aria-hidden="true"
@@ -30,7 +31,7 @@ export function SpotlightScrim({ className }: { className?: string }) {
             onPointerDown={(e) => e.preventDefault()}
             onClick={(e) => {
                 e.stopPropagation();
-                nudgeBindingEditor({ x: e.clientX, y: e.clientY });
+                nudgeBindingEditor({ x: e.clientX, y: e.clientY }, source);
             }}
         />
     );
@@ -68,6 +69,21 @@ function ringBackArrow(back: HTMLElement, cue: "blocked" | "precue") {
 }
 const clearRings = () => document.querySelectorAll(`.${PULSE_CLASS}`).forEach(el => el.classList.remove(PULSE_CLASS));
 
+/** The side panel's category strip (?railMode=collapse): the picker selector while editing. */
+const STRIP = "[data-picker-rail] [data-picker-strip]";
+const STRIP_CLASS = "picker-strip-cue";
+function visibleStrip(): HTMLElement | null {
+    const candidates = [...document.querySelectorAll<HTMLElement>(STRIP)]
+        .filter(el => !el.closest("[hidden], [inert], [aria-hidden='true']"));
+    return candidates.find(el => el.getClientRects().length > 0) ?? candidates[0] ?? null;
+}
+function cueStrip(strip: HTMLElement) {
+    strip.classList.remove(STRIP_CLASS);
+    void strip.offsetWidth;
+    strip.classList.add(STRIP_CLASS);
+}
+const clearStrip = () => document.querySelectorAll(`.${STRIP_CLASS}`).forEach(el => el.classList.remove(STRIP_CLASS));
+
 /** Covered controls inside lifted areas (the canvas): darkened, out of the Tab order, and a click nudges. */
 const COVER = "[data-spotlight-cover]";
 /** The lifted canvas: a click on its empty space (not a key or a control) is a blocked click. */
@@ -94,6 +110,9 @@ export default function BindingSpotlight() {
     const reducedMotion = usePrefersReducedMotion();
     /** Where the callout sits: under the back arrow (arrow), or near the click when there is none. */
     const [hint, setHint] = React.useState<{ x: number; y: number; arrow: boolean; key: number } | null>(null);
+    /** ?railMode=collapse: a rail click also points at the side panel's category strip, with this cue beside it. */
+    const [stripHint, setStripHint] = React.useState<{ x: number; y: number; key: number } | null>(null);
+    const railMode = React.useMemo(currentRailMode, []);
 
     const selectedRef = React.useRef(selectedTarget);
     selectedRef.current = selectedTarget;
@@ -111,7 +130,7 @@ export default function BindingSpotlight() {
     const nudgedRef = React.useRef(false);
 
     React.useEffect(() => {
-        if (!active) { setHint(null); return; }
+        if (!active) { setHint(null); setStripHint(null); return; }
         const root = document.documentElement;
         root.setAttribute("data-binding-spotlight", "");
         const strength = spotStrength(window.location.search);
@@ -179,6 +198,17 @@ export default function BindingSpotlight() {
         if (!active) return;
         const onNudge = (event: Event) => {
             nudgedRef.current = true;
+            const detail = (event as CustomEvent<NudgeDetail>).detail;
+            // A click on the scrimmed rail in collapse mode: go back, or use these pickers.
+            const strip = railMode === "collapse" && detail?.from === "rail" ? visibleStrip() : null;
+            if (strip) {
+                cueStrip(strip);
+                const r = strip.getBoundingClientRect();
+                setStripHint({ x: r.right + 10, y: r.top + 14, key: Date.now() });
+            } else {
+                clearStrip();
+                setStripHint(null);
+            }
             const back = visibleBackArrow();
             if (back) {
                 ringBackArrow(back, "blocked");
@@ -186,7 +216,7 @@ export default function BindingSpotlight() {
                 setHint({ x: r.left, y: r.bottom + 10, arrow: true, key: Date.now() });
                 return;
             }
-            let at = (event as CustomEvent<{ x: number; y: number } | null>).detail;
+            let at = typeof detail?.x === "number" && typeof detail?.y === "number" ? { x: detail.x, y: detail.y } : null;
             if (!at) {
                 const card = document.querySelector(".binding-workspace")?.getBoundingClientRect();
                 at = card ? { x: card.left, y: card.top } : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
@@ -196,6 +226,7 @@ export default function BindingSpotlight() {
         // A ring ends with its last animation; a reduced-motion highlight ends with its timer.
         const onEnd = (event: AnimationEvent) => {
             if (event.target instanceof HTMLElement && event.animationName.startsWith("bindingBack")) event.target.classList.remove(PULSE_CLASS);
+            if (event.target instanceof HTMLElement && event.animationName === "pickerStripCue") event.target.classList.remove(STRIP_CLASS);
         };
         window.addEventListener(SPOTLIGHT_NUDGE_EVENT, onNudge);
         document.addEventListener("animationend", onEnd);
@@ -203,7 +234,16 @@ export default function BindingSpotlight() {
             window.removeEventListener(SPOTLIGHT_NUDGE_EVENT, onNudge);
             document.removeEventListener("animationend", onEnd);
         };
-    }, [active]);
+    }, [active, railMode]);
+
+    React.useEffect(() => {
+        if (!stripHint) return;
+        const timer = window.setTimeout(() => {
+            setStripHint(null);
+            clearStrip();
+        }, HINT_MS);
+        return () => window.clearTimeout(timer);
+    }, [stripHint]);
 
     React.useEffect(() => {
         if (!hint) return;
@@ -217,6 +257,7 @@ export default function BindingSpotlight() {
     React.useEffect(() => {
         if (active) return;
         clearRings();
+        clearStrip();
     }, [active]);
 
     // Covered controls inside the lifted canvas: out of the Tab order, and
@@ -306,7 +347,7 @@ export default function BindingSpotlight() {
     return (
         <>
             <SpotlightScrim className="fixed inset-0 z-[45]" />
-            <div role="status" aria-live="polite" className="sr-only">{hint ? text : ""}</div>
+            <div role="status" aria-live="polite" className="sr-only">{hint ? (stripHint ? `${text} ${PICKER_STRIP_HINT_SR}` : text) : ""}</div>
             {hint && (
                 <div
                     key={hint.key}
@@ -316,6 +357,20 @@ export default function BindingSpotlight() {
                     style={{ left, top }}
                 >
                     {text}
+                </div>
+            )}
+            {stripHint && (
+                <div
+                    key={stripHint.key}
+                    aria-hidden="true"
+                    data-picker-strip-callout=""
+                    className="binding-back-callout picker-strip-callout fixed z-[80] pointer-events-none rounded-lg px-3 py-2 text-[13px] font-medium shadow-lg whitespace-nowrap"
+                    style={{
+                        left: Math.max(8, Math.min(stripHint.x, window.innerWidth - 160)),
+                        top: Math.max(8, Math.min(stripHint.y, window.innerHeight - 48)),
+                    }}
+                >
+                    {PICKER_STRIP_HINT}
                 </div>
             )}
         </>

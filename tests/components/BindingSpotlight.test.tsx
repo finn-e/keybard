@@ -293,3 +293,54 @@ describe('binding editor spotlight', () => {
         expect(document.documentElement.hasAttribute('data-spot')).toBe(false);
     });
 });
+
+describe('?railMode=collapse: a click on the scrimmed rail', () => {
+    const setSearch = (search: string) => window.history.replaceState(null, '', `/${search}`);
+    afterEach(() => setSearch(''));
+    const page = () => (
+        <>
+            <button type="button" aria-label="Go back" data-binding-editor-back="" />
+            <div data-picker-rail=""><div data-picker-strip="" /></div>
+            <BindingSpotlight />
+        </>
+    );
+    const strip = () => document.querySelector('[data-picker-strip]')!;
+
+    it('rings the back arrow and lights the category strip with its own cue', () => {
+        setSearch('?railMode=collapse');
+        render(page());
+        act(() => nudgeBindingEditor({ x: 20, y: 200 }, 'rail'));
+        expect(screen.getByRole('button', { name: 'Go back' })).toHaveClass('binding-back-pulse');
+        expect(document.querySelector('[data-binding-back-callout]')).toHaveTextContent('Done with Combo 3? Go back to use the rest.');
+        expect(strip()).toHaveClass('picker-strip-cue');
+        expect(document.querySelector('[data-picker-strip-callout]')).toHaveTextContent('Pick keys here');
+        expect(screen.getByRole('status')).toHaveTextContent('Or pick keys from the categories in the side panel.');
+    });
+
+    it('clears both cues after a moment', () => {
+        vi.useFakeTimers();
+        try {
+            setSearch('?railMode=collapse');
+            render(page());
+            act(() => nudgeBindingEditor(undefined, 'rail'));
+            act(() => { vi.advanceTimersByTime(3000); });
+            expect(strip()).not.toHaveClass('picker-strip-cue');
+            expect(document.querySelector('[data-picker-strip-callout]')).toBeNull();
+        } finally { vi.useRealTimers(); }
+    });
+
+    it('lights only the back arrow for a click elsewhere, or without the param', () => {
+        setSearch('?railMode=collapse');
+        const view = render(page());
+        act(() => nudgeBindingEditor({ x: 400, y: 300 }));
+        expect(strip()).not.toHaveClass('picker-strip-cue');
+        expect(document.querySelector('[data-picker-strip-callout]')).toBeNull();
+        view.unmount();
+        setSearch('');
+        render(page());
+        act(() => nudgeBindingEditor({ x: 20, y: 200 }, 'rail'));
+        expect(screen.getByRole('button', { name: 'Go back' })).toHaveClass('binding-back-pulse');
+        expect(strip()).not.toHaveClass('picker-strip-cue');
+        expect(document.querySelector('[data-picker-strip-callout]')).toBeNull();
+    });
+});

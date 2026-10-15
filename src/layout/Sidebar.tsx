@@ -1,4 +1,4 @@
-import { BookOpen, HelpCircle, Keyboard, ListOrdered, LucideIcon, Mouse, Piano, Rocket, Settings } from "lucide-react";
+import { ArrowLeft, BookOpen, HelpCircle, Keyboard, ListOrdered, LucideIcon, Mouse, PanelLeftClose, PanelLeftOpen, Piano, Rocket, Settings } from "lucide-react";
 import KeybardLogo from "@/components/icons/KeybardLogo";
 import PointingDeviceBall01Icon from "@/components/icons/PointingDeviceBall01Icon";
 import LayoutLayersIcon from "@/components/icons/LayoutLayersIcon";
@@ -29,7 +29,7 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
 import { PARANOID } from "@/lib/paranoid";
-import { isBindingEditorOpen, pickerCategoryForRail, effectivePickerMode, nudgeBindingEditor, reviewChoice, RAIL_BARS, RAIL_BAR_PARAM } from "@/lib/bindingSpotlight";
+import { bindingEditorKind, currentRailMode, isBindingEditorOpen, modalRailExitLabel, pickerCategoryForRail, effectivePickerMode, nudgeBindingEditor, reviewChoice, RAIL_BARS, RAIL_BAR_PARAM, usablePickerCategories } from "@/lib/bindingSpotlight";
 import { ALT_REPEAT_PANEL, panelAllowed, SHOW_ALT_REPEAT_SETTING } from "@/lib/altRepeatVisibility";
 import { useSettings } from "@/contexts/SettingsContext";
 
@@ -121,7 +121,7 @@ const NAV_BOX_PADDING_PX = 8;
  * half pixel whenever the free space is odd, which leaves the rail items
  * (and their pills and bar) at fractional positions at 1x.
  */
-function useWholePixelCenter() {
+function useWholePixelCenter(remountKey: unknown) {
     const boxRef = useRef<HTMLDivElement>(null);
     const menuRef = useRef<HTMLUListElement>(null);
     const [offset, setOffset] = useState(0);
@@ -136,7 +136,8 @@ function useWholePixelCenter() {
         observer.observe(box);
         observer.observe(menu);
         return () => observer.disconnect();
-    }, []);
+        // The nav remounts when the rail's contents swap (?railMode=modal), so it is measured again.
+    }, [remountKey]);
     return { boxRef, menuRef, offset };
 }
 
@@ -215,7 +216,7 @@ const SidebarNavItem = ({
 
 const AppSidebar = () => {
     const [overlayOpen, setOverlayOpen] = useState(() => overlayRequested());
-    const { state, toggleSidebar, setOpen: setNavigationOpen } = useSidebar("primary-nav", { defaultOpen: false });
+    const { state, toggleSidebar, setOpen: setNavigationOpen, setForcedCollapsed } = useSidebar("primary-nav", { defaultOpen: false });
     const isCollapsed = state === "collapsed";
     const {
         setItemToEdit,
@@ -233,16 +234,46 @@ const AppSidebar = () => {
         pickerMode,
         setPickerMode,
         bindingTypeToEdit,
+        handleCloseEditor,
     } = usePanels();
     // While a binding editor is open, the rail's picker categories switch the
     // picker and nothing on the rail leaves the editor.
     const editing = isBindingEditorOpen(activePanel, itemToEdit);
     const shownPickerMode = editing ? effectivePickerMode(pickerMode ?? "keyboard", activePanel) : null;
+    // ?railMode=collapse: while editing the whole rail is under the scrim and
+    // narrows to its icons; the side panel's category strip picks instead.
+    const railMode = useMemo(currentRailMode, []);
+    const railCollapse = editing && railMode === "collapse";
+    // ?railMode=modal: while editing the rail is the editor's own: its picker
+    // categories replace the navigation and the top-left corner is the way out.
+    const railModal = editing && railMode === "modal";
+    // The contents swap in place when the mode changes (never on first load).
+    const [swapFor, setSwapFor] = useState(railModal);
+    const [swapped, setSwapped] = useState(false);
+    if (swapFor !== railModal) {
+        setSwapFor(railModal);
+        setSwapped(true);
+    }
     const railSpotlight = (url: string): RailSpotlight | undefined =>
-        !editing ? undefined : pickerCategoryForRail(url, activePanel) ? "lift" : url === activePanel ? "origin" : "cover";
+        !editing || railModal ? undefined : railCollapse ? "cover" : pickerCategoryForRail(url, activePanel) ? "lift" : url === activePanel ? "origin" : "cover";
+    useEffect(() => {
+        if (railMode !== "collapse") return;
+        const root = document.documentElement;
+        root.setAttribute("data-rail-mode", "collapse");
+        return () => root.removeAttribute("data-rail-mode");
+    }, [railMode]);
+    // Held narrow while editing, never saved: leaving the editor brings back the person's own width.
+    // (The setter is new on every sidebar change, so it is read through a ref.)
+    const setForcedRef = useRef(setForcedCollapsed);
+    setForcedRef.current = setForcedCollapsed;
+    useEffect(() => {
+        if (!railCollapse) return;
+        setForcedRef.current(true);
+        return () => setForcedRef.current(false);
+    }, [railCollapse]);
 
     const { keyboard } = useKeyboard();
-    const navCenter = useWholePixelCenter();
+    const navCenter = useWholePixelCenter(railModal);
     // Owner review: ?railBar=flush|gap2|kiss (unset is flush).
     const railBar = useMemo(() => reviewChoice(window.location.search, RAIL_BAR_PARAM, RAIL_BARS), []);
 
@@ -264,6 +295,15 @@ const AppSidebar = () => {
 
     const handleItemSelect = useCallback(
         (item: SidebarItem) => {
+            if (railModal) {
+                const category = pickerCategoryForRail(item.url, activePanel);
+                if (category) setPickerMode(category);
+                return;
+            }
+            if (railCollapse) {
+                nudgeBindingEditor(undefined, "rail");
+                return;
+            }
             if (editing) {
                 const category = pickerCategoryForRail(item.url, activePanel);
                 if (category) setPickerMode(category);
@@ -299,7 +339,7 @@ const AppSidebar = () => {
                 setItemToEdit(null);
             }
         },
-        [editing, showAltRepeat, setPickerMode, setNavigationOpen, activePanel, open, handleCloseDetails, setActivePanel, openDetails, setPanelToGoBack, setAlternativeHeader, setItemToEdit, setOpen]
+        [editing, railModal, railCollapse, showAltRepeat, setPickerMode, setNavigationOpen, activePanel, open, handleCloseDetails, setActivePanel, openDetails, setPanelToGoBack, setAlternativeHeader, setItemToEdit, setOpen]
     );
 
 
@@ -366,13 +406,25 @@ const AppSidebar = () => {
             + (activeLayoutIndex * MENU_ITEM_GAP_PX);
     }
 
+    // ?railMode=modal: the editor's picker categories, in rail order, with the rail's own icons.
+    const modalItems = useMemo(() => {
+        if (!railModal) return [];
+        const byUrl = new Map(primarySidebarItems.map(item => [item.url, item]));
+        return usablePickerCategories(activePanel).map(id => byUrl.get(id)).filter((item): item is SidebarItem => !!item);
+    }, [railModal, activePanel]);
+    const modalActiveIndex = modalItems.findIndex(item => item.url === shownPickerMode);
+    const editorKind = bindingEditorKind(activePanel, itemToEdit);
+    const exitLabel = modalRailExitLabel(editorKind);
+
     const sidebarClasses = cn(
         // Above the page scrim while editing; its own scrim covers what the editor cannot use.
         // The spotlight rules take the rim and shadow off (data-spotlight-rail-frame).
         editing ? "z-[47]" : "z-11",
         // Whole-pixel insets: the rail's surface spans 8px to 100vh - 8px, the same as the side panel.
         "fixed transition-[box-shadow,border-color] duration-300 ease-out border border-sidebar-border shadow-lg ml-2 h-[calc(100vh-14px)] mt-[7px] transition-all",
-        "rounded-3xl select-none"
+        "rounded-3xl select-none",
+        // The collapse variant narrows and restores in 250ms; instant with reduced motion.
+        railMode === "collapse" && "duration-[250ms] motion-reduce:transition-none"
     );
 
     return (
@@ -384,11 +436,92 @@ const AppSidebar = () => {
 
             <Sidebar rounded name="primary-nav" defaultOpen={false} collapsible="icon" hideGap className={sidebarClasses}
                 data-spotlight-rail-frame={editing ? "" : undefined}
-                data-rail-bar={railBar ?? undefined}>
+                data-rail-bar={railBar ?? undefined}
+                data-rail-collapsed={railCollapse ? "" : undefined}
+                data-rail-modal-frame={railModal ? "" : undefined}>
                 {/* The rail is its own fixed layer above the page scrim, so it carries the
                     same scrim over its own surface, the same shape as it. */}
-                {editing && <SpotlightScrim className="absolute inset-0 z-[5]" />}
-                <SidebarContent className={cn("py-4 overflow-y-auto overflow-x-hidden flex flex-col", isCollapsed && "scrollbar-none")}>
+                {editing && !railModal && <SpotlightScrim className="absolute inset-0 z-[5]" source="rail" />}
+                {railModal ? (
+                <SidebarContent key="modal" data-rail-modal="" className={cn("py-4 overflow-y-auto overflow-x-hidden flex flex-col", swapped && "rail-mode-swap", isCollapsed && "scrollbar-none")}>
+                    {/* The way out, where the logo sits: the one place that goes back to the rest of the app. */}
+                    <SidebarMenu>
+                        {/* Inset from the rail's edge, so its ring never runs under the panel. */}
+                        <SidebarMenuItem className={cn(!isCollapsed && "pr-3")}>
+                            <SidebarMenuButton
+                                asChild
+                                size="nav"
+                                tooltip={exitLabel}
+                                sidebarName="primary-nav"
+                                className="transition-colors !h-auto text-sidebar-foreground"
+                            >
+                                <button
+                                    type="button"
+                                    className="flex w-full items-center justify-start font-semibold"
+                                    aria-label={exitLabel}
+                                    data-binding-editor-back=""
+                                    data-rail-exit=""
+                                    onClick={() => handleCloseEditor()}
+                                >
+                                    <div className={cn(ICON_GUTTER_CLASSES, "h-8")}>
+                                        <ArrowLeft className="h-5 w-5 shrink-0" />
+                                    </div>
+                                    {/* Two lines, so the editor's name never truncates in the rail's width. */}
+                                    <span className={cn("flex min-w-0 flex-col items-start pr-3 leading-tight", isCollapsed && "hidden")} data-rail-exit-label="">
+                                        <span className="text-xs font-normal text-muted-foreground">Done with</span>
+                                        <span className="truncate max-w-full">{editorKind}</span>
+                                    </span>
+                                </button>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                    </SidebarMenu>
+
+                    {/* The editor's picker categories: the rail is the picker selector now. */}
+                    <div className="flex-1 flex flex-col justify-center py-2">
+                        <SidebarMenu className="relative" aria-label="Pick keys from">
+                            {modalActiveIndex !== -1 && <SlidingIndicator y={modalActiveIndex * MENU_ITEM_GAP_PX} />}
+                            {modalItems.map((item, index) => (
+                                <SidebarNavItem
+                                    key={item.url}
+                                    item={item}
+                                    isActive={index === modalActiveIndex}
+                                    isCollapsed={isCollapsed}
+                                    onClick={handleItemSelect}
+                                />
+                            ))}
+                        </SidebarMenu>
+                    </div>
+
+                    {/* The rail keeps the person's width; its toggle moves here while the corner is the exit. */}
+                    <div className="py-2 mb-3">
+                        <SidebarMenu>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton
+                                    asChild
+                                    size="nav"
+                                    tooltip="Show labels"
+                                    sidebarName="primary-nav"
+                                    className="transition-colors text-gray-400 dark:text-neutral-400"
+                                >
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center justify-start"
+                                        aria-label={isCollapsed ? "Expand navigation" : "Collapse navigation"}
+                                        aria-expanded={!isCollapsed}
+                                        onClick={() => toggleSidebar()}
+                                    >
+                                        <div className={cn(ICON_GUTTER_CLASSES, "h-full")}>
+                                            {isCollapsed ? <PanelLeftOpen className="h-5 w-5 shrink-0" /> : <PanelLeftClose className="h-5 w-5 shrink-0" />}
+                                        </div>
+                                        <span className={cn("truncate", isCollapsed && "hidden")}>Show icons only</span>
+                                    </button>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                        </SidebarMenu>
+                    </div>
+                </SidebarContent>
+                ) : (
+                <SidebarContent key="nav" className={cn("py-4 overflow-y-auto overflow-x-hidden flex flex-col", swapped && "rail-mode-swap", isCollapsed && "scrollbar-none")}>
                     {/* Header section - Logo, Connect, Import/Export */}
                     <SidebarMenu>
                         {/* While editing, the logo stays under the scrim and is not a control. */}
@@ -524,6 +657,7 @@ const AppSidebar = () => {
 
                     </div>
                 </SidebarContent>
+                )}
             </Sidebar>
         </>
     );

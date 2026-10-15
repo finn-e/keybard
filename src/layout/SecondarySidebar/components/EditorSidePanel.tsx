@@ -79,7 +79,7 @@ const EditorSidePanel: FC<Props> = ({ className, activeTab, onTabChange, categor
     return (
         <div className={cn("items-start justify-start flex", className)}>
             {/* A flat column inside the panel: no card, no shadow. The category on show is a filled tile. */}
-            <div className="text-gray-400 dark:text-neutral-400 flex items-center flex-col justify-start py-3 px-2 gap-1">
+            <div className="text-gray-400 dark:text-neutral-400 flex items-center flex-col justify-start py-3 px-2 gap-1 rounded-[14px]" data-picker-strip="">
                 {visibleIcons.map((i) => (
                     <Tooltip key={i.panel}>
                         <TooltipTrigger asChild>

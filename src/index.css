@@ -96,6 +96,8 @@
     --kb-spot-pill-radius: 10px;
     /* The rail while editing is one painted shape: its surface pre-dimmed by the scrim. */
     --kb-spot-rail-bg: color-mix(in srgb, rgb(var(--kb-scrim-rgb)) calc(var(--kb-scrim-alpha) * 100%), var(--kb-surface));
+    /* ?railMode=modal: the rail is the editor's own and keeps its own lit surface. */
+    --kb-spot-rail-lit-bg: var(--sidebar);
     /* Lit rail pills: 36px tall (5px above and below the 26px item), 6px in from the visible rail. */
     --kb-spot-pill-inset-y: 5px;
     --kb-spot-pill-left: 6px;
@@ -457,6 +459,10 @@ html.dark {
 :root[data-binding-spotlight] [data-spotlight-rail-frame] [data-binding-scrim] {
     background-color: transparent;
 }
+/* ?railMode=modal: the rail is the editor's own, so its surface stays lit (no scrim on it). */
+:root[data-binding-spotlight] [data-spotlight-rail-frame][data-rail-modal-frame] > [data-sidebar="sidebar"] {
+    background-color: var(--kb-spot-rail-lit-bg);
+}
 :root[data-binding-spotlight] [data-spotlight-rail-frame] [data-spotlight="cover"],
 :root[data-binding-spotlight] [data-spotlight-rail-frame] [data-spotlight-rail-rule] {
     filter: brightness(calc(1 - var(--kb-scrim-alpha)));
@@ -630,6 +636,45 @@ html.dark {
 @keyframes bindingBackCallout {
     from { opacity: 0; transform: translateY(4px); }
     to { opacity: 1; transform: none; }
+}
+/* ?railMode=collapse: a rail click also lights the side panel's category strip
+   (the picker selector while editing), with "Pick keys here" beside it. */
+/* The strip sits in a scrolling column, so its cue stays inside it: an inset
+   outline and a fill that flashes twice in step with the back arrow's rings. */
+@keyframes pickerStripCue {
+    0% { background-color: transparent; }
+    35% { background-color: var(--kb-back-highlight-soft); }
+    100% { background-color: transparent; }
+}
+.picker-strip-cue {
+    box-shadow: inset 0 0 0 2px var(--kb-back-highlight);
+    animation: pickerStripCue 650ms ease-out 2;
+}
+.picker-strip-callout::before {
+    content: "";
+    position: absolute;
+    top: 13px;
+    left: -5px;
+    width: 10px;
+    height: 10px;
+    background-color: var(--kb-back-highlight);
+    transform: rotate(45deg);
+    border-radius: 2px;
+}
+/* ?railMode=modal: entering or leaving an editor, the rail's contents swap in
+   place with a short fade (RAIL_MODAL_SWAP_MS). Nothing slides; none with reduced motion. */
+@keyframes railModeSwap {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.rail-mode-swap {
+    animation: railModeSwap 200ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+    .rail-mode-swap { animation: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .picker-strip-cue { animation: none; background-color: var(--kb-back-highlight-soft); }
 }
 @media (prefers-reduced-motion: reduce) {
     /* A brief static highlight instead of the rings, with no motion. */

@@ -22,7 +22,7 @@ import { useKeyboard } from "@/contexts/KeyboardContext";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { cn } from "@/lib/utils";
 import { isPanelEditorPlacement, pinnedEditorTop, type ComboEditorPlacement } from "@/lib/comboEditorPlacement";
-import { bindingEditorHeading, bindingEditorSubtitle, effectivePickerMode, isBindingEditorOpen, usablePickerCategories, type PickerMode } from "@/lib/bindingSpotlight";
+import { bindingEditorHeading, bindingEditorSubtitle, currentRailMode, effectivePickerMode, isBindingEditorOpen, RAIL_COLLAPSE_EASE, RAIL_COLLAPSE_MS, usablePickerCategories, type PickerMode } from "@/lib/bindingSpotlight";
 import {
     EDITOR_REST_FRAME, isUsableRect, PANEL_EDITOR_EASE_OUT, PANEL_EDITOR_FADE_MS, PANEL_EDITOR_MOTION_MS,
     PANEL_PICKER_RISE_PX, pickerScrolledUnder, pinCueStyle, rowToEditorFrame, type MotionRect, type PanelEditorMotion,
@@ -48,9 +48,11 @@ interface AlternativeHeaderProps {
     menus?: CustomUIMenuItem[];
     /** Keep showing the editor's title after it closes (the picker overlay, while it leaves). */
     holdEditorTitle?: boolean;
+    /** False while the rail's top-left corner is the editor's way out (?railMode=modal). */
+    showBack?: boolean;
 }
 
-const AlternativeHeader = ({ onBack, menus, holdEditorTitle = false }: AlternativeHeaderProps) => {
+const AlternativeHeader = ({ onBack, menus, holdEditorTitle = false, showBack = true }: AlternativeHeaderProps) => {
     const { activePanel, handleCloseEditor, itemToEdit } = usePanels();
     const { keyboard } = useKeyboard();
     const editing = isBindingEditorOpen(activePanel, itemToEdit);
@@ -69,9 +71,9 @@ const AlternativeHeader = ({ onBack, menus, holdEditorTitle = false }: Alternati
     const back = () => onBack ? onBack() : handleCloseEditor();
 
     return (
-        <div className="flex items-center justify-start gap-4">
+        <div className={cn("flex items-center justify-start gap-4", !showBack && "min-h-10")}>
             {/* The editor's way out: a click under the spotlight scrim pulses it (BindingSpotlight). */}
-            <button
+            {showBack && <button
                 type="button"
                 onClick={back}
                 className="bg-transparent hover:bg-muted/60 rounded-full p-2 cursor-pointer transition-colors"
@@ -79,7 +81,7 @@ const AlternativeHeader = ({ onBack, menus, holdEditorTitle = false }: Alternati
                 data-binding-editor-back={editing ? "" : undefined}
             >
                 <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-neutral-400" />
-            </button>
+            </button>}
             <div>
                 <h2 className="text-[22px] font-semibold leading-none text-kb-ink">
                     {title}
@@ -203,6 +205,14 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
     const panelPlacement = !bottom && isPanelEditorPlacement(comboPlacement);
     const panelEditor = showPicker && panelPlacement;
     const reducedMotion = usePrefersReducedMotion();
+    // ?railMode=collapse: the panel follows the rail's edge as it narrows and comes back.
+    const railMode = React.useMemo(currentRailMode, []);
+    // ?railMode=modal: the rail is the picker selector and its top-left corner the
+    // way out, so the panel drops its category strip and its back arrow while editing.
+    const railModal = railMode === "modal";
+    const railMotion = railMode === "collapse" && !bottom && !reducedMotion
+        ? `left ${RAIL_COLLAPSE_MS}ms ${RAIL_COLLAPSE_EASE}, width ${RAIL_COLLAPSE_MS}ms ${RAIL_COLLAPSE_EASE}`
+        : undefined;
     const pinCue = React.useMemo(() => pinCueStyle(typeof window === "undefined" ? "" : window.location.search), []);
 
     // Entering and leaving the side-panel editor. Set while rendering, so the
@@ -454,6 +464,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                 width: bottom ? undefined : `min(${DETAIL_SIDEBAR_WIDTH}, calc(100vw - ${leftOffset ?? primaryOffset} - 8px))`,
                 height: bottom ? getDetailPanelHeight(activePanel, height) : undefined,
                 maxHeight: "calc(100dvh - 16px)",
+                transition: railMotion,
                 "--panel-left": leftOffset ?? primaryOffset,
                 "--panel-height": `${height}px`,
             } as React.CSSProperties}
@@ -467,7 +478,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
             >
                 {/* Entering, the list's own title fades out under the editor's. */}
                 {(alternativeHeader || showPicker) && motion !== "enter" ? (
-                    <AlternativeHeader menus={keyboard?.menus} />
+                    <AlternativeHeader menus={keyboard?.menus} showBack={!(railModal && showPicker)} />
                 ) : (
                     <div className="flex items-center justify-between gap-4 pt-1.5">
                         <div>
@@ -518,14 +529,14 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                 style={panelPlacement ? undefined : { clipPath: "inset(-50px -300px -50px 0px)" }}
             >
                 <div ref={overlayHeaderRef} className={cn("px-4 py-6 shrink-0", panelPlacement ? motion === "exit" && "invisible" : "bg-kb-surface")}>
-                    <AlternativeHeader onBack={() => setIsClosingEditor(true)} menus={keyboard?.menus} holdEditorTitle />
+                    <AlternativeHeader onBack={() => setIsClosingEditor(true)} menus={keyboard?.menus} holdEditorTitle showBack={!railModal} />
                 </div>
 
-                <div ref={railRef} data-picker-rail="" className="absolute top-24 right-0 bottom-0 overflow-y-auto z-30">
+                {!railModal && <div ref={railRef} data-picker-rail="" className="absolute top-24 right-0 bottom-0 overflow-y-auto z-30">
                     <EditorSidePanel activeTab={pickerMode} onTabChange={setPickerMode} categories={pickerCategories} />
-                </div>
+                </div>}
 
-                <div ref={pickerScrollRef} onScroll={onPickerScroll} className="flex-1 min-h-0 overflow-auto overscroll-contain pl-4 pr-16 pb-4" data-panel-editor-scroll={panelEditor ? "" : undefined}>
+                <div ref={pickerScrollRef} onScroll={onPickerScroll} className={cn("flex-1 min-h-0 overflow-auto overscroll-contain pl-4 pb-4", railModal ? "pr-4" : "pr-16")} data-panel-editor-scroll={panelEditor ? "" : undefined}>
                     {panelEditor && <div
                         ref={bindingRef}
                         tabIndex={-1}
