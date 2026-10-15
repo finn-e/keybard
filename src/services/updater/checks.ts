@@ -174,7 +174,7 @@ export async function planInstall(client: UpdaterClient, source: InstallSource, 
 
     // Integrity: a carried file must match its pin; that's the only refusal of a file Keybard chose.
     const releases = o.releases;
-    let pinned = source.kind === "release";
+    let pinned = true;
     let integrityOk = true;
     for (const h of halves) {
         const f = files[h];
@@ -235,7 +235,7 @@ export async function planInstall(client: UpdaterClient, source: InstallSource, 
     }
 
     const toTag = lead?.manifest.tag || (source.kind === "release" ? source.release.tag : "custom firmware");
-    const kind = lead ? kindFor(board, lead, pinned && source.kind === "release" ? true : pinned) : "custom";
+    const kind = lead ? kindFor(board, lead, pinned) : "custom";
     return {
         board, target, files, kind, toTag, fromTag: board.usbTag, title: titleFor(kind, toTag), checks, warnings, refusal,
         otherSilent, pinned,

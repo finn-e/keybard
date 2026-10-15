@@ -1,0 +1,300 @@
+// The install flow end to end against FakeSvalboard, in virtual time.
+import { beforeEach, describe, expect, it } from "vitest";
+import { UpdaterClient } from "@/services/updater/client";
+import { planInstall, type Plan, type PreFailure } from "@/services/updater/checks";
+import { fakeSetup, fixtureRelease, FakeHost, type FixtureRelease } from "@/services/updater/fake-host";
+import { memoryFlowStore, UpdateFlow, type Afterwards, type FlowState } from "@/services/updater/flow";
+import { HAND_LEFT, HAND_RIGHT, Op } from "@/services/updater/protocol";
+import { VirtualClock } from "@/services/updater/transport";
+import type { FirmwareReleasePin } from "@/constants/firmware-releases";
+
+const L = HAND_LEFT;
+const R = HAND_RIGHT;
+let clock: VirtualClock;
+let v3: FixtureRelease;
+let x4: FixtureRelease;
+let dev: FixtureRelease;
+
+beforeEach(async () => {
+    clock = new VirtualClock();
+    v3 ??= await fixtureRelease("v3", 3000);
+    x4 ??= await fixtureRelease("x4", 4000);
+    dev ??= await fixtureRelease("x4", 4000, { noChord: true });
+});
+
+const pin = (r: FixtureRelease): FirmwareReleasePin => ({
+    tag: r.tag, kind: r.tag.startsWith("v") ? "v" : "x", fwVersion: r.fwVersion, updaterProtocol: 4,
+    files: {
+        left: { svup: "left.svup", uf2: "left.uf2", sha256: r.files[L].sha256, size: r.files[L].bytes.length, pid: 0x4044 },
+        right: { svup: "right.svup", uf2: "right.uf2", sha256: r.files[R].sha256, size: r.files[R].bytes.length, pid: 0x4045 },
+    },
+    highlights: [], notesUrl: "",
+});
+
+interface RunOptions {
+    setup?: Partial<Parameters<typeof fakeSetup>[0]>;
+    release?: FixtureRelease;
+    afterwards?: Afterwards;
+    onlyHand?: 0 | 1;
+    backup?: boolean;
+}
+
+async function plan(o: RunOptions = {}) {
+    const { board, host } = fakeSetup({ clock, running: v3, ...o.setup });
+    const release = o.release ?? x4;
+    const p = await planInstall(new UpdaterClient(board), { kind: "release", release: pin(release), files: release.files }, { clock, onlyHand: o.onlyHand, releases: [pin(v3), pin(x4)] });
+    return { board, host, plan: p };
+}
+
+async function run(o: RunOptions = {}) {
+    const { board, host, plan: p } = await plan(o);
+    if ("id" in p) throw new Error(`plan failed: ${p.id}`);
+    const store = memoryFlowStore();
+    const flow = UpdateFlow.create(host, store, { plan: p, afterwards: o.afterwards ?? "restore", backup: o.backup === false ? null : { fileName: "Kip-v3-2026-10-15.svil", svil: "{}" } });
+    const approvals: number[] = [];
+    flow.subscribe((s) => { if (s.step === "approve") approvals.push(s.approvalsAsked); });
+    const state = await flow.run();
+    return { board, host, state, store, flow, approvals };
+}
+
+function expectOneChordAtMost(s: FlowState) {
+    expect(s.approvalsAsked).toBeLessThanOrEqual(1);
+}
+
+describe("the install flow", () => {
+    it("P4-28 a pair update asks for the chord exactly once and ends on the new release", async () => {
+        const { board, host, state } = await run();
+        expect(state.phase).toBe("result");
+        expect(state.approvalsAsked).toBe(1);
+        expect(board.chordRequests).toBe(1);
+        expect(board.halves[L].cfg.fwVersion).toBe(4000);
+        expect(board.halves[R].cfg.fwVersion).toBe(4000);
+        expect(state.result).toMatchObject({ tags: { 0: "x4", 1: "x4" }, layout: "restored" });
+        expect(host.restores).toBe(1);
+        expect(host.events[host.events.length - 1]).toBe("0x2A");
+        expect(state.sent2A).toBe(true);
+        expect(board.storageFlags & 4).toBe(0);
+        // The other half went first; the half with USB armed pre-approved.
+        const arms = board.requests.filter((r) => r.op === Op.ARM);
+        expect(arms.map((a) => a.hand)).toEqual([L, R]);
+    });
+
+    it("P4-29 a no-chord developer build never asks for the chord", async () => {
+        const { board, state } = await run({ setup: { noChord: true }, release: dev });
+        expect(state.phase).toBe("result");
+        expect(state.noChord).toBe(true);
+        expect(state.approvalsAsked).toBe(0);
+        expect(board.chordRequests).toBe(0);
+    });
+
+    it("P4-31 a lapsed held approval stops on F9 and never asks for a second chord", async () => {
+        const { board, state } = await run({ setup: { faults: [{ kind: "held-lapse" }] } });
+        expect(state.phase).toBe("failed");
+        expect(state.failure).toMatchObject({ id: "F9", tags: { 0: "x4", 1: "v3" } });
+        expect(state.approvalsAsked).toBe(1);
+        expect(board.chordRequests).toBe(1);
+        expect(board.halves[R].cfg.fwVersion).toBe(3000);
+    });
+
+    it("survives client ID renewals throughout (REBIND after each, including between the sessions)", async () => {
+        const { board, state } = await run({ setup: { faults: [{ kind: "renew-every", ms: 4000 }] } });
+        expect(state.phase).toBe("result");
+        expect(board.requests.filter((r) => r.op === Op.REBIND && r.status === 0).length).toBeGreaterThanOrEqual(2);
+        expect(state.approvalsAsked).toBe(1);
+    });
+
+    it("updates the half with USB alone, with its own single chord", async () => {
+        const { board, state } = await run({ onlyHand: R });
+        expect(state.phase).toBe("failed"); // the halves now differ: F9 says so, with Finish update
+        expect(state.failure?.id).toBe("F9");
+        expect(state.approvalsAsked).toBe(1);
+        expect(board.halves[R].cfg.fwVersion).toBe(4000);
+        expect(board.halves[L].cfg.fwVersion).toBe(3000);
+    });
+
+    it("finishes a stopped update: the other half alone brings the halves together", async () => {
+        const { board, state } = await run({ onlyHand: L, setup: { otherRunning: { tag: "v3", fwVersion: 3000 }, running: x4 }, release: x4 });
+        expect(board.halves[L].cfg.fwVersion).toBe(4000);
+        expect(state.phase).toBe("result");
+        expect(state.approvalsAsked).toBe(1);
+        expect(state.result?.tags).toEqual({ 0: "x4", 1: "x4" });
+        expect(board.chordRequests).toBe(1);
+    });
+
+    it("F3 another app holds the updater", async () => {
+        const { plan: p } = await plan({ setup: { faults: [{ kind: "other-client" }] } });
+        expect((p as PreFailure).id).toBe("F3");
+    });
+
+    it("F4 the chord isn't made in time: nothing changed", async () => {
+        const { board, state } = await run({ setup: { chordAfterMs: "never" } });
+        expect(state.failure?.id).toBe("F4");
+        expect(board.halves[L].cfg.fwVersion).toBe(3000);
+        expect(board.halves[R].cfg.fwVersion).toBe(3000);
+        expect(board.state).toBe(0); // ABORT cleared the latched error
+    });
+
+    it("F5 unplugged while sending the other half's file: nothing changed", async () => {
+        const { board, state } = await run({ setup: { faults: [{ kind: "unplug", at: "other-send" }] } });
+        expect(state.failure).toMatchObject({ id: "F5", tags: { 0: "v3", 1: "v3" } });
+        expect(board.halves[L].cfg.fwVersion).toBe(3000);
+    });
+
+    it("F5 a verify failure (bad hash) before any install", async () => {
+        const { state } = await run({ setup: { faults: [{ kind: "bad-hash", hand: L }] } });
+        expect(state.failure?.id).toBe("F5");
+    });
+
+    it("F5 the relay fails part way", async () => {
+        const { board, state } = await run({ setup: { faults: [{ kind: "relay-fail" }] } });
+        expect(state.failure?.id).toBe("F5");
+        expect(board.halves[L].cfg.fwVersion).toBe(3000);
+    });
+
+    it("F9 unplugged after the other half installed", async () => {
+        const { state } = await run({ setup: { faults: [{ kind: "unplug", at: "self-send" }] } });
+        expect(state.failure).toMatchObject({ id: "F9", tags: { 0: "x4", 1: "v3" } });
+        expectOneChordAtMost(state);
+    });
+
+    it("F11 the other half doesn't come back after its install", async () => {
+        const { state } = await run({ setup: { faults: [{ kind: "other-no-return" }] } });
+        expect(state.failure).toMatchObject({ id: "F11", hand: L });
+        expectOneChordAtMost(state);
+    });
+
+    it("F14 the keyboard doesn't come back after the USB half installs", async () => {
+        const { state } = await run({ setup: { faults: [{ kind: "no-return" }] } });
+        expect(state.failure).toMatchObject({ id: "F14", hand: R });
+    });
+
+    it("F16 putting the layout back fails; 0x2A is not sent", async () => {
+        const { host, state } = await run({ setup: { host: { restoreFails: true } } });
+        expect(state.failure?.id).toBe("F16");
+        expect(host.clears).toBe(0);
+        expect(state.sent2A).toBe(false);
+    });
+
+    it("F17 settings writes failing stops before the sheet", async () => {
+        const { plan: p } = await plan({ setup: { half: { writesFailing: true } } });
+        expect((p as PreFailure).id).toBe("F17");
+    });
+
+    it("F18 a board without the 16 MiB flash installs by hand", async () => {
+        const { plan: p } = await plan({ setup: { half: { flash16MiB: false } } });
+        expect((p as PreFailure).id).toBe("F18");
+    });
+
+    it("a latched error from an earlier session is cleared with ABORT, with no row", async () => {
+        const { state, board } = await run({ setup: { faults: [{ kind: "latched-error" }] } });
+        expect(state.phase).toBe("result");
+        expect(board.requests[0].op).not.toBe(Op.MANIFEST);
+    });
+});
+
+describe("the sheet's checks", () => {
+    it("F2 refuses a carried file that misses its pin", async () => {
+        const { board } = fakeSetup({ clock, running: v3 });
+        const bad = pin(x4);
+        bad.files.left.sha256 = "0".repeat(64);
+        const p = await planInstall(new UpdaterClient(board), { kind: "release", release: bad, files: x4.files }, { clock, releases: [bad] }) as Plan;
+        expect(p.refusal?.id).toBe("integrity");
+        expect(p.refusal?.label).toBe("Firmware file failed its check");
+    });
+
+    it("warns about an unknown file, a developer build and an older release, and reads the right title", async () => {
+        const { board } = fakeSetup({ clock, running: x4 });
+        const older = await planInstall(new UpdaterClient(board), { kind: "file", files: [v3.files[L], v3.files[R]] }, { clock, releases: [pin(v3), pin(x4)] }) as Plan;
+        expect(older.title).toBe("Install v3");
+        expect(older.warnings.map((w) => w.id)).toContain("older");
+        const devPlan = await planInstall(new UpdaterClient(fakeSetup({ clock, running: v3 }).board), { kind: "file", files: [dev.files[L], dev.files[R]] }, { clock, releases: [pin(v3), pin(x4)] }) as Plan;
+        expect(devPlan.title).toBe("Install custom firmware");
+        expect(devPlan.warnings.map((w) => w.id)).toEqual(expect.arrayContaining(["unknown-file", "developer"]));
+        expect(devPlan.refusal).toBeNull();
+    });
+
+    it("titles a reinstall and an update", async () => {
+        const { plan: re } = await plan({ release: v3 });
+        expect((re as Plan).title).toBe("Reinstall v3");
+        const { plan: up } = await plan();
+        expect((up as Plan).title).toBe("Update to x4");
+        expect((up as Plan).target).toBe("both");
+    });
+
+    it("offers the half with USB only when the other half doesn't answer", async () => {
+        const { plan: p } = await plan({ setup: { faults: [{ kind: "other-silent" }] } });
+        expect((p as Plan).target).toBe(R);
+        expect((p as Plan).otherSilent).toBe(true);
+        expect((p as Plan).warnings.map((w) => w.label)).toContain("Left half not answering");
+    });
+
+    it("refuses a developer file on a release board (the firmware would)", async () => {
+        const diag = await fixtureRelease("x4", 4000, { flags: 0x2 });
+        const { board } = fakeSetup({ clock, running: v3, release: true });
+        const p = await planInstall(new UpdaterClient(board), { kind: "file", files: [diag.files[L], diag.files[R]] }, { clock }) as Plan;
+        expect(p.refusal?.label).toMatch(/won't accept this file/);
+    });
+});
+
+describe("afterwards", () => {
+    it("start from defaults on an identical build sends SETTINGS_RESET, then 0x2A last", async () => {
+        const { board, host, state } = await run({ release: v3, afterwards: "defaults" });
+        expect(state.phase).toBe("result");
+        expect(state.settingsResetSent).toBe(true);
+        await clock.sleep(5000);
+        board.connected();
+        expect(board.settings).toEqual({ 0: "defaults", 1: "defaults" });
+        expect(host.restores).toBe(0);
+        expect(host.events[host.events.length - 1]).toBe("0x2A");
+        expect(board.requests.some((r) => r.op === Op.SETTINGS_RESET)).toBe(true);
+    });
+
+    it("start from defaults after a different build sends no reset (bit 2 already set)", async () => {
+        const { board, state } = await run({ afterwards: "defaults" });
+        expect(state.settingsResetSent).toBe(false);
+        expect(board.requests.some((r) => r.op === Op.SETTINGS_RESET)).toBe(false);
+        expect(state.result?.layout).toBe("defaults");
+    });
+
+    it("put my layout back writes the backup even when the firmware kept the settings", async () => {
+        const { host, state } = await run({ release: v3, afterwards: "restore" });
+        expect(host.restores).toBe(1);
+        expect(state.result?.layout).toBe("restored");
+    });
+
+    it("with no backup, Afterwards is defaults", async () => {
+        const { state } = await run({ backup: false, afterwards: "restore" });
+        expect(state.afterwards).toBe("defaults");
+    });
+});
+
+describe("a reload mid-update", () => {
+    it("resumes after the restart from the saved state and puts the layout back without asking", async () => {
+        const { board, host, plan: p } = await plan();
+        const store = memoryFlowStore();
+        // The tab goes away while the keyboard restarts: waitForDevice never returns in this tab.
+        const dying = Object.assign(Object.create(Object.getPrototypeOf(host)), host, { waitForDevice: () => new Promise(() => undefined) }) as FakeHost;
+        const flow = UpdateFlow.create(dying, store, { plan: p as Plan, afterwards: "restore", backup: { fileName: "b.svil", svil: "{}" } });
+        void flow.run();
+        // Let the flow run (it advances virtual time itself) until it waits for the keyboard.
+        for (let i = 0; i < 20000 && !store.snapshot?.includes('"step":"reconnect"'); i++) await new Promise((r) => setTimeout(r, 0));
+        expect(JSON.parse(store.snapshot!)).toMatchObject({ step: "reconnect" });
+        const resumed = await UpdateFlow.restore(host, store);
+        expect(resumed).not.toBeNull();
+        const state = await resumed!.run();
+        expect(state.phase).toBe("result");
+        expect(state.approvalsAsked).toBe(1);
+        expect(host.restores).toBe(1);
+        expect(board.halves[R].cfg.fwVersion).toBe(4000);
+    });
+
+    it("reports F6 when the tab went away mid-transfer", async () => {
+        const { host, plan: p } = await plan();
+        const store = memoryFlowStore();
+        const flow = UpdateFlow.create(host, store, { plan: p as Plan, afterwards: "restore", backup: null });
+        // Saved as if the tab died while sending the other half's file.
+        store.save({ ...flow.state, step: "other-send" });
+        const state = await (await UpdateFlow.restore(host, store))!.run();
+        expect(state.failure?.id).toBe("F6");
+    });
+});
