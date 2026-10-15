@@ -55,14 +55,15 @@ export const SETTINGS: SettingDefinition[] = [
     },
     {
         name: COMBO_EDITOR_PLACEMENT_SETTING,
-        label: "Combo Editor Placement",
-        description: "Where the combo editor sits while you pick keys on the keyboard.",
+        label: "Binding Editor Placement",
+        description: "Where binding editors sit while you pick keys.",
         type: "select",
         items: [
             { label: "Under a half", value: "half" },
             { label: "Below the keyboard", value: "dock" },
             { label: "Under the combo's keys", value: "anchored" },
             { label: "Floating", value: "float" },
+            { label: "In the side panel", value: "panel" },
         ],
         defaultValue: DEFAULT_COMBO_EDITOR_PLACEMENT,
     },

@@ -20,7 +20,7 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { usePanels } from "@/contexts/PanelsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
-import type { ComboEditorPlacement } from "@/lib/comboEditorPlacement";
+import { isPanelEditorPlacement, pinnedEditorTop, type ComboEditorPlacement } from "@/lib/comboEditorPlacement";
 import { effectivePickerMode, isBindingEditorOpen, usablePickerCategories, type PickerMode } from "@/lib/bindingSpotlight";
 import type { CustomUIMenuItem } from "@/types/keyboard.types";
 
@@ -131,9 +131,15 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
         };
     }, [showPicker]);
 
+    // "In the side panel": every binding editor sits at the top of this panel,
+    // pinned above the picker, so nothing covers the layout. The side layout
+    // only; the bottom bar keeps its own arrangement.
+    const panelEditor = showPicker && !bottom && isPanelEditorPlacement(comboPlacement);
+    const panelCombo = panelEditor && activePanel === "combos";
+
     // A single combo's editor moves out of the keyboard's way (dock, anchored
     // or float). It stays in this tree; only CSS and fixed coordinates change.
-    const comboActive = showPicker && activePanel === "combos" && !!comboPlacement;
+    const comboActive = showPicker && activePanel === "combos" && !!comboPlacement && !isPanelEditorPlacement(comboPlacement);
     const comboEntry = comboActive && itemToEdit !== null ? keyboard?.combos?.[itemToEdit] : undefined;
     const triggerKeycodes = React.useMemo(
         () => (comboEntry?.keys ?? []).filter(k => k && k !== "KC_NO"),
@@ -151,6 +157,36 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
     });
 
     const [isClosingEditor, setIsClosingEditor] = React.useState(false);
+
+    // The list is hidden while an editor is open, which resets its scroll.
+    // Remember where it was and put it back on the way out, so the list
+    // returns showing the item that was edited.
+    const listScrollRef = React.useRef<HTMLDivElement>(null);
+    const listScrollTop = React.useRef(0);
+    const onListScroll = React.useCallback((event: React.UIEvent<HTMLDivElement>) => {
+        if (!showPicker) listScrollTop.current = event.currentTarget.scrollTop;
+    }, [showPicker]);
+    React.useLayoutEffect(() => {
+        if (showPicker || !listScrollRef.current) return;
+        listScrollRef.current.scrollTop = listScrollTop.current;
+    }, [showPicker]);
+
+    // The pinned editor's sticky top: 0 unless it is taller than the panel
+    // leaves room for, so the picker below always stays reachable.
+    const pickerScrollRef = React.useRef<HTMLDivElement>(null);
+    const [pinTop, setPinTop] = React.useState(0);
+    React.useLayoutEffect(() => {
+        if (!panelEditor) return;
+        const scroller = pickerScrollRef.current;
+        const editor = bindingRef.current;
+        if (!scroller || !editor) return;
+        const measure = () => setPinTop(pinnedEditorTop(scroller.clientHeight, editor.offsetHeight));
+        measure();
+        const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+        observer?.observe(scroller);
+        observer?.observe(editor);
+        return () => observer?.disconnect();
+    }, [panelEditor]);
 
     // Reset picker mode when picker closes
     React.useEffect(() => {
@@ -174,6 +210,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
             data-binding-open={showPicker ? "true" : undefined}
             data-placement={bottom ? "bottom" : "side"}
             data-combo-placement={comboActive ? comboPlacement : undefined}
+            data-editor-placement={panelEditor ? "panel" : undefined}
             className={cn("detail-panel fixed z-[60] flex flex-col bg-kb-surface border shadow-lg min-h-0", bottom ? "bottom-panel bottom-0 right-0" : "top-2 bottom-2 rounded-2xl", state !== "expanded" && "hidden")}
             style={{
                 left: leftOffset ?? primaryOffset,
@@ -208,7 +245,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                     </div>
                 )}
             </div>
-            <div className="z-10 relative flex-1 min-h-0 overflow-auto overscroll-contain px-4 pb-4" data-panel-scroll-owner>
+            <div ref={listScrollRef} onScroll={onListScroll} className="z-10 relative flex-1 min-h-0 overflow-auto overscroll-contain px-4 pb-4" data-panel-scroll-owner>
                 <div hidden={showPicker}>
                     <PanelContent panel={activePanel} horizontal={bottom} />
                 </div>
@@ -236,7 +273,27 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                     <EditorSidePanel activeTab={pickerMode} onTabChange={setPickerMode} categories={pickerCategories} />
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-auto overscroll-contain pl-4 pr-16 pb-4">
+                <div ref={pickerScrollRef} className="flex-1 min-h-0 overflow-auto overscroll-contain pl-4 pr-16 pb-4" data-panel-editor-scroll={panelEditor ? "" : undefined}>
+                    {panelEditor && <div
+                        ref={bindingRef}
+                        tabIndex={-1}
+                        className="binding-workspace sticky z-30 mb-3 flex flex-col rounded-xl border bg-kb-gray-medium shadow-sm"
+                        aria-label="Binding editor"
+                        data-editor-placement="panel"
+                        style={{ top: pinTop }}
+                    >
+                        {!panelCombo && <div className="flex justify-end px-1 pt-1">
+                            <Button type="button" variant="ghost" size="icon" aria-label="Close binding editor"
+                                className="h-8 w-8 rounded-full" onClick={() => setIsClosingEditor(true)}><X className="h-4 w-4" /></Button>
+                        </div>}
+                        <BindingEditorContainer
+                            shouldClose={isClosingEditor}
+                            inline
+                            compact={panelCombo}
+                            stacked={panelCombo}
+                            onRequestClose={panelCombo ? () => setIsClosingEditor(true) : undefined}
+                        />
+                    </div>}
                     {pickerMode === "keyboard" && <BasicKeyboards isPicker />}
                     {pickerMode === "layers" && <LayersPanel isPicker />}
                     {pickerMode === "macros" && <MacrosPanel isPicker />}
@@ -248,7 +305,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                     {pickerMode === "tapdances" && <TapdancePanel isPicker />}
                 </div>
             </div>
-            {showPicker && <div
+            {showPicker && !panelEditor && <div
                 ref={bindingRef}
                 tabIndex={-1}
                 className="binding-workspace z-30 bg-kb-gray-medium shadow-lg flex min-h-0"
