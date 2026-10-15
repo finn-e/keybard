@@ -1,7 +1,7 @@
 import "./SecondarySidebar.css";
 
 import * as React from "react";
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft, Pin, X } from "lucide-react";
 
 import BindingEditorContainer from "./components/BindingEditor/BindingEditorContainer";
 import EditorSidePanel from "./components/EditorSidePanel";
@@ -19,9 +19,14 @@ import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
 import { usePanels } from "@/contexts/PanelsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { cn } from "@/lib/utils";
 import { isPanelEditorPlacement, pinnedEditorTop, type ComboEditorPlacement } from "@/lib/comboEditorPlacement";
 import { bindingEditorHeading, bindingEditorSubtitle, effectivePickerMode, isBindingEditorOpen, usablePickerCategories, type PickerMode } from "@/lib/bindingSpotlight";
+import {
+    EDITOR_REST_FRAME, isUsableRect, PANEL_EDITOR_EASE_OUT, PANEL_EDITOR_FADE_MS, PANEL_EDITOR_MOTION_MS,
+    PANEL_PICKER_RISE_PX, pickerScrolledUnder, pinCueStyle, rowToEditorFrame, type MotionRect, type PanelEditorMotion,
+} from "@/lib/panelEditorMotion";
 import type { CustomUIMenuItem } from "@/types/keyboard.types";
 
 import { getPanelTitle, PanelContent } from "../PanelContent";
@@ -73,6 +78,50 @@ const AlternativeHeader = ({ onBack, menus }: AlternativeHeaderProps) => {
         </div>
     );
 };
+
+/**
+ * Sits inside the side-panel editor. Its cleanup runs while the editor is
+ * still in the page, so the exit motion can start from the editor's last
+ * look and place.
+ */
+const EditorSnapshotProbe = ({ onLeave }: { onLeave: (editor: HTMLElement) => void }) => {
+    const ref = React.useRef<HTMLSpanElement>(null);
+    const leave = React.useRef(onLeave);
+    leave.current = onLeave;
+    React.useLayoutEffect(() => {
+        const editor = ref.current?.closest<HTMLElement>("[data-editor-placement='panel']") ?? null;
+        return () => {
+            if (editor?.isConnected) leave.current(editor);
+        };
+    }, []);
+    return <span ref={ref} hidden />;
+};
+
+/** A still copy of the editor that carries the motion, so the real one never leaves its place. */
+function makeEditorGhost(source: HTMLElement, rect: MotionRect): HTMLElement {
+    const ghost = source.cloneNode(true) as HTMLElement;
+    ghost.querySelectorAll("[id]").forEach(el => el.removeAttribute("id"));
+    ghost.classList.remove("binding-workspace", "sticky");
+    ghost.removeAttribute("tabindex");
+    ghost.removeAttribute("aria-label");
+    ghost.removeAttribute("data-editor-placement");
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.setAttribute("inert", "");
+    ghost.setAttribute("data-editor-ghost", "");
+    Object.assign(ghost.style, {
+        position: "fixed",
+        left: `${rect.left}px`,
+        top: `${rect.top}px`,
+        width: `${rect.width}px`,
+        height: `${rect.height}px`,
+        margin: "0",
+        zIndex: "30",
+        pointerEvents: "none",
+        overflow: "hidden",
+        transformOrigin: "top left",
+    });
+    return ghost;
+}
 
 /**
  * The Secondary Sidebar (Detail Panel) slides in to show context-specific tools
@@ -138,8 +187,21 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
     // "In the side panel": every binding editor sits at the top of this panel,
     // pinned above the picker, so nothing covers the layout. The side layout
     // only; the bottom bar keeps its own arrangement.
-    const panelEditor = showPicker && !bottom && isPanelEditorPlacement(comboPlacement);
+    const panelPlacement = !bottom && isPanelEditorPlacement(comboPlacement);
+    const panelEditor = showPicker && panelPlacement;
     const panelCombo = panelEditor && activePanel === "combos";
+    const reducedMotion = usePrefersReducedMotion();
+    const pinCue = React.useMemo(() => pinCueStyle(typeof window === "undefined" ? "" : window.location.search), []);
+
+    // Entering and leaving the side-panel editor. Set while rendering, so the
+    // first frame of the change already has it: entering keeps the list laid
+    // out for one motion, leaving keeps the picker shown while it fades.
+    const [motion, setMotion] = React.useState<PanelEditorMotion | null>(null);
+    const [motionFor, setMotionFor] = React.useState(panelEditor);
+    if (motionFor !== panelEditor) {
+        setMotionFor(panelEditor);
+        setMotion(panelPlacement && state === "expanded" ? (panelEditor ? "enter" : "exit") : null);
+    }
 
     // A single combo's editor moves out of the keyboard's way (dock, anchored
     // or float). It stays in this tree; only CSS and fixed coordinates change.
@@ -161,6 +223,11 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
     });
 
     const [isClosingEditor, setIsClosingEditor] = React.useState(false);
+    const listHeaderRef = React.useRef<HTMLDivElement>(null);
+    const overlayRef = React.useRef<HTMLDivElement>(null);
+    const overlayHeaderRef = React.useRef<HTMLDivElement>(null);
+    const railRef = React.useRef<HTMLDivElement>(null);
+    const pickerBodyRef = React.useRef<HTMLDivElement>(null);
 
     // The list is hidden while an editor is open, which resets its scroll.
     // Remember where it was and put it back on the way out, so the list
@@ -192,6 +259,126 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
         return () => observer?.disconnect();
     }, [panelEditor]);
 
+    // Shadow cue: on once picker content has scrolled beneath the pinned editor.
+    const [pinnedUnder, setPinnedUnder] = React.useState(false);
+    const onPickerScroll = React.useCallback((event: React.UIEvent<HTMLDivElement>) => {
+        if (!panelEditor) return;
+        const under = pickerScrolledUnder(event.currentTarget.scrollTop, pinTop);
+        setPinnedUnder(prev => prev === under ? prev : under);
+    }, [panelEditor, pinTop]);
+    React.useEffect(() => {
+        if (!panelEditor) setPinnedUnder(false);
+    }, [panelEditor]);
+
+    // The item being edited, kept for the way back to its row.
+    const editedIndex = React.useRef<number | null>(null);
+    React.useLayoutEffect(() => {
+        if (panelEditor) editedIndex.current = itemToEdit;
+    }, [panelEditor, itemToEdit]);
+
+    const editorSnapshot = React.useRef<{ rect: MotionRect; node: HTMLElement } | null>(null);
+    const takeEditorSnapshot = React.useCallback((editor: HTMLElement) => {
+        const r = editor.getBoundingClientRect();
+        editorSnapshot.current = { rect: { left: r.left, top: r.top, width: r.width, height: r.height }, node: editor.cloneNode(true) as HTMLElement };
+    }, []);
+
+    const running = React.useRef<Animation[]>([]);
+    const ghostRef = React.useRef<HTMLElement | null>(null);
+    const liftedRow = React.useRef<HTMLElement | null>(null);
+    const stopMotion = React.useCallback(() => {
+        running.current.forEach(a => a.cancel());
+        running.current = [];
+        ghostRef.current?.remove();
+        ghostRef.current = null;
+        if (liftedRow.current) liftedRow.current.style.visibility = "";
+        liftedRow.current = null;
+    }, []);
+    React.useEffect(() => stopMotion, [stopMotion]);
+
+    // Declared after the list scroll restore above, so leaving measures the
+    // row where the list will show it.
+    React.useLayoutEffect(() => {
+        stopMotion();
+        if (!motion) return;
+        const duration = reducedMotion ? PANEL_EDITOR_FADE_MS : PANEL_EDITOR_MOTION_MS;
+        const easing = PANEL_EDITOR_EASE_OUT;
+        const play = (el: Element | null | undefined, keyframes: Keyframe[], options: KeyframeAnimationOptions = {}) => {
+            if (!el || typeof (el as HTMLElement).animate !== "function") return;
+            running.current.push((el as HTMLElement).animate(keyframes, { duration, easing, fill: "both", ...options }));
+        };
+        const fadeIn: Keyframe[] = [{ opacity: 0 }, { opacity: 1 }];
+        const fadeOut: Keyframe[] = [{ opacity: 1 }, { opacity: 0 }];
+        const rowFor = (index: number | null) => index === null ? null
+            : listScrollRef.current?.querySelector<HTMLElement>(`[data-binding-row="${index}"]`) ?? null;
+        const rectOf = (el: Element | null | undefined): MotionRect | null => {
+            if (!el) return null;
+            const r = el.getBoundingClientRect();
+            return { left: r.left, top: r.top, width: r.width, height: r.height };
+        };
+        const canAnimate = typeof HTMLElement !== "undefined" && typeof HTMLElement.prototype.animate === "function";
+        const ghostFrom = (source: HTMLElement, rect: MotionRect) => {
+            const ghost = makeEditorGhost(source, rect);
+            panelRef.current?.appendChild(ghost);
+            ghostRef.current = ghost;
+            return ghost;
+        };
+
+        if (motion === "enter") {
+            const editor = bindingRef.current;
+            if (pickerScrollRef.current) pickerScrollRef.current.scrollTop = 0;
+            play(listScrollRef.current, fadeOut, { duration: duration * 0.7 });
+            play(listHeaderRef.current, fadeOut, { duration: duration * 0.7 });
+            play(overlayHeaderRef.current, fadeIn);
+            play(railRef.current, fadeIn);
+            const row = reducedMotion ? null : rowFor(itemToEdit);
+            const from = rectOf(row);
+            const to = rectOf(editor);
+            if (canAnimate && editor && row && isUsableRect(from) && isUsableRect(to)) {
+                // The row lifts out of the list and grows into the pinned editor.
+                const ghost = ghostFrom(editor, to);
+                row.style.visibility = "hidden";
+                liftedRow.current = row;
+                play(editor, [{ opacity: 0 }, { opacity: 0 }]);
+                play(ghost, [
+                    { ...rowToEditorFrame(from, to), opacity: 0.9 },
+                    { ...EDITOR_REST_FRAME, opacity: 1 },
+                ]);
+            } else {
+                play(editor, fadeIn);
+            }
+            play(pickerBodyRef.current, reducedMotion ? fadeIn : [
+                { opacity: 0, transform: `translateY(${PANEL_PICKER_RISE_PX}px)` },
+                { opacity: 1, transform: "translateY(0px)" },
+            ], reducedMotion ? {} : { duration: duration * 0.8, delay: duration * 0.2 });
+        } else {
+            const snapshot = editorSnapshot.current;
+            editorSnapshot.current = null;
+            play(listScrollRef.current, fadeIn);
+            play(listHeaderRef.current, fadeIn);
+            play(overlayRef.current, fadeOut, { duration: duration * 0.7 });
+            if (!reducedMotion) play(pickerBodyRef.current, [
+                { transform: "translateY(0px)" },
+                { transform: `translateY(${PANEL_PICKER_RISE_PX}px)` },
+            ]);
+            const row = reducedMotion ? null : rowFor(editedIndex.current);
+            const to = rectOf(row);
+            if (canAnimate && snapshot && row && isUsableRect(snapshot.rect) && isUsableRect(to)) {
+                // The editor shrinks back into its row's place in the list.
+                const ghost = ghostFrom(snapshot.node, snapshot.rect);
+                row.style.visibility = "hidden";
+                liftedRow.current = row;
+                play(ghost, [
+                    { ...EDITOR_REST_FRAME, opacity: 1 },
+                    { ...rowToEditorFrame(to, snapshot.rect), opacity: 0.9 },
+                ]);
+            }
+        }
+        const timer = setTimeout(() => setMotion(null), duration + 20);
+        return () => clearTimeout(timer);
+        // Runs once per motion; the values it reads are the ones of that frame.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [motion]);
+
     // Reset picker mode when picker closes
     React.useEffect(() => {
         if (!showPicker) {
@@ -215,6 +402,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
             data-placement={bottom ? "bottom" : "side"}
             data-combo-placement={comboActive ? comboPlacement : undefined}
             data-editor-placement={panelEditor ? "panel" : undefined}
+            data-editor-motion={motion ?? undefined}
             className={cn("detail-panel fixed z-[60] flex flex-col bg-kb-surface border shadow-lg min-h-0", bottom ? "bottom-panel bottom-0 right-0" : "top-2 bottom-2 rounded-2xl", state !== "expanded" && "hidden")}
             style={{
                 left: leftOffset ?? primaryOffset,
@@ -226,8 +414,14 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
             } as React.CSSProperties}
         >
             <div className="absolute inset-0 bg-sidebar-background pointer-events-none" />
-            <div hidden={showPicker && !bottom} className="px-4 py-3 shrink-0 z-10 bg-sidebar-background">
-                {(alternativeHeader || showPicker) ? (
+            <div
+                ref={listHeaderRef}
+                hidden={showPicker && !bottom && motion !== "enter"}
+                inert={motion === "enter"}
+                className="px-4 py-3 shrink-0 z-10 bg-sidebar-background"
+            >
+                {/* Entering, the list's own title fades out under the editor's. */}
+                {(alternativeHeader || showPicker) && motion !== "enter" ? (
                     <AlternativeHeader menus={keyboard?.menus} />
                 ) : (
                     <div className="flex items-center justify-between gap-4 pt-1.5">
@@ -250,7 +444,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                 )}
             </div>
             <div ref={listScrollRef} onScroll={onListScroll} className="z-10 relative flex-1 min-h-0 overflow-auto overscroll-contain px-4 pb-4" data-panel-scroll-owner>
-                <div hidden={showPicker}>
+                <div hidden={showPicker && motion !== "enter"} inert={motion === "enter"}>
                     <PanelContent panel={activePanel} horizontal={bottom} />
                 </div>
                 {bottom && showPicker && comboActive && (
@@ -260,32 +454,42 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
             </div>
 
             {/* Overlay Panel for Key Picker */}
+            {/* In the side panel this layer never moves and has no background of
+                its own: the panel's frame stays put and only its contents animate. */}
             <div
-                className={cn(
-                    "absolute top-0 bottom-0 left-0 -right-[2px] bg-kb-surface shadow-[4px_0_16px_rgba(0,0,0,0.1)] z-20 transition-all duration-500 ease-in-out flex flex-col",
-                    showPicker && !bottom ? "translate-x-0 opacity-100" : "-translate-x-[120%] opacity-0 pointer-events-none"
-                )}
+                ref={overlayRef}
+                className={panelPlacement
+                    ? cn("absolute inset-0 z-20 flex flex-col rounded-[inherit]", !(showPicker || motion === "exit") && "invisible pointer-events-none")
+                    : cn(
+                        "absolute top-0 bottom-0 left-0 -right-[2px] bg-kb-surface shadow-[4px_0_16px_rgba(0,0,0,0.1)] z-20 transition-all duration-500 ease-in-out flex flex-col",
+                        showPicker && !bottom ? "translate-x-0 opacity-100" : "-translate-x-[120%] opacity-0 pointer-events-none"
+                    )}
                 aria-hidden={!showPicker || bottom}
                 inert={!showPicker || bottom}
-                style={{ clipPath: "inset(-50px -300px -50px 0px)" }}
+                data-picker-overlay=""
+                style={panelPlacement ? undefined : { clipPath: "inset(-50px -300px -50px 0px)" }}
             >
-                <div className="px-4 py-6 bg-kb-surface shrink-0">
+                <div ref={overlayHeaderRef} className={cn("px-4 py-6 shrink-0", panelPlacement ? motion === "exit" && "invisible" : "bg-kb-surface")}>
                     <AlternativeHeader onBack={() => setIsClosingEditor(true)} menus={keyboard?.menus} />
                 </div>
 
-                <div className="absolute top-24 right-0 bottom-0 overflow-y-auto z-30">
+                <div ref={railRef} className="absolute top-24 right-0 bottom-0 overflow-y-auto z-30">
                     <EditorSidePanel activeTab={pickerMode} onTabChange={setPickerMode} categories={pickerCategories} />
                 </div>
 
-                <div ref={pickerScrollRef} className="flex-1 min-h-0 overflow-auto overscroll-contain pl-4 pr-16 pb-4" data-panel-editor-scroll={panelEditor ? "" : undefined}>
+                <div ref={pickerScrollRef} onScroll={onPickerScroll} className="flex-1 min-h-0 overflow-auto overscroll-contain pl-4 pr-16 pb-4" data-panel-editor-scroll={panelEditor ? "" : undefined}>
                     {panelEditor && <div
                         ref={bindingRef}
                         tabIndex={-1}
                         className="binding-workspace sticky z-30 mb-3 flex flex-col rounded-xl border bg-kb-gray-medium shadow-sm"
                         aria-label="Binding editor"
                         data-editor-placement="panel"
+                        data-pin-cue={pinCue}
+                        data-pinned-under={pinnedUnder ? "true" : undefined}
                         style={{ top: pinTop }}
                     >
+                        <EditorSnapshotProbe onLeave={takeEditorSnapshot} />
+                        {pinCue === "notch" && <Pin aria-hidden="true" className="pin-cue-glyph" />}
                         {!panelCombo && <div className="flex justify-end px-1 pt-1">
                             <Button type="button" variant="ghost" size="icon" aria-label="Close binding editor"
                                 className="h-8 w-8 rounded-full" onClick={() => setIsClosingEditor(true)}><X className="h-4 w-4" /></Button>
@@ -298,6 +502,8 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                             onRequestClose={panelCombo ? () => setIsClosingEditor(true) : undefined}
                         />
                     </div>}
+                    {/* Keyed by category: a rail switch swaps only this, with a short crossfade. */}
+                    <div key={pickerMode} ref={pickerBodyRef} className={panelPlacement ? "panel-picker-swap" : undefined} data-picker-body={pickerMode}>
                     {pickerMode === "keyboard" && <BasicKeyboards isPicker />}
                     {pickerMode === "layers" && <LayersPanel isPicker />}
                     {pickerMode === "macros" && <MacrosPanel isPicker />}
@@ -307,6 +513,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                     {pickerMode === "pointing" && <PointingPanel isPicker />}
                     {pickerMode === "mouse" && <MousePanel isPicker />}
                     {pickerMode === "tapdances" && <TapdancePanel isPicker />}
+                    </div>
                 </div>
             </div>
             {showPicker && !panelEditor && <div

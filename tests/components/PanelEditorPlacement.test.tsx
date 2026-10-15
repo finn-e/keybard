@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pinnedEditorTop } from '../../src/lib/comboEditorPlacement';
 import SecondarySidebar from '../../src/layout/SecondarySidebar/SecondarySidebar';
@@ -94,7 +94,7 @@ describe('binding editor in the side panel', () => {
         expect(screen.getByTestId('editor')).toHaveAttribute('data-should-close', 'true');
     });
 
-    it('returns to the list scrolled where the edited item was', () => {
+    it('returns to the list scrolled where the edited item was', async () => {
         state.itemToEdit = null;
         const view = render(ui());
         const list = view.container.querySelector('[data-panel-scroll-owner]') as HTMLElement;
@@ -102,7 +102,8 @@ describe('binding editor in the side panel', () => {
         fireEvent.scroll(list);
         state.itemToEdit = 7;
         view.rerender(ui());
-        expect(list.querySelector('[hidden]')).not.toBeNull();
+        // The list stays laid out for the entering motion, then hides.
+        await waitFor(() => expect(list.querySelector('[hidden]')).not.toBeNull());
         list.scrollTop = 0; // hiding the list resets its scroll
         fireEvent.scroll(list);
         state.itemToEdit = null;
