@@ -1492,9 +1492,13 @@ const EditorLayoutInner = () => {
                 {
                     !useBottomLayout && (
                         <>
-                            <div className="absolute bottom-4 right-2 max-w-[calc(100%-4rem)] flex flex-col items-end gap-1 pointer-events-none" style={comboEditorReserve > 0 ? { bottom: `calc(1rem + ${comboEditorReserve}px)` } : undefined}>
-                                <div className="pointer-events-auto" data-combo-editor-avoid data-inspector-avoid inert={spotlight}>
-                                    <EditorControls />
+                            <div className={cn("absolute bottom-4 right-2 max-w-[calc(100%-4rem)] flex flex-col items-end gap-1 pointer-events-none", spotlight && "z-[42]")} style={comboEditorReserve > 0 ? { bottom: `calc(1rem + ${comboEditorReserve}px)` } : undefined}>
+                                {/* While editing, the size controls stay in view above the lit canvas but dimmed and out of reach; a click on them nudges the editor. */}
+                                <div className={cn("pointer-events-auto", spotlight && "relative")} data-combo-editor-avoid data-inspector-avoid data-spotlight-dimmed={spotlight ? "" : undefined}>
+                                    <div inert={spotlight} className={cn(spotlight && "opacity-40")}>
+                                        <EditorControls />
+                                    </div>
+                                    {spotlight && <SpotlightScrim className="absolute inset-0 bg-transparent" />}
                                 </div>
                                 {import.meta.env.DEV && (
                                     <div className="text-[10px] font-medium text-slate-400 dark:text-neutral-400 select-none px-1 pointer-events-auto">
