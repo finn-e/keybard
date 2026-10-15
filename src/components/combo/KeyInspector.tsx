@@ -22,11 +22,15 @@ export const HOVER_COMBO_CAP = 6;
 export const FULL_MIN_LANE = 120;
 export const STRIP_MIN_LANE = 40;
 const MAX_CARD_HEIGHT = 340;
+const MAX_CARD_WIDTH = 560;
+const MIN_CARD_WIDTH = 320;
 const GAP = 12;
 const VIEWPORT_GUTTER = 16;
 const LEAVE_FADE_MS = 90;
 /** What the lane stops at: editors and controls under the layout. */
 const OBSTACLES = ".binding-workspace, aside.detail-panel[data-placement='bottom'], [data-inspector-avoid]";
+/** Small controls level with the card's top edge (the add-view button): the card starts to their right. */
+const BESIDE = "[data-inspector-beside]";
 
 function membershipOf(combos: ComboEntry[], index: number): ComboMembership | null {
     const c = combos[index];
@@ -126,10 +130,14 @@ const Sections = ({ list, kb }: { list: Section[]; kb: KeyboardInfo }) => (
 
 /**
  * Space under the layout for the card: from GAP below the layout to GAP above the nearest
- * editor or control under it, or the viewport bottom.
+ * editor or control under it, or the viewport bottom. Also the card width: up to 560px and
+ * the layout's width, but never past the visible canvas (a narrow canvas, with the picker and
+ * an editor open, would otherwise push the card off screen).
  */
-function useLane(anchor: React.RefObject<HTMLDivElement | null>, deps: unknown[]): number {
+function useLane(anchor: React.RefObject<HTMLDivElement | null>, deps: unknown[]): { lane: number; width: number; inset: number } {
     const [lane, setLane] = useState(MAX_CARD_HEIGHT);
+    const [width, setWidth] = useState(MAX_CARD_WIDTH);
+    const [inset, setInset] = useState(0);
     useLayoutEffect(() => {
         const el = anchor.current;
         if (!el) return;
@@ -144,6 +152,19 @@ function useLane(anchor: React.RefObject<HTMLDivElement | null>, deps: unknown[]
                 bottom = Math.min(bottom, r.top - GAP);
             });
             setLane(Math.max(0, Math.round(bottom - a.top)));
+            const canvas = el.closest(".keyboard-canvas-scroll");
+            let right = window.innerWidth - VIEWPORT_GUTTER;
+            if (canvas) right = Math.min(right, canvas.getBoundingClientRect().left + canvas.clientWidth - GAP);
+            let left = 0;
+            document.querySelectorAll<HTMLElement>(BESIDE).forEach(o => {
+                const r = o.getBoundingClientRect();
+                if (!r.width || !r.height || r.bottom <= a.top || r.top >= a.top + 40) return;
+                if (r.right <= a.left || r.left >= a.left + MAX_CARD_WIDTH) return;
+                left = Math.max(left, Math.ceil(r.right - a.left + 8));
+            });
+            setInset(left);
+            const room = Math.floor(right - a.left - left);
+            setWidth(Math.max(0, Math.min(MAX_CARD_WIDTH, Math.max(MIN_CARD_WIDTH, Math.round(a.width) - left), room)));
         };
         measure();
         const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
@@ -154,7 +175,7 @@ function useLane(anchor: React.RefObject<HTMLDivElement | null>, deps: unknown[]
         return () => { ro?.disconnect(); window.removeEventListener("resize", measure); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, deps);
-    return lane;
+    return { lane, width, inset };
 }
 
 export function KeyInspector({ keyboard, hues, className }: {
@@ -181,7 +202,7 @@ export function KeyInspector({ keyboard, hues, className }: {
     const wasShown = useRef(false);
 
     const anchor = useRef<HTMLDivElement>(null);
-    const lane = useLane(anchor, [active?.id, keyboard]);
+    const { lane, width, inset } = useLane(anchor, [active?.id, keyboard]);
     const bodyRef = useRef<HTMLDivElement>(null);
     const [hiddenRows, setHiddenRows] = useState(0);
 
@@ -274,9 +295,18 @@ export function KeyInspector({ keyboard, hues, className }: {
     // Count rows a hovering card clips, for its "+N More" footer.
     useLayoutEffect(() => {
         const el = bodyRef.current;
-        if (!el || pinned) { setHiddenRows(0); return; }
+        if (!el) { setHiddenRows(0); return; }
+        if (pinned) {
+            el.querySelectorAll<HTMLElement>("[data-inspector-row]").forEach(r => { r.style.visibility = ""; });
+            setHiddenRows(0);
+            return;
+        }
         const limit = el.getBoundingClientRect().bottom;
-        const n = [...el.querySelectorAll("[data-inspector-row]")].filter(r => r.getBoundingClientRect().bottom > limit + 1).length;
+        let n = 0;
+        el.querySelectorAll<HTMLElement>("[data-inspector-row]").forEach(r => {
+            r.style.visibility = "";
+            if (r.getBoundingClientRect().bottom > limit + 1) { n++; r.style.visibility = "hidden"; }
+        });
         setHiddenRows(n);
     });
 
@@ -298,7 +328,7 @@ export function KeyInspector({ keyboard, hues, className }: {
 
     return (
         <div ref={anchor} className={cn("w-full", className)}>
-            <div style={{ width: "min(560px, max(320px, 100%))" }}>
+            <div style={{ width, marginLeft: inset || undefined }}>
                 {body
                     ? <div className="kb-inspector-in" key={shows.current} data-inspector-live="">{body}</div>
                     : leaving && <div className="kb-inspector-out pointer-events-none" aria-hidden="true">{leaving}</div>}

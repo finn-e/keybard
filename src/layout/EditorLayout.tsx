@@ -1422,6 +1422,7 @@ const EditorLayoutInner = () => {
                                         onClick={handleAddView}
                                         className="p-2 rounded-full transition-colors text-gray-500 dark:text-neutral-400 hover:text-gray-800 dark:hover:text-neutral-100 hover:bg-gray-200 dark:hover:bg-neutral-700"
                                         aria-label="Add keyboard layer view"
+                                        data-inspector-beside=""
                                     >
                                         <LayersPlusIcon className="h-5 w-5" />
                                     </button>

@@ -248,6 +248,30 @@ describe("combo preview", () => {
         expect(keyEl("KC_K").getAttribute("aria-pressed")).toBe("false");
     });
 
+    it("a click outside unpins even where the app stops click propagation", () => {
+        renderAll();
+        const bar = document.createElement("div");
+        bar.addEventListener("click", e => e.stopPropagation());
+        document.body.appendChild(bar);
+        fireEvent.click(keyEl("KC_K"));
+        expect(keyEl("KC_K").getAttribute("aria-pressed")).toBe("true");
+        fireEvent.click(bar);
+        expect(keyEl("KC_K").getAttribute("aria-pressed")).toBe("false");
+        bar.remove();
+    });
+
+    it("with a pinned card up, hovering another key replaces it at once", () => {
+        renderAll();
+        fireEvent.click(keyEl("KC_K"));
+        fireEvent.mouseLeave(keyEl("KC_K"));
+        tick(LEAVE_DELAY_MS + 10);
+        fireEvent.mouseEnter(keyEl("KC_D"));
+        expect(document.querySelector("[data-inspector-title]")!.textContent).toBe("D");
+        fireEvent.mouseLeave(keyEl("KC_D"));
+        tick(LEAVE_DELAY_MS + 10);
+        expect(document.querySelector("[data-inspector-title]")!.textContent).toBe("K");
+    });
+
     it("is keyboard accessible: focus previews at once, Enter pins, Esc clears until blur", () => {
         renderAll();
         act(() => keyEl("KC_J").focus());

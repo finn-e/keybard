@@ -100,7 +100,8 @@ export const ComboPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const enter = useCallback((f: PreviewFocus, immediate = false) => {
         clearTimers();
         setHoverVia("hover");
-        if (immediate || hoverRef.current) { commitHover(f); return; }
+        // Instant while a card is up, hovered or pinned; the delay is for the first card only.
+        if (immediate || hoverRef.current || pinRef.current) { commitHover(f); return; }
         hoverTimer.current = window.setTimeout(() => commitHover(f), HOVER_DELAY_MS);
     }, [commitHover]);
 
@@ -148,10 +149,11 @@ export const ComboPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ 
             commitPin(null);
         };
         window.addEventListener("keydown", onKey, true);
-        document.addEventListener("click", onClick);
+        // Capture phase: parts of the app (the top toolbar) stop click propagation.
+        document.addEventListener("click", onClick, true);
         return () => {
             window.removeEventListener("keydown", onKey, true);
-            document.removeEventListener("click", onClick);
+            document.removeEventListener("click", onClick, true);
         };
     }, [commitHover, commitPin]);
 
