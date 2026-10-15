@@ -285,12 +285,15 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
     const running = React.useRef<Animation[]>([]);
     const ghostRef = React.useRef<HTMLElement | null>(null);
     const liftedRow = React.useRef<HTMLElement | null>(null);
+    const refreshFrame = React.useRef<number | null>(null);
     const stopMotion = React.useCallback(() => {
+        if (refreshFrame.current !== null) cancelAnimationFrame(refreshFrame.current);
+        refreshFrame.current = null;
         running.current.forEach(a => a.cancel());
         running.current = [];
         ghostRef.current?.remove();
         ghostRef.current = null;
-        if (liftedRow.current) liftedRow.current.style.visibility = "";
+        if (liftedRow.current) liftedRow.current.style.opacity = "";
         liftedRow.current = null;
     }, []);
     React.useEffect(() => stopMotion, [stopMotion]);
@@ -315,6 +318,15 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
             const r = el.getBoundingClientRect();
             return { left: r.left, top: r.top, width: r.width, height: r.height };
         };
+        // The row's slot goes empty while its copy travels. Opacity, not
+        // visibility: keycaps and toggles with transition-all would keep
+        // showing through a hidden parent until their own transition ends.
+        // A combo row's selection ring sits on its wrapper, so that goes too.
+        const liftSlot = (row: HTMLElement) => {
+            const slot = row.closest<HTMLElement>("[data-combo-row]") ?? row;
+            slot.style.opacity = "0";
+            liftedRow.current = slot;
+        };
         const canAnimate = typeof HTMLElement !== "undefined" && typeof HTMLElement.prototype.animate === "function";
         const ghostFrom = (source: HTMLElement, rect: MotionRect) => {
             const ghost = makeEditorGhost(source, rect);
@@ -336,13 +348,32 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
             if (canAnimate && editor && row && isUsableRect(from) && isUsableRect(to)) {
                 // The row lifts out of the list and grows into the pinned editor.
                 const ghost = ghostFrom(editor, to);
-                row.style.visibility = "hidden";
-                liftedRow.current = row;
+                liftSlot(row);
                 play(editor, [{ opacity: 0 }, { opacity: 0 }]);
-                play(ghost, [
-                    { ...rowToEditorFrame(from, to), opacity: 0.9 },
+                const grow = (target: MotionRect): Keyframe[] => [
+                    { ...rowToEditorFrame(from, target), opacity: 0.9 },
                     { ...EDITOR_REST_FRAME, opacity: 1 },
-                ]);
+                ];
+                play(ghost, grow(to));
+                // Some editors fill in their content right after they mount
+                // (a macro's actions), so the first copy can be stale and
+                // shorter. One frame on, copy the editor again and carry on
+                // from the same point in the motion, so nothing pops at the end.
+                if (typeof requestAnimationFrame === "function") {
+                    const first = running.current[running.current.length - 1];
+                    refreshFrame.current = requestAnimationFrame(() => {
+                        refreshFrame.current = null;
+                        const now = rectOf(editor);
+                        if (ghostRef.current !== ghost || !editor.isConnected || !isUsableRect(now)) return;
+                        const elapsed = Number(first?.currentTime ?? 0);
+                        first?.cancel();
+                        ghost.remove();
+                        const fresh = ghostFrom(editor, now);
+                        play(fresh, grow(now));
+                        const next = running.current[running.current.length - 1];
+                        if (next && Number.isFinite(elapsed)) next.currentTime = elapsed;
+                    });
+                }
             } else {
                 play(editor, fadeIn);
             }
@@ -365,8 +396,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
             if (canAnimate && snapshot && row && isUsableRect(snapshot.rect) && isUsableRect(to)) {
                 // The editor shrinks back into its row's place in the list.
                 const ghost = ghostFrom(snapshot.node, snapshot.rect);
-                row.style.visibility = "hidden";
-                liftedRow.current = row;
+                liftSlot(row);
                 play(ghost, [
                     { ...EDITOR_REST_FRAME, opacity: 1 },
                     { ...rowToEditorFrame(to, snapshot.rect), opacity: 0.9 },
@@ -455,11 +485,14 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
 
             {/* Overlay Panel for Key Picker */}
             {/* In the side panel this layer never moves and has no background of
-                its own: the panel's frame stays put and only its contents animate. */}
+                its own: the panel's frame stays put and only its contents animate.
+                Hidden by opacity as well as visibility: keycaps with transition-all
+                would otherwise stay visible through "invisible" until their own
+                transition ends, flashing the picker over the list. */}
             <div
                 ref={overlayRef}
                 className={panelPlacement
-                    ? cn("absolute inset-0 z-20 flex flex-col rounded-[inherit]", !(showPicker || motion === "exit") && "invisible pointer-events-none")
+                    ? cn("absolute inset-0 z-20 flex flex-col rounded-[inherit]", !(showPicker || motion === "exit") && "invisible opacity-0 pointer-events-none")
                     : cn(
                         "absolute top-0 bottom-0 left-0 -right-[2px] bg-kb-surface shadow-[4px_0_16px_rgba(0,0,0,0.1)] z-20 transition-all duration-500 ease-in-out flex flex-col",
                         showPicker && !bottom ? "translate-x-0 opacity-100" : "-translate-x-[120%] opacity-0 pointer-events-none"
@@ -502,6 +535,11 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                             onRequestClose={panelCombo ? () => setIsClosingEditor(true) : undefined}
                         />
                     </div>}
+                    {/* Fills the pinned editor's rounded top corners with the panel's
+                        background, so picker content scrolling beneath never shows there.
+                        It sits after the editor (and behind it) and sticks to the same
+                        top before any content can reach those corners. */}
+                    {panelEditor && <div aria-hidden="true" data-pin-cap="" className="sticky z-[29] h-3 -mt-3 bg-kb-surface" style={{ top: pinTop }} />}
                     {/* Keyed by category: a rail switch swaps only this, with a short crossfade. */}
                     <div key={pickerMode} ref={pickerBodyRef} className={panelPlacement ? "panel-picker-swap" : undefined} data-picker-body={pickerMode}>
                     {pickerMode === "keyboard" && <BasicKeyboards isPicker />}

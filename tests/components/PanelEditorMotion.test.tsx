@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import SecondarySidebar from '../../src/layout/SecondarySidebar/SecondarySidebar';
 import { TooltipProvider } from '../../src/components/ui/tooltip';
@@ -139,10 +139,10 @@ describe('side-panel editor motion', () => {
         expect(played.find(p => p.el === list)!.keyframes).toEqual([{ opacity: 1 }, { opacity: 0 }]);
         const picker = view.container.querySelector('[data-picker-body]') as HTMLElement;
         expect(String(played.find(p => p.el === picker)!.keyframes[0].transform)).toMatch(/translateY\(\d+px\)/);
-        expect((view.container.querySelector('[data-binding-row="2"]') as HTMLElement).style.visibility).toBe('hidden');
+        expect((view.container.querySelector('[data-binding-row="2"]') as HTMLElement).style.opacity).toBe('0');
         await waitFor(() => expect(aside(view.container)).not.toHaveAttribute('data-editor-motion'));
         expect(ghost(view.container)).toBeNull();
-        expect((view.container.querySelector('[data-binding-row="2"]') as HTMLElement).style.visibility).toBe('');
+        expect((view.container.querySelector('[data-binding-row="2"]') as HTMLElement).style.opacity).toBe('');
     });
 
     it('shrinks the editor back into its row and keeps the picker shown while it fades', async () => {
@@ -163,7 +163,33 @@ describe('side-panel editor motion', () => {
         expect(played.find(p => p.el === overlay)!.keyframes).toEqual([{ opacity: 1 }, { opacity: 0 }]);
         await waitFor(() => expect(aside(view.container)).not.toHaveAttribute('data-editor-motion'));
         expect(overlay).toHaveClass('invisible');
+        // Opacity too: keycaps with transition-all would show through "invisible" alone.
+        expect(overlay).toHaveClass('opacity-0');
         expect(ghost(view.container)).toBeNull();
+    });
+
+    it('copies the editor again one frame on, keeping its place in the motion', async () => {
+        const frames: FrameRequestCallback[] = [];
+        const raf = window.requestAnimationFrame;
+        const caf = window.cancelAnimationFrame;
+        window.requestAnimationFrame = (cb: FrameRequestCallback) => { frames.push(cb); return frames.length; };
+        window.cancelAnimationFrame = () => {};
+        const view = render(ui());
+        state.itemToEdit = 2;
+        state.alternativeHeader = true;
+        view.rerender(ui());
+        const first = ghost(view.container)!;
+        expect(first).not.toBeNull();
+        const firstAnim = played.find(p => p.el === first)!;
+        expect(frames.length).toBeGreaterThan(0);
+        act(() => frames.forEach(cb => cb(0)));
+        const second = ghost(view.container)!;
+        expect(second).not.toBe(first);
+        expect(first.isConnected).toBe(false);
+        expect(played.find(p => p.el === second)!.keyframes).toEqual(firstAnim.keyframes);
+        await waitFor(() => expect(aside(view.container)).not.toHaveAttribute('data-editor-motion'));
+        window.requestAnimationFrame = raf;
+        window.cancelAnimationFrame = caf;
     });
 
     it('with reduced motion only crossfades: no ghost, no transforms', async () => {
