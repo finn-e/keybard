@@ -16,9 +16,17 @@ describe('combo editor placement', () => {
   expect(resolveComboEditorPlacement('', undefined)).toEqual({ placement: 'half', fromUrl: false });
   const setting = SETTINGS.find(s => s.name === COMBO_EDITOR_PLACEMENT_SETTING);
   expect(setting?.defaultValue).toBe('half');
-  expect(setting?.items?.map(i => i.value)).toEqual(['half', 'dock', 'anchored', 'float']);
+  expect(setting?.items?.map(i => i.value)).toEqual(['half', 'dock', 'anchored', 'float', 'panel']);
   expect(resolveComboEditorPlacement('?comboEditor=half', 'dock')).toEqual({ placement: 'half', fromUrl: true });
   expect(SETTINGS_CATEGORIES.find(c => c.name === 'general')?.settings).toContain(COMBO_EDITOR_PLACEMENT_SETTING);
+ });
+
+ it('offers In the side panel as a value, chosen by the setting or ?comboEditor=panel', () => {
+  const setting = SETTINGS.find(s => s.name === COMBO_EDITOR_PLACEMENT_SETTING);
+  expect(setting?.items?.find(i => i.value === 'panel')?.label).toBe('In the side panel');
+  expect(setting?.defaultValue).not.toBe('panel');
+  expect(resolveComboEditorPlacement('?comboEditor=panel', 'half')).toEqual({ placement: 'panel', fromUrl: true });
+  expect(resolveComboEditorPlacement('', 'panel')).toEqual({ placement: 'panel', fromUrl: false });
  });
 
  it('lets a valid URL value win over the setting without saving it', () => {

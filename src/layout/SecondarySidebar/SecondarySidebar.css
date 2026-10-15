@@ -40,7 +40,7 @@
     max-height: calc(100dvh - var(--panel-height) - 16px);
 }
 @media (max-width: 1000px) {
-    .detail-panel[data-placement="side"][data-binding-open="true"]:not([data-combo-placement]) {
+    .detail-panel[data-placement="side"][data-binding-open="true"]:not([data-combo-placement]):not([data-editor-placement]) {
         top: 50dvh;
     }
     .detail-panel[data-placement="side"] .binding-workspace {
@@ -69,4 +69,16 @@
 }
 .detail-panel[data-combo-placement="dock"] .binding-workspace {
     border-radius: 0.75rem;
+}
+
+/* "In the side panel": the editor is in the panel's own flow, pinned at the
+   top of the picker scroll with a sticky top from the sidebar. No card sits
+   over the layout. Kept last so it wins over the side rules above. */
+.detail-panel[data-editor-placement="panel"] .binding-workspace {
+    position: sticky;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    width: auto;
+    max-height: none;
 }
