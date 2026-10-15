@@ -1,9 +1,10 @@
 /**
  * Where the single-combo editor sits while keys are picked on the keyboard.
- * "half" is the compact card under the keyboard half that holds fewer of the
- * combo's keys; the others stay selectable for comparison. "panel" is the one
- * value that applies to every binding editor: the editor sits at the top of
- * the side panel, pinned above the picker, with no card over the layout.
+ * "panel" is the default and applies to every binding editor: the editor sits
+ * at the top of the side panel, pinned above the picker, with no card over the
+ * layout. "half" is the compact card under the keyboard half that holds fewer
+ * of the combo's keys; it and the others stay selectable for comparison
+ * (setting, or ?comboEditor=<value> for one page load).
  */
 export type ComboEditorPlacement = "half" | "dock" | "anchored" | "float" | "panel";
 
@@ -11,7 +12,7 @@ export const COMBO_EDITOR_PLACEMENT_SETTING = "combo-editor-placement";
 export const COMBO_EDITOR_PLACEMENT_PARAM = "comboEditor";
 /** Fired when the fixed combo editor card moves, so the key inspector can re-measure its lane. */
 export const COMBO_EDITOR_MOVED_EVENT = "keybard:combo-editor-moved";
-export const DEFAULT_COMBO_EDITOR_PLACEMENT: ComboEditorPlacement = "half";
+export const DEFAULT_COMBO_EDITOR_PLACEMENT: ComboEditorPlacement = "panel";
 export const COMBO_EDITOR_PLACEMENTS: readonly ComboEditorPlacement[] = ["half", "dock", "anchored", "float", "panel"];
 
 export const isComboEditorPlacement = (value: unknown): value is ComboEditorPlacement =>

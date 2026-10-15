@@ -1,5 +1,5 @@
 /**
- * Motion for the binding editor "In the side panel" (?comboEditor=panel).
+ * Motion for the binding editor "In the side panel" (the default placement).
  * The panel's frame and background never move; only its contents animate.
  * Entering, the clicked list row grows into the pinned editor while the rest
  * of the list fades out and the picker rises in beneath. Leaving reverses it.

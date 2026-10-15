@@ -90,7 +90,8 @@ const overflowScan = () => {
     await ctx.addInitScript(t => { try { localStorage.setItem("keyboard-settings", JSON.stringify({ "show-alt-repeat": true, theme: t })); } catch {} }, theme);
     await ctx.route(/sval-default.svil/, r => r.request().resourceType() !== "fetch" ? r.continue() : r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(svil) }));
     const p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
-    const q = shape === "panel" ? "?comboEditor=panel" : `?comboEditor=panel&pickerShape=${shape}`;
+    // The side panel editor is the default placement: no ?comboEditor= needed.
+    const q = shape === "panel" ? "" : `?pickerShape=${shape}`;
     await p.goto(`http://localhost:${port}/keybard-ng/${q}`);
     await p.waitForTimeout(800);
     await p.getByText("QWERTY Example").click();
