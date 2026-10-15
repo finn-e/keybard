@@ -21,6 +21,8 @@ export interface FirmwareSectionProps {
     onManual: (release: FirmwareReleasePin | null) => void;
     onConnect?: () => void;
     paranoid?: boolean;
+    /** Its own "Firmware" title; off inside Settings, whose section is titled already. */
+    heading?: boolean;
 }
 
 const HALF = (h: Hand) => (h === 0 ? "Left half" : "Right half");
@@ -34,7 +36,7 @@ function buttonLabel(pick: FirmwareReleasePin | null, board: BoardSummary | null
     return `Install ${pick.tag}`;
 }
 
-export function FirmwareSection({ board, releases, onInstall, onManual, onConnect, paranoid = PARANOID }: FirmwareSectionProps) {
+export function FirmwareSection({ board, releases, onInstall, onManual, onConnect, paranoid = PARANOID, heading = true }: FirmwareSectionProps) {
     const newest = releases[0] ?? null;
     const installedTag = board?.updater ? board.tag : null;
     const initial = useMemo(() => {
@@ -79,8 +81,8 @@ export function FirmwareSection({ board, releases, onInstall, onManual, onConnec
     const status = !board ? null : board.updater && board.differ ? "Halves differ" : board.updater && newest && board.halves.every((h) => h.fwVersion >= newest.fwVersion) ? "Up to date" : null;
 
     return (
-        <section aria-labelledby="fw-title" className="flex flex-col gap-4" data-testid="firmware-section">
-            <h2 id="fw-title" className="text-lg font-semibold text-kb-ink">Firmware</h2>
+        <section aria-labelledby={heading ? "fw-title" : undefined} aria-label={heading ? undefined : "Firmware"} className="flex flex-col gap-4" data-testid="firmware-section">
+            {heading && <h2 id="fw-title" className="text-lg font-semibold text-kb-ink">Firmware</h2>}
 
             <div className="flex flex-col gap-1" aria-label="This keyboard">
                 <h3 className={`text-sm font-semibold ${status === "Halves differ" ? "text-kb-orange" : "text-muted-foreground"}`}>{status ?? "This keyboard"}</h3>

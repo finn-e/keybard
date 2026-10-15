@@ -11,6 +11,8 @@ const panels = vi.hoisted(() => ({
 vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => false }));
 vi.mock('@/features/trainer/OverlayDialog', () => ({ OverlayDialog: () => null, overlayRequested: () => false }));
 vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ keyboard: null }) }));
+const firmware = vi.hoisted(() => ({ dot: false }));
+vi.mock('@/features/firmware/FirmwareUpdateProvider', () => ({ useFirmwareUpdates: () => ({ status: { dot: firmware.dot } }) }));
 vi.mock('@/contexts/PanelsContext', () => ({ usePanels: () => ({
     ...panels, setItemToEdit: vi.fn(), panelToGoBack: null, alternativeHeader: false,
     setPanelToGoBack: vi.fn(), setAlternativeHeader: vi.fn(), setOpen: vi.fn(),
@@ -18,7 +20,7 @@ vi.mock('@/contexts/PanelsContext', () => ({ usePanels: () => ({
 
 const renderRail = () => render(<SidebarProvider><AppSidebar /></SidebarProvider>);
 
-beforeEach(() => { vi.clearAllMocks(); panels.activePanel = null; panels.open = false; takeSettingsSectionRequest(); });
+beforeEach(() => { vi.clearAllMocks(); panels.activePanel = null; panels.open = false; firmware.dot = false; takeSettingsSectionRequest(); });
 
 describe('rail homes for what left Settings', () => {
     it('lists Typing Behavior after Overrides, and Clusters beside Layouts', () => {
@@ -53,5 +55,20 @@ describe('rail homes for what left Settings', () => {
         expect(panels.handleCloseDetails).not.toHaveBeenCalled();
         expect(heard).toEqual(['about']);
         window.removeEventListener('keybard-settings-section', listener);
+    });
+});
+
+describe('the firmware update dot', () => {
+    it('marks Settings when an update is available and not yet seen', () => {
+        firmware.dot = true;
+        renderRail();
+        expect(screen.getByRole('button', { name: 'Settings, firmware update available' })).toBeTruthy();
+        expect(screen.getAllByTestId('rail-dot')).toHaveLength(1);
+    });
+
+    it('is quiet otherwise', () => {
+        renderRail();
+        expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy();
+        expect(screen.queryByTestId('rail-dot')).toBeNull();
     });
 });

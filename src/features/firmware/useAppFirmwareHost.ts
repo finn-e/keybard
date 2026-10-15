@@ -16,6 +16,7 @@ import type { CheckRow } from "@/services/updater/checks";
 import { realClock, type UpdaterTransport } from "@/services/updater/transport";
 import { WebHidUpdaterTransport } from "@/services/updater/webhid-transport";
 import type { KeyboardInfo } from "@/types/keyboard.types";
+import { getKeyLabel } from "@/utils/layers";
 import { restoreLayoutToBoard } from "./restore";
 import type { FirmwareUiHost, UpdateBackup } from "./useFirmwareUpdate";
 
@@ -72,11 +73,26 @@ async function pauseKeybardHost(): Promise<CheckRow | null> {
     }
 }
 
-/** Layer-0 legends of the chord keys: Index South + Middle South (right [6,0]+[7,0], left [1,0]+[2,0]). */
+/** The chord keys by matrix position: Index South + Middle South (right [6,0]+[7,0], left [1,0]+[2,0]). */
+const CHORD_KEYS: Record<0 | 1, Array<[number, number]>> = { 1: [[6, 0], [7, 0]], 0: [[1, 0], [2, 0]] };
+
+/**
+ * Layer-0 legends of the chord keys, from the board's own keymap. The default layout's
+ * letters when the keymap isn't loaded; the key's place when it is empty (a blank board).
+ */
 export function chordLegendsFor(keyboard: KeyboardInfo | null, hand: 0 | 1): [string, string] {
     const fallback: [string, string] = hand === 1 ? ["M", ","] : ["V", "C"];
-    void keyboard;
-    return fallback;
+    const layer0 = keyboard?.keymap?.[0];
+    const cols = keyboard?.cols;
+    if (!keyboard || !layer0 || !cols) return fallback;
+    const places = ["Index South", "Middle South"];
+    return CHORD_KEYS[hand].map(([row, col], i) => {
+        const code = layer0[row * cols + col];
+        if (code === undefined) return fallback[i];
+        if (code === 0) return places[i];
+        const label = getKeyLabel(keyboard, code).label?.replace(/\s+/g, " ").trim();
+        return label || fallback[i];
+    }) as [string, string];
 }
 
 export function useAppFirmwareHost(): FirmwareUiHost {
@@ -117,6 +133,13 @@ export function useAppFirmwareHost(): FirmwareUiHost {
                 const current = k.keyboard;
                 if (!current) throw new Error("The keyboard didn't finish loading.");
                 return restoreLayoutToBoard(svil, { keyboard: current, setKeyboard: k.setKeyboard, queue: ch.queue, commit: ch.commit });
+            },
+            async keymapBlank() {
+                // After the wipe's reconnect: wait for the load, then every key on every layer is KC_NO.
+                const deadline = Date.now() + 20_000;
+                while (!keyboardLoaded() && Date.now() < deadline) await new Promise((r) => setTimeout(r, 250));
+                const keymap = ref.current.kb.keyboard?.keymap;
+                return !!keymap?.length && keymap.every((layer) => layer.every((code) => code === 0));
             },
             holdLocks: holdUpdateLocks,
             async makeBackup({ fromTag, toTag }): Promise<UpdateBackup> {

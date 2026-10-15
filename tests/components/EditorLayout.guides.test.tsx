@@ -140,6 +140,11 @@ vi.mock("../../src/layout/EditorControls", () => ({
   EditorControls: () => null,
 }));
 
+// The firmware updates (their dialog, the board read) are tested on their own.
+vi.mock("@/features/firmware/AppFirmwareUpdates", () => ({
+  AppFirmwareUpdates: ({ children }: { children: ReactNode }) => children,
+}));
+
 vi.mock("@/components/PasteLayerDialog", () => ({
   PasteLayerDialog: () => null,
 }));

@@ -28,6 +28,7 @@ import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
 import { PARANOID } from "@/lib/paranoid";
 import { requestSettingsSection } from "@/layout/SecondarySidebar/Panels/settings/anchor";
+import { useFirmwareUpdates } from "@/features/firmware/FirmwareUpdateProvider";
 
 // --- Constants ---
 const MENU_ITEM_GAP_PX = 42; // Matches Gap-4 (16px) + Button Height (26px)
@@ -116,6 +117,8 @@ interface SidebarNavItemProps {
     alternativeHeader?: boolean;
     isCollapsed: boolean;
     onClick: (item: SidebarItem) => void;
+    /** A quiet dot on the icon: a firmware update the user hasn't opened yet. */
+    dot?: string;
 }
 
 const SidebarNavItem = ({
@@ -125,6 +128,7 @@ const SidebarNavItem = ({
     alternativeHeader,
     isCollapsed,
     onClick,
+    dot,
 }: SidebarNavItemProps) => (
     <SidebarMenuItem className="cursor-pointer">
         <SidebarMenuButton
@@ -148,9 +152,10 @@ const SidebarNavItem = ({
                     </span>
                 </a>
             ) : (
-                <button type="button" aria-label={item.title} aria-pressed={isActive} onClick={() => onClick(item)} className="flex w-full items-center justify-start">
-                    <div className={cn(ICON_GUTTER_CLASSES, "h-full")}>
+                <button type="button" aria-label={dot ? `${item.title}, ${dot}` : item.title} aria-pressed={isActive} onClick={() => onClick(item)} className="flex w-full items-center justify-start">
+                    <div className={cn(ICON_GUTTER_CLASSES, "relative h-full")}>
                         <item.icon className="h-5 w-5 shrink-0" />
+                        {dot && <span aria-hidden="true" data-testid="rail-dot" className="absolute right-[calc(50%-12px)] top-[calc(50%-12px)] h-2 w-2 rounded-full bg-kb-primary ring-2 ring-sidebar" />}
                     </div>
                     <span className={cn("truncate", isCollapsed && "hidden")}>
                         {item.title}
@@ -182,6 +187,7 @@ const AppSidebar = () => {
     } = usePanels();
 
     const { keyboard } = useKeyboard();
+    const firmwareDot = useFirmwareUpdates()?.status.dot ? "firmware update available" : undefined;
 
 
 
@@ -416,6 +422,7 @@ const AppSidebar = () => {
                                     isActive={activePanel === item.url}
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
+                                    dot={item.url === "settings" ? firmwareDot : undefined}
                                 />
                             ))}
                         </SidebarMenu>

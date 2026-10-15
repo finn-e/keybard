@@ -6,6 +6,7 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { useLayoutImport } from "@/hooks/useLayoutImport";
+import { useFirmwareUpdates } from "@/features/firmware/FirmwareUpdateProvider";
 import { DEVELOPER_OPENED_SETTING } from "@/lib/appearance-settings";
 import { cn } from "@/lib/utils";
 import BackupsSection from "./BackupsSection";
@@ -31,6 +32,10 @@ const SettingsPanel = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isExportOpen, setIsExportOpen] = useState(false);
     const { handleFileImport, reviewFile, importReview } = useLayoutImport();
+    // The update the rail's dot pointed at: marked on the Firmware chip for this visit
+    // (opening Settings clears the rail dot).
+    const firmwareDotNow = !!useFirmwareUpdates()?.status.dot;
+    const [firmwareDot] = useState(firmwareDotNow);
 
     const developerOpenedBefore = getSetting(DEVELOPER_OPENED_SETTING, false) === true;
     const [developerOpen, setDeveloperOpen] = useState(developerOpenedBefore);
@@ -115,9 +120,11 @@ const SettingsPanel = () => {
                         key={id}
                         type="button"
                         onClick={() => scrollToSection(id)}
-                        className="rounded-full border border-kb-gray-border bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-kb-ink"
+                        aria-label={id === "firmware" && firmwareDot ? `${label}, update available` : undefined}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-kb-gray-border bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-kb-ink"
                     >
                         {label}
+                        {id === "firmware" && firmwareDot && <span aria-hidden="true" data-testid="firmware-chip-dot" className="h-1.5 w-1.5 rounded-full bg-kb-primary" />}
                     </button>
                 ))}
             </nav>
