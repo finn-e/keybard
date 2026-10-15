@@ -12,9 +12,10 @@ import type { ComboMembership } from "@/utils/combo-membership";
 import type { ComboIndicatorMode } from "@/lib/comboIndicators";
 import type { ComboPalette } from "@/utils/combo-hues";
 
-/** Combo indicator and preview wiring for a layout key (set only while combo indicators are on). */
+/** Inspector, combo indicator and preview wiring for a layout key (every layout key has it). */
 export interface KeyComboProps {
-    /** Combos this key triggers, ascending by combo number. Empty for a key in no combo. */
+    /** Combos whose folds this key draws, ascending by combo number. Empty for a key in no
+     *  combo, and while combo indicators are off. */
     memberships: ComboMembership[];
     /** Combo number -> hue, for the whole keyboard. */
     hues: ReadonlyMap<number, number>;
@@ -23,14 +24,18 @@ export interface KeyComboProps {
     /** Fold size mode and palette (see src/lib/comboIndicators.ts). */
     mode?: ComboIndicatorMode;
     palette?: ComboPalette;
-    /** Accessible label (keys in a combo only). */
+    /** Accessible label. */
     ariaLabel?: string;
+    /** The layout's one Tab stop (roving tabindex); every other key is tabIndex -1. */
+    tabStop?: boolean;
+    /** Arrow keys, Home and End: move focus to another layout key. */
+    onNavigate?: (key: string) => void;
     pinned: boolean;
     onEnter: () => void;
     onLeave: () => void;
     onFocus: (el: Element) => void;
     onBlur: () => void;
-    /** Click, Enter or Space: pin or unpin this key's preview (a key in no combo clears the pin). */
+    /** Click, Enter or Space: pin or unpin this key in the inspector. */
     onToggle: () => void;
     /** False for a key that only draws the fold (the ghost overlay of a transparent key). */
     interactive?: boolean;
@@ -73,6 +78,11 @@ export interface KeyProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'on
     combo?: KeyComboProps;
 }
 
+/** Focus that came from the keyboard (Tab, arrows), not from a click. */
+function keyboardFocused(el: Element): boolean {
+    try { return el.matches(":focus-visible"); } catch { return true; }
+}
+
 /**
  * Renders a single key in the keyboard layout.
  */
@@ -105,7 +115,7 @@ export const Key = React.forwardRef<HTMLDivElement, KeyProps>((props, ref) => {
     }, [label, keyContents, keycode, forceLabel, internationalLayout]);
 
     const comboInteractive = !!combo && combo.interactive !== false;
-    const comboFocusable = comboInteractive && combo!.memberships.length > 0;
+    const comboFocusable = comboInteractive;
 
     // --- Styling logic ---
     const styles = useMemo(() => {
@@ -216,31 +226,36 @@ export const Key = React.forwardRef<HTMLDivElement, KeyProps>((props, ref) => {
         if (comboInteractive) combo!.onToggle();
     };
 
-    // Combo preview: hover and focus preview this key's combos; the drag handlers still run.
-    const inCombo = comboFocusable;
+    // Inspector and combo preview: hover and focus show this key; the drag handlers still run.
     const handleMouseEnter = () => {
         drag.handleMouseEnter();
-        if (comboInteractive) (inCombo ? combo!.onEnter() : combo!.onLeave());
+        if (comboInteractive) combo!.onEnter();
     };
     const handleMouseLeave = () => {
         drag.handleMouseLeave();
         if (comboInteractive) combo!.onLeave();
     };
     const comboAttrs: React.HTMLAttributes<HTMLDivElement> & { "data-combo-preview"?: string } = comboInteractive ? { "data-combo-preview": "" } : {};
-    if (inCombo) {
+    if (comboInteractive) {
         Object.assign(comboAttrs, {
-            tabIndex: 0,
+            tabIndex: combo!.tabStop ? 0 : -1,
             role: "button",
             "aria-label": combo!.ariaLabel,
             "aria-pressed": combo!.pinned,
             onFocus: (e: React.FocusEvent<HTMLDivElement>) => { if (e.target === e.currentTarget) combo!.onFocus(e.currentTarget); },
             onBlur: (e: React.FocusEvent<HTMLDivElement>) => { if (e.target === e.currentTarget) combo!.onBlur(); },
             onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
-                if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
-                // Keep "typing binds a key" from binding Enter or Space to a selected key.
+                if (e.target !== e.currentTarget || e.altKey || e.ctrlKey || e.metaKey) return;
+                const nav = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(e.key);
+                if (!nav && e.key !== "Enter" && e.key !== " ") return;
+                // Only for keyboard focus: a key focused by a click leaves these keys to
+                // "typing binds a key".
+                if (!keyboardFocused(e.currentTarget)) return;
+                // Keep "typing binds a key" from binding these keys to a selected key.
                 e.preventDefault();
                 e.stopPropagation();
-                combo!.onToggle();
+                if (nav) combo!.onNavigate?.(e.key);
+                else combo!.onToggle();
             },
         });
     }

@@ -1,15 +1,32 @@
-// Readout for a combo preview: the hovered, focused or pinned key (or combos-list row), and
-// each of its combos as chord keys and output. It overlays the space under the layout, so
-// showing it never moves anything, and it is empty while nothing is previewed.
-import React from "react";
+// Key inspector: the one card that shows key details on the layout. It describes the hovered,
+// focused or pinned layout key (or a combos-list row): the key's action, tap dance or macro,
+// every combo it is in, key overrides, alt repeat, leaders and where else it is used. It
+// overlays the space under the layout, so showing it never moves a key, and it stops short
+// of any editor or control below (the "lane"). Sections render only when they have content.
+import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import type { ComboEntry } from "@/types/keyboard.types";
+import type { ComboEntry, KeyboardInfo } from "@/types/keyboard.types";
 import { useComboPreview } from "@/contexts/ComboPreviewContext";
+import { useLayoutSettings } from "@/contexts/LayoutSettingsContext";
 import { comboInputs, type ComboMembership } from "@/utils/combo-membership";
 import { comboSentence, shortKeyName } from "@/utils/combo-labels";
 import { hiddenOnKey } from "@/utils/combo-fold";
+import { layerHexFor } from "@/utils/combo-hues";
+import { buildKeyIndex, inspectKey, type KeyInspection, type Part, type Row, type Section } from "@/utils/key-inspect";
 import { ComboOptions } from "@/types/keyboard.types";
 import { FoldGlyph } from "./FoldGlyph";
+
+/** Combo lines a hovering card lists before "+N More Combos" (a pinned card lists all). */
+export const HOVER_COMBO_CAP = 6;
+/** Lane heights (px) for the full card and the one-line strip. */
+export const FULL_MIN_LANE = 120;
+export const STRIP_MIN_LANE = 40;
+const MAX_CARD_HEIGHT = 340;
+const GAP = 12;
+const VIEWPORT_GUTTER = 16;
+const LEAVE_FADE_MS = 90;
+/** What the lane stops at: editors and controls under the layout. */
+const OBSTACLES = ".binding-workspace, aside.detail-panel[data-placement='bottom'], [data-inspector-avoid]";
 
 function membershipOf(combos: ComboEntry[], index: number): ComboMembership | null {
     const c = combos[index];
@@ -17,78 +34,276 @@ function membershipOf(combos: ComboEntry[], index: number): ComboMembership | nu
     return { index, enabled: !!(c.options & ComboOptions.ENABLED), output: c.output, inputs: comboInputs(c) };
 }
 
-function Chip({ children, out = false }: { children: React.ReactNode; out?: boolean }) {
+function Chip({ children, out = false, label, edge }: { children: React.ReactNode; out?: boolean; label?: string; edge?: string }) {
     return (
-        <span className={cn(
-            "inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-[5px] text-[11px] font-semibold uppercase whitespace-nowrap",
-            "bg-kb-combo-chip border border-kb-combo-chip-border text-kb-ink",
-            out && "font-bold",
-        )}>{children}</span>
+        <span
+            className={cn(
+                "inline-flex items-center justify-center min-w-[22px] max-w-[140px] h-[22px] px-1.5 rounded-[5px] text-[11px] font-semibold uppercase whitespace-nowrap",
+                "bg-kb-combo-chip border border-kb-combo-chip-border text-kb-ink",
+                out && "font-bold",
+            )}
+            aria-label={label}
+            style={edge ? { borderLeftWidth: 3, borderLeftColor: edge } : undefined}
+        ><span className="truncate">{children}</span></span>
     );
 }
 
-export function ComboLine({ c, hue, notShown = false }: { c: ComboMembership; hue: number; notShown?: boolean }) {
+const Off = () => <span className="text-[11px] text-muted-foreground border border-kb-combo-chip-border rounded-full px-1.5">off</span>;
+
+export function ComboLine({ c, hue, notShown = false, showHue = true }: { c: ComboMembership; hue: number; notShown?: boolean; showHue?: boolean }) {
     return (
-        <li className="flex items-center gap-2 min-h-6 text-[13px]" data-readout-combo={c.index}>
-            <span className="inline-flex w-[18px] h-4 items-center justify-center"><FoldGlyph hue={hue} disabled={!c.enabled} /></span>
-            <span className="text-muted-foreground tabular-nums min-w-[62px] text-[12.5px]">Combo {c.index}</span>
-            <span className="inline-flex items-center gap-[3px] flex-wrap" aria-label={comboSentence(c)}>
-                {c.inputs.map((x, i) => (
-                    <React.Fragment key={i}>
-                        {i > 0 && <span className="text-muted-foreground text-[11px]" aria-hidden="true">+</span>}
-                        <Chip>{shortKeyName(x)}</Chip>
-                    </React.Fragment>
-                ))}
-                <span className="text-muted-foreground mx-0.5" aria-hidden="true">→</span>
-                <Chip out>{shortKeyName(c.output)}</Chip>
+        <li className="grid grid-cols-[18px_86px_1fr] items-center gap-x-2 min-h-6 text-[13px]" data-readout-combo={c.index} data-inspector-row="">
+            <span className="inline-flex w-[18px] h-4 items-center justify-center">{showHue && <FoldGlyph hue={hue} disabled={!c.enabled} />}</span>
+            <span className="text-muted-foreground tabular-nums text-[12.5px]">Combo {c.index}</span>
+            <span className="inline-flex items-center gap-[3px] flex-wrap min-w-0">
+                <span className="inline-flex items-center gap-[3px] flex-wrap" aria-label={comboSentence(c)}>
+                    {c.inputs.map((x, i) => (
+                        <React.Fragment key={i}>
+                            {i > 0 && <span className="text-muted-foreground text-[11px]" aria-hidden="true">+</span>}
+                            <Chip>{shortKeyName(x)}</Chip>
+                        </React.Fragment>
+                    ))}
+                    <span className="text-muted-foreground mx-0.5" aria-hidden="true">→</span>
+                    <Chip out>{shortKeyName(c.output)}</Chip>
+                </span>
+                {!c.enabled && <Off />}
+                {notShown && <span className="text-[11px] text-muted-foreground" data-readout-not-shown="">not shown on key</span>}
             </span>
-            {!c.enabled && <span className="text-[11px] text-muted-foreground border border-kb-combo-chip-border rounded-full px-1.5">off</span>}
-            {notShown && <span className="text-[11px] text-muted-foreground" data-readout-not-shown="">not shown on key</span>}
         </li>
     );
 }
 
-export function ComboReadout({ combos, hues, className }: {
-    combos: ComboEntry[];
+function Parts({ parts, kb }: { parts: Part[]; kb: KeyboardInfo }) {
+    return (
+        <>
+            {parts.map((p, i) => {
+                if (p.t === "plus") return <span key={i} className="text-muted-foreground text-[11px]" aria-hidden="true">+</span>;
+                if (p.t === "arrow") return <span key={i} className="text-muted-foreground mx-0.5" aria-hidden="true">→</span>;
+                if (p.t === "text") return <span key={i} className={cn("text-[12px] text-muted-foreground", p.mono && "font-mono text-kb-ink truncate max-w-full")}>{p.text}</span>;
+                const edge = p.layer != null ? layerHexFor(kb.cosmetic?.layer_colors?.[String(p.layer)] || "green") : undefined;
+                return <Chip key={i} out={p.out} label={p.label} edge={edge}>{p.label}</Chip>;
+            })}
+        </>
+    );
+}
+
+function RowLine({ row, kb }: { row: Row; kb: KeyboardInfo }) {
+    return (
+        <li className="grid grid-cols-[18px_86px_1fr] items-center gap-x-2 min-h-6 text-[13px]" data-inspector-row="">
+            <span />
+            <span className="text-muted-foreground tabular-nums text-[12.5px] truncate">{row.label}</span>
+            <span className="inline-flex items-center gap-[3px] flex-wrap min-w-0">
+                <Parts parts={row.parts} kb={kb} />
+                {row.off && <Off />}
+                {row.note && <span className="text-[11px] text-muted-foreground">{row.note}</span>}
+            </span>
+        </li>
+    );
+}
+
+function SectionBlock({ title, note, off, id, children }: { title: string; note?: string; off?: boolean; id: string; children: React.ReactNode }) {
+    return (
+        <section className="mt-2.5 first:mt-2" data-inspector-section={id}>
+            <h3 className="text-[12px] font-medium text-muted-foreground flex items-center gap-1.5 m-0">
+                <span>{title}</span>
+                {note && <span className="font-normal">{note}</span>}
+                {off && <Off />}
+            </h3>
+            <ul className="list-none mt-1 p-0 grid gap-1">{children}</ul>
+        </section>
+    );
+}
+
+const Sections = ({ list, kb }: { list: Section[]; kb: KeyboardInfo }) => (
+    <>
+        {list.map(sec => (
+            <SectionBlock key={sec.id} id={sec.id} title={sec.title} note={sec.titleNote} off={sec.off}>
+                {sec.rows.map((r, i) => <RowLine key={i} row={r} kb={kb} />)}
+            </SectionBlock>
+        ))}
+    </>
+);
+
+/**
+ * Space under the layout for the card: from GAP below the layout to GAP above the nearest
+ * editor or control under it, or the viewport bottom.
+ */
+function useLane(anchor: React.RefObject<HTMLDivElement | null>, deps: unknown[]): number {
+    const [lane, setLane] = useState(MAX_CARD_HEIGHT);
+    useLayoutEffect(() => {
+        const el = anchor.current;
+        if (!el) return;
+        const measure = () => {
+            const a = el.getBoundingClientRect();
+            let bottom = window.innerHeight - VIEWPORT_GUTTER;
+            document.querySelectorAll<HTMLElement>(OBSTACLES).forEach(o => {
+                const r = o.getBoundingClientRect();
+                if (!r.width || !r.height) return;
+                if (r.top < a.top - 1) return; // beside or above the layout, never under the card
+                if (r.right <= a.left || r.left >= a.left + Math.max(a.width, 1)) return;
+                bottom = Math.min(bottom, r.top - GAP);
+            });
+            setLane(Math.max(0, Math.round(bottom - a.top)));
+        };
+        measure();
+        const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+        ro?.observe(document.body);
+        if (el.parentElement) ro?.observe(el.parentElement);
+        document.querySelectorAll<HTMLElement>(OBSTACLES).forEach(o => ro?.observe(o));
+        window.addEventListener("resize", measure);
+        return () => { ro?.disconnect(); window.removeEventListener("resize", measure); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, deps);
+    return lane;
+}
+
+export function KeyInspector({ keyboard, hues, className }: {
+    keyboard: KeyboardInfo;
     hues: ReadonlyMap<number, number>;
     className?: string;
 }) {
-    const { enabled, active, isPinned } = useComboPreview();
-    if (!enabled) return null;
+    const { enabled: indicators, active, activeVia, isPinned } = useComboPreview();
+    const { internationalLayout } = useLayoutSettings();
+    const combos = keyboard.combos || [];
+    const index = useMemo(
+        () => buildKeyIndex(keyboard),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [keyboard.combos, keyboard.tapdances, keyboard.macros, keyboard.key_overrides, keyboard.alt_repeat_keys, keyboard.leaders, keyboard.custom_keycodes],
+    );
+    const model: KeyInspection | null = useMemo(
+        () => (active?.kind === "key" && active.key ? inspectKey(keyboard, active.key, index, internationalLayout || "us") : null),
+        [active, keyboard, index, internationalLayout],
+    );
+
+    // Keep the last card for the leave fade.
+    const [leaving, setLeaving] = useState<React.ReactNode>(null);
+    const lastBody = useRef<React.ReactNode>(null);
+    const wasShown = useRef(false);
+
+    const anchor = useRef<HTMLDivElement>(null);
+    const lane = useLane(anchor, [active?.id, keyboard]);
+    const bodyRef = useRef<HTMLDivElement>(null);
+    const [hiddenRows, setHiddenRows] = useState(0);
+
+    const pinned = !!active && isPinned(active.id);
+    const form: "full" | "strip" | "none" = lane >= FULL_MIN_LANE ? "full" : lane >= STRIP_MIN_LANE ? "strip" : "none";
 
     let body: React.ReactNode = null;
-    if (active) {
-        const list = active.combos.map(i => membershipOf(combos, i)).filter((c): c is ComboMembership => !!c);
-        const pinned = isPinned(active.id);
-        // A key draws its three lowest-numbered combos; the readout names the rest too.
-        const hidden = active.kind === "key" ? hiddenOnKey(list) : new Set<number>();
+    let summary = "";
+    if (active && form !== "none") {
         let title: string;
         let meta: string;
+        let list: ComboMembership[];
         if (active.kind === "combo") {
+            list = active.combos.map(i => membershipOf(combos, i)).filter((c): c is ComboMembership => !!c);
             const c = list[0];
             title = `Combo ${active.combos[0]}`;
             meta = c ? `${c.inputs.length} keys${c.enabled ? "" : " · off"}` : "";
+            summary = c ? comboSentence(c) : title;
+        } else if (model) {
+            list = model.combos;
+            title = model.title;
+            const inN = list.length ? `in ${list.length} combo${list.length === 1 ? "" : "s"}` : "";
+            meta = [model.kind, inN].filter(Boolean).join(" · ");
+            summary = model.summary;
         } else {
+            list = active.combos.map(i => membershipOf(combos, i)).filter((c): c is ComboMembership => !!c);
             title = shortKeyName(active.keycode);
             meta = `in ${list.length} combo${list.length === 1 ? "" : "s"}`;
+            summary = `${title}, ${meta}`;
         }
-        body = (
-            <div
-                className="pointer-events-none rounded-[10px] border border-kb-combo-chip-border bg-kb-surface text-kb-ink shadow-md px-3.5 py-3 max-w-[560px]"
-                data-combo-readout=""
-            >
-                <div className="flex items-baseline gap-2.5 flex-wrap text-[13px] text-muted-foreground">
-                    <strong className="text-kb-ink font-semibold text-sm">{title}</strong>
-                    <span>{meta}</span>
-                    {pinned && <span className="ml-auto text-xs">Pinned · Esc clears</span>}
-                </div>
-                {list.length > 0 && (
-                    <ul className="list-none mt-2 p-0 grid gap-1">
-                        {list.map(c => <ComboLine key={c.index} c={c} hue={hues.get(c.index) ?? 0} notShown={hidden.has(c.index)} />)}
-                    </ul>
-                )}
+        // A key draws its three lowest-numbered combos; the inspector names the rest too.
+        const hidden = active.kind === "key" ? hiddenOnKey(list) : new Set<number>();
+        const capped = !pinned && list.length > HOVER_COMBO_CAP;
+        const shownCombos = capped ? list.slice(0, HOVER_COMBO_CAP) : list;
+        const comboLines = shownCombos.map(c => (
+            <ComboLine key={c.index} c={c} hue={hues.get(c.index) ?? 0} notShown={hidden.has(c.index)} showHue={indicators || active.kind === "combo"} />
+        ));
+
+        const header = (
+            <div className="flex items-baseline gap-2.5 text-[13px] text-muted-foreground min-w-0">
+                <strong className="text-kb-ink font-semibold text-sm truncate max-w-[50%]" data-inspector-title="">{title}</strong>
+                <span className="truncate">{meta}</span>
+                {pinned && <span className="ml-auto text-xs whitespace-nowrap">Pinned · Esc clears</span>}
             </div>
         );
+
+        if (form === "strip") {
+            body = (
+                <div className="h-8 flex items-center rounded-[10px] border border-kb-combo-chip-border bg-kb-surface text-kb-ink shadow-md px-3.5" data-key-inspector="strip" data-combo-readout="">
+                    {header}
+                </div>
+            );
+        } else {
+            const combosBlock = list.length > 0 && (active.kind === "combo"
+                ? <ul className="list-none mt-2 p-0 grid gap-1">{comboLines}</ul>
+                : (
+                    <SectionBlock id="combos" title="Combos">
+                        {comboLines}
+                        {capped && <li className="text-[12px] text-muted-foreground pl-[26px]" data-inspector-more-combos="">+{list.length - HOVER_COMBO_CAP} More Combos</li>}
+                    </SectionBlock>
+                ));
+            body = (
+                <div
+                    className={cn(
+                        "rounded-[10px] border border-kb-combo-chip-border bg-kb-surface text-kb-ink shadow-md flex flex-col",
+                        pinned ? "pointer-events-auto" : "pointer-events-none",
+                    )}
+                    style={{ maxHeight: Math.min(lane, MAX_CARD_HEIGHT) }}
+                    data-key-inspector="card"
+                    data-combo-readout=""
+                    aria-hidden={activeVia === "hover" ? true : undefined}
+                >
+                    <div ref={bodyRef} className={cn("px-3.5 pt-3 min-h-0", pinned ? "overflow-y-auto" : "overflow-hidden", !model && "pb-3")}>
+                        {header}
+                        {model && <Sections list={model.before} kb={keyboard} />}
+                        {combosBlock}
+                        {model && <Sections list={model.after} kb={keyboard} />}
+                        {model && <div className="mt-2.5 pb-3 text-[11px] text-muted-foreground" data-inspector-footer="">{model.footer}</div>}
+                    </div>
+                    {!pinned && hiddenRows > 0 && (
+                        <div className="px-3.5 py-1.5 text-[11px] text-muted-foreground border-t border-kb-combo-chip-border" data-inspector-clipped="">
+                            +{hiddenRows} More · Click to Pin
+                        </div>
+                    )}
+                </div>
+            );
+        }
     }
-    return <div aria-live="polite" className={className}>{body}</div>;
+
+    // Count rows a hovering card clips, for its "+N More" footer.
+    useLayoutEffect(() => {
+        const el = bodyRef.current;
+        if (!el || pinned) { setHiddenRows(0); return; }
+        const limit = el.getBoundingClientRect().bottom;
+        const n = [...el.querySelectorAll("[data-inspector-row]")].filter(r => r.getBoundingClientRect().bottom > limit + 1).length;
+        setHiddenRows(n);
+    });
+
+    // First show fades in; key to key swaps at once; leaving fades out.
+    useLayoutEffect(() => {
+        if (body) { lastBody.current = body; setLeaving(null); return; }
+        if (!wasShown.current || !lastBody.current) return;
+        setLeaving(lastBody.current);
+        const t = window.setTimeout(() => setLeaving(null), LEAVE_FADE_MS);
+        return () => window.clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [!!body]);
+    // Each first show mounts a fresh wrapper, so its entrance animation runs once.
+    const shows = useRef(0);
+    if (body && !wasShown.current) shows.current++;
+    useLayoutEffect(() => { wasShown.current = !!body; });
+
+    const announce = activeVia && activeVia !== "hover" ? summary : "";
+
+    return (
+        <div ref={anchor} className={cn("w-full", className)}>
+            <div style={{ width: "min(560px, max(320px, 100%))" }}>
+                {body
+                    ? <div className="kb-inspector-in" key={shows.current} data-inspector-live="">{body}</div>
+                    : leaving && <div className="kb-inspector-out pointer-events-none" aria-hidden="true">{leaving}</div>}
+            </div>
+            <div aria-live="polite" className="sr-only" data-inspector-summary="">{announce}</div>
+        </div>
+    );
 }

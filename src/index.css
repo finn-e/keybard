@@ -248,6 +248,31 @@ html.dark {
     }
 }
 
+/* Key inspector: fades in on first show, swaps at once between keys, fades out on leave. */
+@keyframes kb-inspector-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+}
+@keyframes kb-inspector-in-still {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@keyframes kb-inspector-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+.kb-inspector-in {
+    animation: kb-inspector-in 120ms ease-out;
+}
+.kb-inspector-out {
+    animation: kb-inspector-out 90ms ease-in forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+    .kb-inspector-in {
+        animation-name: kb-inspector-in-still;
+    }
+}
+
 /* Printed output stays light even when the editor is in dark mode.
    PrintableKeymap.css also forces white/black with !important. */
 @media print {

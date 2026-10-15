@@ -6,6 +6,7 @@ import { ComboPreviewProvider, HOVER_DELAY_MS, LEAVE_DELAY_MS } from "@/contexts
 import { ComboPreviewRow } from "@/components/combo/ComboPreviewRow";
 import { demoKeyboard } from "../utils/combo-test-helpers";
 import { FOLD_IDLE_MS } from "@/lib/comboIndicators";
+import { keyService } from "@/services/key.service";
 
 const state = vi.hoisted(() => ({
     mode: "small" as string,
@@ -49,7 +50,7 @@ const kb = demoKeyboard();
 function renderAll() {
     return render(
         <ComboPreviewProvider>
-            <Keyboard keyboard={kb as any} selectedLayer={0} setSelectedLayer={vi.fn()} instanceId="main" showComboReadout />
+            <Keyboard keyboard={kb as any} selectedLayer={0} setSelectedLayer={vi.fn()} instanceId="main" showKeyInspector />
             <ComboPreviewRow index={4} ariaLabel="Combo 4: D plus K gives Enter"><div>row 4</div></ComboPreviewRow>
             <button>elsewhere</button>
         </ComboPreviewProvider>,
@@ -59,7 +60,7 @@ function renderAll() {
 const keyEl = (code: string) => document.querySelector(`[data-keycode="${code}"]`) as HTMLElement;
 const foldOf = (code: string) => keyEl(code).querySelector("svg[data-combo-fold]") as SVGSVGElement | null;
 const order = (code: string) => foldOf(code)?.getAttribute("data-combo-order");
-const readout = () => document.querySelector("[data-combo-readout]");
+const readout = () => document.querySelector("[data-inspector-live] [data-combo-readout]");
 const tick = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
 
 beforeEach(() => {
@@ -155,22 +156,25 @@ describe("combo folded corner on the layout", () => {
         expect(new Set(onK).size).toBe(3);
     });
 
-    it("makes keys in a combo focusable buttons with a description", () => {
+    it("makes every layout key a button with a description, and the layout one Tab stop", () => {
         renderAll();
-        expect(keyEl("KC_J").getAttribute("tabindex")).toBe("0");
         expect(keyEl("KC_J").getAttribute("role")).toBe("button");
         expect(keyEl("KC_J").getAttribute("aria-label")).toBe("J: in 1 combo. Combo 0: J plus K gives Esc");
-        expect(keyEl("KC_Q").getAttribute("tabindex")).toBeNull();
+        expect(keyEl("KC_Q").getAttribute("role")).toBe("button");
+        expect(keyEl("KC_Q").getAttribute("aria-label")).toBe("Q");
+        const stops = [...document.querySelectorAll("[data-inspect-pos]")].filter(el => el.getAttribute("tabindex") === "0");
+        expect(stops).toHaveLength(1);
     });
 
-    it("draws nothing and adds no tab stops when the setting is off", () => {
+    it("draws no folds and lights nothing when the setting is off, but the inspector still shows", () => {
         state.mode = "off";
         renderAll();
         expect(document.querySelector("svg[data-combo-fold]")).toBeNull();
-        expect(keyEl("KC_J").getAttribute("tabindex")).toBeNull();
         fireEvent.mouseEnter(keyEl("KC_J"));
         tick(HOVER_DELAY_MS);
-        expect(readout()).toBeNull();
+        expect(readout()!.textContent).toContain("in 1 combo");
+        // No corners are drawn, so there are no swatches to match.
+        expect(readout()!.querySelector("[data-fold-glyph]")).toBeNull();
     });
 });
 
@@ -227,14 +231,18 @@ describe("combo preview", () => {
         expect(fireEvent.keyDown(window, { key: "Escape" })).toBe(true);
     });
 
-    it("clicking the pinned key again, a key in no combo, or empty space unpins", () => {
+    it("clicking the pinned key again or empty space unpins; clicking another key moves the pin", () => {
         renderAll();
         fireEvent.click(keyEl("KC_K"));
         fireEvent.click(keyEl("KC_K"));
+        act(() => { (document.activeElement as HTMLElement | null)?.blur(); });
+        tick(LEAVE_DELAY_MS);
         expect(readout()).toBeNull();
         fireEvent.click(keyEl("KC_K"));
         fireEvent.click(keyEl("KC_Q"));
         expect(keyEl("KC_K").getAttribute("aria-pressed")).toBe("false");
+        // A key in no combo pins too: the inspector describes every key.
+        expect(keyEl("KC_Q").getAttribute("aria-pressed")).toBe("true");
         fireEvent.click(keyEl("KC_K"));
         fireEvent.click(document.body);
         expect(keyEl("KC_K").getAttribute("aria-pressed")).toBe("false");
@@ -336,3 +344,122 @@ describe("readout", () => {
         expect(screen.getByLabelText("Combo 7: W plus E gives =")).toBeTruthy();
     });
 });
+
+describe("key inspector", () => {
+    const live = () => document.querySelector("[data-inspector-live] [data-key-inspector]") as HTMLElement | null;
+    const sections = () => [...live()!.querySelectorAll("[data-inspector-section]")].map(s => s.getAttribute("data-inspector-section"));
+
+    function renderKb(board: any, extra?: ReactNode) {
+        return render(
+            <ComboPreviewProvider>
+                <Keyboard keyboard={board} selectedLayer={0} setSelectedLayer={vi.fn()} instanceId="main" showKeyInspector />
+                {extra}
+            </ComboPreviewProvider>,
+        );
+    }
+
+    it("shows a key in no combo too: header and footer, no sections", () => {
+        renderAll();
+        fireEvent.mouseEnter(keyEl("KC_Q"));
+        tick(HOVER_DELAY_MS);
+        expect(live()!.querySelector("[data-inspector-title]")!.textContent).toBe("Q");
+        expect(sections()).toEqual([]);
+        expect(live()!.querySelector("[data-inspector-footer]")!.textContent).toMatch(/^Layer 0 · R\d+ C\d+ · Matrix \d+$/);
+    });
+
+    it("combo swatches use the same hue as the key's folds", async () => {
+        const { assignComboHues, HUES } = await import("@/utils/combo-hues");
+        renderAll();
+        fireEvent.mouseEnter(keyEl("KC_K"));
+        tick(HOVER_DELAY_MS);
+        const hues = assignComboHues(kb);
+        const lines = [...live()!.querySelectorAll("[data-readout-combo]")];
+        expect(lines.map(l => l.getAttribute("data-readout-combo"))).toEqual(["0", "1", "4"]);
+        for (const l of lines) {
+            const combo = Number(l.getAttribute("data-readout-combo"));
+            const glyph = Number(l.querySelector("[data-fold-glyph]")!.getAttribute("data-fold-glyph"));
+            expect(glyph).toBe(hues.get(combo));
+            const fill = foldOf("KC_K")!.querySelector(`[data-fold-piece="${combo}"]`)!.getAttribute("fill")!;
+            expect(fill).toContain(`--kb-combo-fold-${HUES[glyph].name}`);
+        }
+    });
+
+    it("lists tap dance actions for a tap dance key, only the slots that are set", () => {
+        const board = demoKeyboard() as any;
+        const qPos = board.keymap[0].indexOf(Number(keyServiceParse("KC_Q")));
+        board.keymap = board.keymap.map((l: number[]) => [...l]);
+        board.keymap[0][qPos] = Number(keyServiceParse("TD(0)"));
+        board.tapdances = [{ idx: 0, tap: "KC_A", hold: "KC_LSHIFT", doubletap: "KC_ESCAPE", taphold: "KC_NO", tapping_term: 180 }];
+        renderKb(board);
+        const el = document.querySelector('[data-keycode="TD(0)"]') as HTMLElement;
+        fireEvent.mouseEnter(el);
+        tick(HOVER_DELAY_MS);
+        expect(sections()).toEqual(["tapdance"]);
+        const t = live()!.textContent!;
+        expect(t).toContain("Tap Dance 0");
+        expect(t).toContain("On Tap");
+        expect(t).toContain("On Hold");
+        expect(t).toContain("Double Tap");
+        expect(t).not.toContain("Tap Then Hold");
+        expect(t).toContain("180 ms");
+    });
+
+    it("hovering caps a long combo list; pinning lists every combo", () => {
+        const board = demoKeyboard() as any;
+        const extra = ["KC_A", "KC_S", "KC_F", "KC_G"].map((k, i) => ({ cmbid: 12 + i, keys: ["KC_E", k, "KC_NO", "KC_NO"], output: "KC_TAB", options: 1 << 15 }));
+        board.combos = [...board.combos, ...extra];
+        renderKb(board);
+        fireEvent.mouseEnter(keyEl("KC_E"));
+        tick(HOVER_DELAY_MS);
+        expect(live()!.querySelectorAll("[data-readout-combo]")).toHaveLength(6);
+        expect(live()!.querySelector("[data-inspector-more-combos]")!.textContent).toBe("+3 More Combos");
+        fireEvent.click(keyEl("KC_E"));
+        expect(live()!.querySelectorAll("[data-readout-combo]")).toHaveLength(9);
+        expect(live()!.querySelector("[data-inspector-more-combos]")).toBeNull();
+    });
+
+    it("announces focus and pin to screen readers, never mouse hover", () => {
+        renderAll();
+        const summary = () => document.querySelector("[data-inspector-summary]")!.textContent;
+        fireEvent.mouseEnter(keyEl("KC_J"));
+        tick(HOVER_DELAY_MS);
+        expect(summary()).toBe("");
+        expect(live()!.getAttribute("aria-hidden")).toBe("true");
+        fireEvent.mouseLeave(keyEl("KC_J"));
+        tick(LEAVE_DELAY_MS);
+        act(() => keyEl("KC_J").focus());
+        expect(summary()).toContain("J");
+        expect(summary()).toContain("In 1 combo.");
+    });
+
+    it("arrow keys move between layout keys in matrix order", () => {
+        renderAll();
+        const keys = [...document.querySelectorAll<HTMLElement>("[data-inspect-pos]")]
+            .sort((a, b) => Number(a.dataset.inspectPos) - Number(b.dataset.inspectPos));
+        act(() => keys[0].focus());
+        fireEvent.keyDown(keys[0], { key: "ArrowRight" });
+        expect(document.activeElement).toBe(keys[1]);
+        expect(keys[1].getAttribute("tabindex")).toBe("0");
+        expect(keys[0].getAttribute("tabindex")).toBe("-1");
+        fireEvent.keyDown(keys[1], { key: "End" });
+        expect(document.activeElement).toBe(keys[keys.length - 1]);
+        fireEvent.keyDown(keys[keys.length - 1], { key: "Home" });
+        expect(document.activeElement).toBe(keys[0]);
+    });
+
+    it("one card: a secondary view drives the inspector under the primary view only", () => {
+        render(
+            <ComboPreviewProvider>
+                <Keyboard keyboard={kb as any} selectedLayer={0} setSelectedLayer={vi.fn()} instanceId="main" showKeyInspector />
+                <Keyboard keyboard={kb as any} selectedLayer={0} setSelectedLayer={vi.fn()} instanceId="second" />
+            </ComboPreviewProvider>,
+        );
+        const second = document.querySelector('[data-keyboard-instance="second"] [data-keycode="KC_Q"]') as HTMLElement;
+        fireEvent.mouseEnter(second);
+        tick(HOVER_DELAY_MS);
+        expect(document.querySelectorAll("[data-key-inspector]")).toHaveLength(1);
+        expect(document.querySelector('[data-keyboard-instance="main"] [data-key-inspector]')).not.toBeNull();
+    });
+});
+
+const keyServiceParse = (s: string) => keyService.parse(s);
