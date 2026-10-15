@@ -9,6 +9,8 @@ import { DragItem } from "@/contexts/DragContext";
 import { cn } from "@/lib/utils";
 
 import OverrideModifierSelector from "./OverrideModifierSelector";
+import { prepareOverrideForEdit, setOverrideTriggerMods } from "@/utils/key-override";
+import type { KeyboardInfo, KeyOverrideEntry } from "@/types/keyboard.types";
 
 const TABS = ["Trigger", "Negative", "Suspended"] as const;
 type TabType = typeof TABS[number];
@@ -62,12 +64,21 @@ const OverrideEditor: FC = () => {
         }
     };
 
+    // Every edit goes through here, so a blank slot picks up the new
+    // override defaults (on, QMK default activations, all layers) on its
+    // first change, and opening an empty override changes nothing.
+    const cloneForEdit = (): [KeyboardInfo, KeyOverrideEntry] => {
+        const updatedKeyboard = structuredClone(keyboard!);
+        const ovr = updatedKeyboard.key_overrides![overrideIndex];
+        prepareOverrideForEdit(ovr, updatedKeyboard.layers);
+        return [updatedKeyboard, ovr];
+    };
+
     const updateMask = async (newMask: number) => {
         if (!keyboard || !override) return;
-        const updatedKeyboard = structuredClone(keyboard);
-        const ovr = updatedKeyboard.key_overrides![overrideIndex];
+        const [updatedKeyboard, ovr] = cloneForEdit();
         switch (activeTab) {
-            case "Trigger": ovr.trigger_mods = newMask; break;
+            case "Trigger": setOverrideTriggerMods(ovr, newMask); break;
             case "Negative": ovr.negative_mod_mask = newMask; break;
             case "Suspended": ovr.suppressed_mods = newMask; break;
         }
@@ -77,22 +88,18 @@ const OverrideEditor: FC = () => {
 
     const updateOption = async (bit: number, checked: boolean) => {
         if (!keyboard || !override) return;
-        const updatedKeyboard = structuredClone(keyboard);
-        let options = updatedKeyboard.key_overrides![overrideIndex].options;
-        if (checked) options |= bit;
-        else options &= ~bit;
-        updatedKeyboard.key_overrides![overrideIndex].options = options;
+        const [updatedKeyboard, ovr] = cloneForEdit();
+        if (checked) ovr.options |= bit;
+        else ovr.options &= ~bit;
         setKeyboard(updatedKeyboard);
         await persistBinding(updatedKeyboard, "override", overrideIndex);
     };
 
     const updateLayer = async (layer: number, active: boolean) => {
         if (!keyboard || !override) return;
-        const updatedKeyboard = structuredClone(keyboard);
-        let layers = updatedKeyboard.key_overrides![overrideIndex].layers;
-        if (active) layers |= (1 << layer);
-        else layers &= ~(1 << layer);
-        updatedKeyboard.key_overrides![overrideIndex].layers = layers;
+        const [updatedKeyboard, ovr] = cloneForEdit();
+        if (active) ovr.layers = (ovr.layers | (1 << layer)) >>> 0;
+        else ovr.layers = (ovr.layers & ~(1 << layer)) >>> 0;
         setKeyboard(updatedKeyboard);
         await persistBinding(updatedKeyboard, "override", overrideIndex);
     };
@@ -114,8 +121,7 @@ const OverrideEditor: FC = () => {
             if (sourceSlot === targetSlot) return;
 
             if (!keyboard || !override) return;
-            const updatedKeyboard = structuredClone(keyboard);
-            const ovr = updatedKeyboard.key_overrides![overrideIndex];
+            const [updatedKeyboard, ovr] = cloneForEdit();
 
             const sourceVal = sourceSlot === "trigger" ? ovr.trigger : ovr.replacement;
             const targetVal = targetSlot === "trigger" ? ovr.trigger : ovr.replacement;
@@ -135,8 +141,7 @@ const OverrideEditor: FC = () => {
 
     const updateOverrideAssignment = async (slot: "trigger" | "replacement", keycode: string) => {
         if (!keyboard || !override) return;
-        const updatedKeyboard = structuredClone(keyboard);
-        const ovr = updatedKeyboard.key_overrides![overrideIndex];
+        const [updatedKeyboard, ovr] = cloneForEdit();
         if (slot === "trigger") ovr.trigger = keycode;
         else ovr.replacement = keycode;
         setKeyboard(updatedKeyboard);
