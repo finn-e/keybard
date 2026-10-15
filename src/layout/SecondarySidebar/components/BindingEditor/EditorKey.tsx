@@ -1,4 +1,4 @@
-import { FC, useState } from "react";
+import { FC, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Key } from "@/components/Key";
 import { useKeyboard } from "@/contexts/KeyboardContext";
@@ -23,6 +23,12 @@ interface EditorKeyProps {
     wrapperClassName?: string; // Class for the wrapper div
     showTrash?: boolean; // Whether the trash icon is enabled (defaults to true if onClear is provided)
     onDrop?: (item: DragItem) => void;
+    /**
+     * Dropping a filled slot outside any drop target blanks it through
+     * onClear, like a layout key dragged into blank space. Defaults to true;
+     * turn it off where onClear removes more than the key (macro actions).
+     */
+    clearOnDragOff?: boolean;
     // Context for swapping
     editorType?: string;
     editorId?: number | string;
@@ -43,6 +49,7 @@ const EditorKey: FC<EditorKeyProps> = ({
     wrapperClassName = "flex flex-col items-center gap-1 relative",
     showTrash = true,
     onDrop,
+    clearOnDragOff = true,
     editorType,
     editorId,
     editorSlot
@@ -51,6 +58,9 @@ const EditorKey: FC<EditorKeyProps> = ({
     const { selectedLayer } = useLayer();
     const { isDragging, draggedItem, markDropConsumed } = useDrag();
     const [isDragHover, setIsDragHover] = useState(false);
+    // Read onClear at drop time, not at drag start, so it sees current state.
+    const onClearRef = useRef(onClear);
+    onClearRef.current = onClear;
 
     const layerColorName = keyboard?.cosmetic?.layer_colors?.[selectedLayer] || "primary";
     const hoverBorderColor = hoverBorderClasses[layerColorName] || hoverBorderClasses["primary"];
@@ -59,6 +69,9 @@ const EditorKey: FC<EditorKeyProps> = ({
     const keyContents = getKeyContents(keyboard!, keyService.canonical(keycode));
     const hasContent = (keyContents?.top && keyContents.top !== "KC_NO") ||
         (keyContents?.str && keyContents.str !== "KC_NO" && keyContents.str !== "");
+    const clearSource = hasContent && clearOnDragOff && onClear
+        ? () => onClearRef.current?.()
+        : undefined;
 
     // Determine visual style
     let keyColor: string | undefined;
@@ -150,7 +163,8 @@ const EditorKey: FC<EditorKeyProps> = ({
                     dragItemData={{
                         editorType,
                         editorId,
-                        editorSlot
+                        editorSlot,
+                        clearSource
                     }}
                 />
 
