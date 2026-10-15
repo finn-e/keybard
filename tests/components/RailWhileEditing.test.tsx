@@ -86,4 +86,28 @@ describe('the rail while a binding editor is open', () => {
         expect(panels.activePanel).toBe('pointing');
         expect(panels.pickerMode).toBe('keyboard');
     });
+
+    it('lifts the usable categories above its scrim and makes the rest inert', () => {
+        const { container } = renderRail();
+        expect(container.querySelector('[data-logo-mark="brand"]')).not.toBeNull();
+        openEditor('macros', 0);
+        const item = (name: string) => rail(name).closest('li')!;
+        for (const name of ['Standard Keys', 'Pointing Devices', 'Special Keys', 'Layer Keys', 'Mouse Keys', 'Tap Dance Keys']) {
+            expect(item(name)).toHaveAttribute('data-spotlight', 'lift');
+            expect(item(name)).not.toHaveAttribute('inert');
+        }
+        for (const name of ['Macro Keys', 'Combos', 'Overrides', 'Layouts', 'Settings', 'About']) {
+            expect(item(name)).toHaveAttribute('data-spotlight', 'cover');
+            expect(item(name)).toHaveAttribute('inert');
+        }
+        expect(container.querySelector('[data-binding-scrim]')).not.toBeNull();
+        // The logo becomes the viewfinder mark, a focus cue rather than a control.
+        expect(container.querySelector('[data-logo-mark="viewfinder"]')).not.toBeNull();
+        expect(container.querySelector('[data-logo-mark="brand"]')).toBeNull();
+        expect(screen.getByRole('button', { name: /navigation/ }).closest('li')).toHaveAttribute('inert');
+        act(() => panels.handleCloseEditor());
+        expect(container.querySelector('[data-logo-mark="brand"]')).not.toBeNull();
+        expect(container.querySelector('[data-binding-scrim]')).toBeNull();
+        expect(item('Combos')).not.toHaveAttribute('inert');
+    });
 });

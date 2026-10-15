@@ -43,15 +43,17 @@ interface AlternativeHeaderProps {
 }
 
 const AlternativeHeader = ({ onBack, menus }: AlternativeHeaderProps) => {
-    const { activePanel, handleCloseEditor } = usePanels();
+    const { activePanel, handleCloseEditor, itemToEdit } = usePanels();
+    const editing = isBindingEditorOpen(activePanel, itemToEdit);
 
     const title = `Add Keys to ${getPanelTitle(activePanel, menus)}`;
+    const done = () => onBack ? onBack() : handleCloseEditor();
 
     return (
-        <div className="flex items-center justify-start gap-4">
+        <div className="flex items-center justify-start gap-4" data-binding-editor-header={editing ? "" : undefined}>
             <button
                 type="button"
-                onClick={() => onBack ? onBack() : handleCloseEditor()}
+                onClick={done}
                 className="bg-transparent hover:bg-muted/60 rounded-full p-2 cursor-pointer transition-colors"
                 aria-label="Go back"
             >
@@ -62,6 +64,16 @@ const AlternativeHeader = ({ onBack, menus }: AlternativeHeaderProps) => {
                     {title}
                 </h2>
             </div>
+            {/* The editor's explicit way out, named in the spotlight hint. */}
+            {editing && (
+                <button
+                    type="button"
+                    onClick={done}
+                    className="ml-auto shrink-0 rounded-full bg-kb-active text-kb-active-fg px-4 py-1.5 text-sm font-semibold cursor-pointer hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2"
+                >
+                    Done
+                </button>
+            )}
         </div>
     );
 };

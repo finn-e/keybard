@@ -15,6 +15,8 @@ import MacrosIcon from "@/components/icons/MacrosIcon";
 import OverridesIcon from "@/components/icons/Overrides";
 import TapdanceIcon from "@/components/icons/Tapdance";
 import Logo from "@/components/Logo";
+import ViewfinderMark from "@/components/icons/ViewfinderMark";
+import { SpotlightScrim } from "@/layout/BindingSpotlight";
 import {
     Sidebar,
     SidebarContent,
@@ -114,6 +116,11 @@ interface SidebarNavItemProps {
     alternativeHeader?: boolean;
     isCollapsed: boolean;
     onClick: (item: SidebarItem) => void;
+    /**
+     * While a binding editor is open: "lift" keeps a usable picker category
+     * above the rail's scrim; "cover" leaves the item under it, out of reach.
+     */
+    spotlight?: "lift" | "cover";
 }
 
 const SidebarNavItem = ({
@@ -123,8 +130,13 @@ const SidebarNavItem = ({
     alternativeHeader,
     isCollapsed,
     onClick,
+    spotlight,
 }: SidebarNavItemProps) => (
-    <SidebarMenuItem className="cursor-pointer">
+    <SidebarMenuItem
+        className={cn("cursor-pointer", spotlight === "lift" && "relative z-[6] rounded-md bg-kb-surface")}
+        inert={spotlight === "cover"}
+        data-spotlight={spotlight}
+    >
         <SidebarMenuButton
             asChild
             isActive={isActive}
@@ -185,6 +197,8 @@ const AppSidebar = () => {
     // picker and nothing on the rail leaves the editor.
     const editing = isBindingEditorOpen(activePanel, itemToEdit);
     const shownPickerMode = editing ? effectivePickerMode(pickerMode ?? "keyboard", activePanel) : null;
+    const railSpotlight = (url: string): "lift" | "cover" | undefined =>
+        !editing ? undefined : pickerCategoryForRail(url, activePanel) ? "lift" : "cover";
 
     const { keyboard } = useKeyboard();
 
@@ -292,7 +306,9 @@ const AppSidebar = () => {
     }
 
     const sidebarClasses = cn(
-        "z-11 fixed transition-[box-shadow,border-color] duration-300 ease-out border border-sidebar-border shadow-lg ml-2 h-[98vh] mt-[1vh] transition-all",
+        // Above the page scrim while editing; its own scrim covers what the editor cannot use.
+        editing ? "z-[47]" : "z-11",
+        "fixed transition-[box-shadow,border-color] duration-300 ease-out border border-sidebar-border shadow-lg ml-2 h-[98vh] mt-[1vh] transition-all",
         "rounded-3xl select-none"
     );
 
@@ -304,10 +320,12 @@ const AppSidebar = () => {
 
 
             <Sidebar rounded name="primary-nav" defaultOpen={false} collapsible="icon" hideGap className={sidebarClasses}>
+                {editing && <SpotlightScrim className="absolute inset-0 z-[5] rounded-3xl" />}
                 <SidebarContent className={cn("py-4 overflow-y-auto overflow-x-hidden flex flex-col", isCollapsed && "scrollbar-none")}>
                     {/* Header section - Logo, Connect, Import/Export */}
                     <SidebarMenu>
-                        <SidebarMenuItem>
+                        {/* While editing, the logo stays lit as a focus cue but is not a control. */}
+                        <SidebarMenuItem className={cn(editing && "relative z-[6]")} inert={editing}>
                             <SidebarMenuButton
                                 asChild
                                 size="nav"
@@ -322,7 +340,9 @@ const AppSidebar = () => {
                                     onClick={() => toggleSidebar()}
                                 >
                                     <div className={cn(ICON_GUTTER_CLASSES, "h-8")}>
-                                        <Logo className="!w-6 !h-6 !min-w-6 !min-h-6" />
+                                        {editing
+                                            ? <ViewfinderMark className="!w-6 !h-6 !min-w-6 !min-h-6" data-logo-mark="viewfinder" />
+                                            : <Logo className="!w-6 !h-6 !min-w-6 !min-h-6" data-logo-mark="brand" />}
                                     </div>
                                     <KeybardLogo className={cn("shrink-0 !h-[32px] !w-auto", isCollapsed && "hidden")} />
                                 </button>
@@ -345,6 +365,7 @@ const AppSidebar = () => {
                                     alternativeHeader={alternativeHeader && !editing}
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
+                                    spotlight={railSpotlight(item.url)}
                                 />
                             ))}
 
@@ -358,6 +379,7 @@ const AppSidebar = () => {
                                     alternativeHeader={alternativeHeader && !editing}
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
+                                    spotlight={railSpotlight(item.url)}
                                 />
                             ))}
 
@@ -374,6 +396,7 @@ const AppSidebar = () => {
                                     alternativeHeader={alternativeHeader && !editing}
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
+                                    spotlight={railSpotlight(item.url)}
                                 />
                             ))}
 
@@ -388,6 +411,7 @@ const AppSidebar = () => {
                                     alternativeHeader={alternativeHeader && !editing}
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
+                                    spotlight={railSpotlight(item.url)}
                                 />
                             ))}
 
@@ -402,6 +426,7 @@ const AppSidebar = () => {
                                     alternativeHeader={alternativeHeader && !editing}
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
+                                    spotlight={railSpotlight(item.url)}
                                 />
                             ))}
                         </SidebarMenu>
@@ -418,6 +443,7 @@ const AppSidebar = () => {
                                     isActive={markedPanel === item.url}
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
+                                    spotlight={railSpotlight(item.url)}
                                 />
                             ))}
                         </SidebarMenu>

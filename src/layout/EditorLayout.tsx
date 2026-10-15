@@ -42,6 +42,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { MatrixTester } from "@/components/MatrixTester";
 
 import { EditorControls } from "./EditorControls";
+import BindingSpotlight, { SpotlightScrim, useBindingSpotlight } from "./BindingSpotlight";
 import { getBackdropLayerFromElements } from "@/utils/layer-drop-target";
 import { svalService } from "@/services/sval.service";
 import {
@@ -1089,6 +1090,10 @@ const EditorLayoutInner = () => {
 
     const primarySidebar = useSidebar("primary-nav", { defaultOpen: false });
     const { isMobile, state, activePanel, itemToEdit } = usePanels();
+    // While a binding editor is open, only the keyboard canvas (with its layer
+    // tabs and keys), the editor, the picker and the rail's picker categories
+    // stay usable; the rest of this column sits under the spotlight scrim.
+    const spotlight = useBindingSpotlight();
 
     // Editor overlay state for bottom bar mode
 
@@ -1210,11 +1215,13 @@ const EditorLayoutInner = () => {
             marginLeft: contentOffset,
             transition: "margin-left 320ms cubic-bezier(0.22, 1, 0.36, 1), padding-bottom 300ms ease-in-out",
             willChange: "margin-left, padding-bottom",
+            // Above the page scrim, so this column dims once, under its own scrim.
+            zIndex: spotlight ? 46 : undefined,
             // Add bottom padding when bottom panel is shown, plus whatever the
             // combo editor reserves under the keyboard.
             paddingBottom: comboEditorReserve > 0 ? `calc(${panelCss} + ${comboEditorReserve}px)` : panelPadding,
         };
-    }, [contentOffset, showBottomPanel, bottomPanelHeight, comboEditorReserve]);
+    }, [contentOffset, showBottomPanel, bottomPanelHeight, comboEditorReserve, spotlight]);
 
     return (
         <div className={cn("flex flex-1 h-dvh w-full min-w-0 overflow-hidden p-0", showDetailsSidebar && "bg-kb-surface")}>
@@ -1223,6 +1230,7 @@ const EditorLayoutInner = () => {
                 <button className="ml-3 underline" onClick={() => { setLayerPasteError(null); clearClipboardError(); }}>Dismiss</button>
             </div>}
             <AppSidebar />
+            <BindingSpotlight />
             <div className="contents">
             {/* Keep the panel mounted when its placement changes. */}
             <SecondarySidebar
@@ -1243,6 +1251,8 @@ const EditorLayoutInner = () => {
                 style={contentStyle}
                 onClick={() => clearSelection()}
             >
+                {spotlight && <SpotlightScrim className="absolute inset-0 z-[40]" />}
+                <div className="contents" inert={spotlight}>
                 <LayerSelector
                     selectedLayer={selectedLayer}
                     setSelectedLayer={setSelectedLayer}
@@ -1257,12 +1267,16 @@ const EditorLayoutInner = () => {
                     isAllTransparencyActive={isAllTransparencyActive}
                     onToggleAllTransparency={handleToggleAllTransparency}
                 />
+                </div>
 
                 <div
                     className={cn(
                         "keyboard-canvas-scroll flex-1 min-h-0 min-w-0 overflow-auto overscroll-contain flex flex-col items-start max-w-full relative pb-16",
-                        isMultiLayersActive && !isScene3D && "pt-11"
+                        isMultiLayersActive && !isScene3D && "pt-11",
+                        // Lifted above the column's scrim, with its own background so it reads as lit.
+                        spotlight && "z-[41] bg-kb-gray"
                     )}
+                    data-spotlight-lift={spotlight ? "" : undefined}
                     ref={viewsScrollRef}
                     role="region"
                     aria-label="Keyboard canvas"
@@ -1423,6 +1437,7 @@ const EditorLayoutInner = () => {
                                         className="p-2 rounded-full transition-colors text-gray-500 dark:text-neutral-400 hover:text-gray-800 dark:hover:text-neutral-100 hover:bg-gray-200 dark:hover:bg-neutral-700"
                                         aria-label="Add keyboard layer view"
                                         data-inspector-beside=""
+                                        data-spotlight-cover=""
                                     >
                                         <LayersPlusIcon className="h-5 w-5" />
                                     </button>
@@ -1478,7 +1493,7 @@ const EditorLayoutInner = () => {
                     !useBottomLayout && (
                         <>
                             <div className="absolute bottom-4 right-2 max-w-[calc(100%-4rem)] flex flex-col items-end gap-1 pointer-events-none" style={comboEditorReserve > 0 ? { bottom: `calc(1rem + ${comboEditorReserve}px)` } : undefined}>
-                                <div className="pointer-events-auto" data-combo-editor-avoid data-inspector-avoid>
+                                <div className="pointer-events-auto" data-combo-editor-avoid data-inspector-avoid inert={spotlight}>
                                     <EditorControls />
                                 </div>
                                 {import.meta.env.DEV && (

@@ -18,7 +18,7 @@ export const isBindingEditorPanel = (panel: string | null | undefined): panel is
 
 /** True while a binding editor (and its picker) is open. */
 export const isBindingEditorOpen = (activePanel: string | null | undefined, itemToEdit: number | null): boolean =>
-    itemToEdit !== null && isBindingEditorPanel(activePanel);
+    typeof itemToEdit === "number" && isBindingEditorPanel(activePanel);
 
 /** Picker categories in rail order. Each one is also a rail item with the same id. */
 export const PICKER_CATEGORIES: readonly { id: PickerMode; title: string }[] = [
@@ -52,4 +52,32 @@ export function pickerCategoryForRail(url: string, editor: string | null | undef
 export function effectivePickerMode(mode: PickerMode, editor: string | null | undefined): PickerMode {
     if (mode === "qmk" || mode === "oneshot") return mode;
     return (usablePickerCategories(editor) as string[]).includes(mode) ? mode : "keyboard";
+}
+
+/** The open editor's name, as its header shows it ("Combo 3", a tap dance's own name). */
+export function bindingEditorTitle(
+    editor: string | null | undefined,
+    index: number | null,
+    cosmetic?: { macros?: Record<string, string>; tapdances?: Record<string, string> },
+): string {
+    if (index === null || !editor) return "the editor";
+    switch (editor) {
+        case "macros": return cosmetic?.macros?.[String(index)] || `Macro Key ${index}`;
+        case "tapdances": return cosmetic?.tapdances?.[String(index)] || `Tap Dance Key ${index}`;
+        case "combos": return `Combo ${index}`;
+        case "overrides": return `Override ${index}`;
+        case "altrepeat": return `Alt-Repeat Key ${index}`;
+        case "leaders": return `Leader Sequence ${index}`;
+        default: return "the editor";
+    }
+}
+
+/** The short hint shown when something under the spotlight scrim is clicked. */
+export const spotlightHint = (title: string) => `Finish ${title} to use this. Press Done.`;
+
+export const SPOTLIGHT_NUDGE_EVENT = "keybard:binding-spotlight-nudge";
+
+/** Ask the open editor to say how to finish: pulses its header and shows the hint near (x, y). */
+export function nudgeBindingEditor(at?: { x: number; y: number }) {
+    window.dispatchEvent(new CustomEvent(SPOTLIGHT_NUDGE_EVENT, { detail: at ?? null }));
 }

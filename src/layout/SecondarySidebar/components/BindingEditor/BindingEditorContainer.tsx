@@ -5,6 +5,7 @@ import { FC, useCallback, useState, useEffect, useRef, KeyboardEvent } from "rea
 import OnOffToggle from "@/components/ui/OnOffToggle";
 import { usePanels } from "@/contexts/PanelsContext";
 import { cn } from "@/lib/utils";
+import { bindingEditorTitle } from "@/lib/bindingSpotlight";
 import { X, GripHorizontal, GripVertical, Trash2 } from "lucide-react";
 import {
     Dialog,
@@ -251,21 +252,8 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compac
 
     const getEditorTitle = () => {
         if (!keyboard || itemToEdit === null || !bindingTypeToEdit) return "Data";
-
-        if (bindingTypeToEdit === "macros") {
-            return keyboard.cosmetic?.macros?.[itemToEdit.toString()] || `Macro Key ${itemToEdit}`;
-        }
-        if (bindingTypeToEdit === "tapdances") {
-            return keyboard.cosmetic?.tapdances?.[itemToEdit.toString()] || `Tap Dance Key ${itemToEdit}`;
-        }
-
-        switch (bindingTypeToEdit) {
-            case "combos": return `Combo ${itemToEdit}`;
-            case "overrides": return `Override ${itemToEdit}`;
-            case "altrepeat": return `Alt-Repeat Key ${itemToEdit}`;
-            case "leaders": return `Leader Sequence ${itemToEdit}`;
-            default: return (labels as any)[bindingTypeToEdit] || "Data";
-        }
+        if (!(bindingTypeToEdit in labels)) return "Data";
+        return bindingEditorTitle(bindingTypeToEdit, itemToEdit, keyboard.cosmetic);
     };
 
     const getHasContent = () => {
@@ -495,7 +483,7 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compac
     // one row that wraps when narrow. Placement is owned by the sidebar.
     if (compact && bindingTypeToEdit === "combos") {
         const title = (
-            <div className="flex flex-row items-center gap-3 shrink-0">
+            <div className="flex flex-row items-center gap-3 shrink-0" data-binding-editor-header="">
                 {movable && (
                     <span data-float-drag-handle aria-hidden="true" title="Move" className="cursor-move touch-none text-kb-gray-border dark:text-neutral-400 hover:text-kb-ink">
                         <GripVertical className="h-4 w-4" />
@@ -565,7 +553,7 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compac
                     <GripHorizontal className="h-4 w-4 text-gray-400 dark:text-neutral-400 group-hover:text-gray-600 dark:group-hover:text-neutral-300" />
                 </div>}
                 <div className={inline ? "p-3 pt-0" : "p-5 pt-0"}>
-                    <div className={cn(
+                    <div data-binding-editor-header="" className={cn(
                         "flex flex-row w-full items-start justify-between",
                         inline ? "pr-3 pt-2 pb-2 pl-4" : "pt-2 pb-[6px] pl-[84px]"
                     )}>
