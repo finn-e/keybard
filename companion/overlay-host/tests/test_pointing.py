@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 
 from keybard_host.device.protocol import (READ_COMMANDS, POINTING_MOTION, POINTING_MOTION_FLAG2, SvalReader,
                                           parse_pointing_motion, pointing_kinds)
-from keybard_host.host_pointing import demo_motion, factors, multiplier_text
+from keybard_host.host_pointing import demo_motion
 from keybard_host.server import REMOTE_ORIGINS, make_server
 from keybard_host.state import DEFAULTS, HostState, serialize_profile, validate_config, validate_pointing_look
 from keybard_host.device.model import demo_profile
@@ -85,12 +85,15 @@ class MotionTests(unittest.TestCase):
 
 class SettingsTests(unittest.TestCase):
     def test_defaults(self):
-        self.assertEqual((DEFAULTS['showPointing'], DEFAULTS['pointingPills'], DEFAULTS['cursorMultiplier']), (False, True, False))
+        self.assertEqual((DEFAULTS['showPointing'], DEFAULTS['pointingPills']), (False, True))
+        self.assertNotIn('cursorMultiplier', DEFAULTS)
 
     def test_validation(self):
         self.assertTrue(validate_config({'showPointing': True})['showPointing'])
-        for bad in ({'showPointing': 1}, {'pointingPills': 'yes'}, {'cursorMultiplier': None}):
+        for bad in ({'showPointing': 1}, {'pointingPills': 'yes'}):
             with self.assertRaises(ValueError): validate_config(bad)
+        # A test build's saved cursorMultiplier is dropped, keeping the rest of the settings.
+        self.assertEqual(validate_config({'cursorMultiplier': True, 'showPointing': True}), dict(DEFAULTS, showPointing=True))
 
     def test_look(self):
         self.assertEqual(validate_pointing_look({'op': 'pointingLook', 'uid': '123', 'left': 'pearl_blue', 'gloss': 0.25, 'sparkle': 1}),
@@ -109,13 +112,6 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(again.snapshot()['pointingLook'], {'right': 'red', 'gloss': 0.5})
             again.board = {'uid': '7'}
             self.assertEqual(again.snapshot()['pointingLook'], {})
-
-    def test_multiplier(self):
-        self.assertEqual(factors([[[0x7E40 + 13]]]), (3, 2))
-        self.assertEqual(factors([[[0x7E40 + 12, 0x7E40 + 26]]]), (2, 5))
-        self.assertEqual(multiplier_text(True, False), '×0.33')
-        self.assertEqual(multiplier_text(True, True, 2, 3), '×0.5 ×3')
-        self.assertEqual(multiplier_text(False, False), '')
 
     def test_demo_motion_shape(self):
         m = demo_motion(3.0, .016)
@@ -148,7 +144,7 @@ class LookOpTests(unittest.TestCase):
         self.assertEqual(error.exception.code, 400)
 
     def test_config_with_pointing_settings(self):
-        config = dict(DEFAULTS, showPointing=True, cursorMultiplier=True)
+        config = dict(DEFAULTS, showPointing=True)
         with self.post({'config': config, 'revision': 0}, path='/api/host/config') as r: self.assertEqual(json.load(r)['revision'], 1)
         self.assertTrue(self.state.config['showPointing'])
 

@@ -22,9 +22,10 @@ EFFECTS = {'Off': dict(effect='Off'), 'Flash': dict(effect='Quick flash', durati
 DEFAULTS = dict(layoutId='us', appearance=dict(PRESETS['Outline only']),
     effect='Short fade', duration=150, scale=100, hands='Both', highlightPressed=True, manualDefault=1,
     capitalAlphas=False, adaptiveContrast=False,
-    # Pointing devices in the overlay: drawn devices off, the sniper and boost pills on,
-    # the multiplier beside the mouse cursor off.
-    showPointing=False, pointingPills=True, cursorMultiplier=False)
+    # Pointing devices in the overlay: drawn devices off, the sniper and boost pills on.
+    showPointing=False, pointingPills=True)
+# Settings that earlier test builds saved and this Host no longer has; dropped when read.
+RETIRED = frozenset({'cursorMultiplier'})
 
 # The balls Keybard can draw (Keybard's src/components/pointing-viz/webgl/materials.ts).
 BALLS = frozenset({'silver', 'red', 'black', 'pearl_blue', 'pearl_purple', 'pearl_white', 'pearl_black'})
@@ -64,6 +65,7 @@ PREFERENCES_VERSION = len(PREFERENCES_MIGRATIONS)
 
 
 def validate_config(value):
+    if isinstance(value, dict): value = {k: v for k, v in value.items() if k not in RETIRED}
     if not isinstance(value, dict) or set(value) - set(DEFAULTS):
         raise ValueError('Unknown host configuration fields')
     result = copy.deepcopy(DEFAULTS)
@@ -86,7 +88,7 @@ def validate_config(value):
         elif key == 'layoutId':
             if not isinstance(val, str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,32}', val): raise ValueError('Invalid keyboard language')
             result[key] = val
-        elif key in ('highlightPressed', 'capitalAlphas', 'adaptiveContrast', 'showPointing', 'pointingPills', 'cursorMultiplier'):
+        elif key in ('highlightPressed', 'capitalAlphas', 'adaptiveContrast', 'showPointing', 'pointingPills'):
             if type(val) is not bool: raise ValueError('Invalid on/off preference')
             result[key] = val
         elif val not in dict(effect=('Off', 'Quick flash', 'Short fade'), hands=('Both', 'Left', 'Right'))[key]:

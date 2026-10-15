@@ -30,7 +30,7 @@ export default function HostPointingDemo() {
     useEffect(() => (demo?.motion ? startDemoFeed(demo, feed) : undefined), [demo, feed]);
     const params = new URLSearchParams(window.location.search);
     const flag = (k: string, dflt: boolean) => (params.has(k) ? !/^(0|false|off|no)$/i.test(params.get(k) ?? '') : dflt);
-    const config = { showPointing: flag('showDevices', true), pointingPills: flag('pills', true), cursorMultiplier: false };
+    const config = { showPointing: flag('showDevices', true), pointingPills: flag('pills', true) };
     const keys = useMemo(() => {
         if (!board) return [];
         try { return surfaceKeys(board, 1, 1, 'Both'); } catch { return []; }

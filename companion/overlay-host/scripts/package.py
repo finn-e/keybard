@@ -3,6 +3,7 @@ from pathlib import Path
 import hashlib
 import json
 import os
+import re
 import subprocess
 import zipfile
 
@@ -19,8 +20,18 @@ def build_json():
         except (OSError, subprocess.CalledProcessError): commit = None
     return json.dumps({'version': os.environ.get('KEYBARD_HOST_VERSION') or 'dev', 'keybardCommit': commit[:7] if commit else None})
 
+def base_path_problem(index_html):
+    """Why a web build can't be served from the Host's root, or None. Git Bash rewrites
+    VITE_BASE_PATH=/ into its own folder (/Program Files/Git/), which leaves the overlay blank."""
+    scripts = re.findall(r'<script[^>]*\ssrc="([^"]+)"', index_html)
+    if not scripts or any(not s.startswith('/assets/') for s in scripts):
+        return f'index.html loads {scripts}, not /assets/: build with VITE_BASE_PATH=/ (in Git Bash, also MSYS_NO_PATHCONV=1)'
+    return None
+
 def package():
     if not (DIST / 'index.html').exists(): raise SystemExit('Build Keybard with VITE_BASE_PATH=/ first')
+    problem = base_path_problem((DIST / 'index.html').read_text(encoding='utf-8'))
+    if problem: raise SystemExit(problem)
     if not PARANOID.exists(): raise SystemExit('Build Keybard Paranoid first (npm run build:paranoid)')
     web_files = [p for p in DIST.rglob('*') if p.is_file() and p.suffix != '.zip']
     destination = DIST / 'KeybardHost-Windows.zip'

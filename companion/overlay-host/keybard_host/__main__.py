@@ -31,7 +31,7 @@ from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings, QWebEngi
 from .device.protocol import candidates, hid_backend
 from .device.worker import DeviceWorker
 from .state import DEFAULTS, EFFECTS, PRESETS, HostState, serialize_profile
-from .host_pointing import CursorBadge, demo_motion, factors, multiplier_text
+from .host_pointing import demo_motion
 from .colors import ColorsPanel
 from .modifiers import ModifierReader
 from .server import REMOTE_ORIGINS, load_paranoid_page, make_server
@@ -294,11 +294,9 @@ class Host(QObject):
         self.devices = {}
         self.selected = None
         self.bridge = Bridge()
-        # Pointing: the keymap's sniper and boost factors, motion waiting to go to the overlay, the cursor badge.
-        self.pointing_factors = (3, 2)
+        # Pointing: motion waiting to go to the overlay.
         self.pointing_pending = None
         self.pointing_sent = 0.0
-        self.cursor_badge = None
         self.demo_pointing = None
         self.bridge.command.connect(self.command)
         # Paranoid mode trusts no website, only the Keybard this host serves itself.
@@ -451,7 +449,7 @@ class Host(QObject):
         self.hands_menu, self.hands_actions = choices('Hands', ('Both', 'Left', 'Right'), lambda n: self.set_config(hands=n))
         self.held_action = QAction('Highlight held keys', self, checkable=True)
         self.held_action.triggered.connect(lambda value: self.set_config(highlightPressed=value))
-        # Pointing devices: drawn in the overlay (off), sniper and boost pills (on), the multiplier at the cursor (off).
+        # Pointing devices: drawn in the overlay (off), sniper and boost pills (on).
         self.pointing_menu = QMenu('Pointing devices')
         self.pointing_show_action = self.pointing_menu.addAction('Show pointing devices'); self.pointing_show_action.setCheckable(True)
         self.pointing_show_action.setToolTip('Draw trackballs and touchpads in the overlay')
@@ -459,9 +457,6 @@ class Host(QObject):
         self.pointing_pills_action = self.pointing_menu.addAction('Show sniper and boost'); self.pointing_pills_action.setCheckable(True)
         self.pointing_pills_action.setToolTip('The sniper and boost pills, even with the devices hidden')
         self.pointing_pills_action.triggered.connect(lambda value: self.set_config(pointingPills=value))
-        self.cursor_multiplier_action = self.pointing_menu.addAction('Multiplier at the cursor'); self.cursor_multiplier_action.setCheckable(True)
-        self.cursor_multiplier_action.setToolTip('The multiplier beside the mouse cursor while sniper or boost is on')
-        self.cursor_multiplier_action.triggered.connect(lambda value: self.set_config(cursorMultiplier=value))
 
     def add_settings(self, menu):
         menu.addMenu(self.board_menu)
@@ -519,7 +514,7 @@ class Host(QObject):
         for name, action in self.highlight_actions.items(): action.setChecked(config['effect'] == EFFECTS[name]['effect'])
         for name, action in self.hands_actions.items(): action.setChecked(config['hands'] == name)
         self.held_action.setChecked(config['highlightPressed'])
-        for name, key in (('pointing_show_action', 'showPointing'), ('pointing_pills_action', 'pointingPills'), ('cursor_multiplier_action', 'cursorMultiplier')):
+        for name, key in (('pointing_show_action', 'showPointing'), ('pointing_pills_action', 'pointingPills')):
             action = getattr(self, name, None)
             if action is not None: action.setChecked(config[key])
 
@@ -612,7 +607,6 @@ class Host(QObject):
                 try: self.state.save()
                 except OSError: pass
         self.profile_ready = True
-        self.pointing_factors = factors(profile.layers)
         if self.worker: self.worker.set_pointing_tracking(self.pointing_wanted())
         self.size_surface()
         self.publish_state()
@@ -668,7 +662,6 @@ class Host(QObject):
             with self.state.lock: self.state.pressed = []
             self.size_surface()
             if self.worker: self.worker.set_pointing_tracking(self.pointing_wanted())
-            if not self.state.config['cursorMultiplier']: self.show_multiplier('')
         elif op == 'show':
             if value['value']: self.controls.set_collapsed(False)
             self.state.visible = value['value']; self.surface.setVisible(value['value']); self.show_action.setChecked(value['value']); self.controls.setVisible(value['value'])
@@ -695,10 +688,10 @@ class Host(QObject):
         config = self.state.config
         board = self.state.board
         has_module = board is None or any((board.get('pointing') or {}).values())
-        return has_module and (config['showPointing'] or config['pointingPills'] or config['cursorMultiplier'])
+        return has_module and (config['showPointing'] or config['pointingPills'])
 
     def pointing_motion(self, motion):
-        """Motion from the board (or the demo): to the overlay at up to 60 Hz, and the cursor badge."""
+        """Motion from the board (or the demo): to the overlay at up to 60 Hz."""
         if self.sender() is not self.worker and self.sender() is not self.demo_pointing: return
         self.forward_pointing(motion)
 
@@ -713,20 +706,11 @@ class Host(QObject):
             pending['sniper'], pending['boost'] = motion['sniper'], motion['boost']
             pending['elapsedMs'] = pending.get('elapsedMs', 0) + motion.get('elapsedMs', 0)
         config = self.state.config
-        self.show_multiplier(multiplier_text(motion['sniper'], motion['boost'], *self.pointing_factors)
-                             if config['cursorMultiplier'] and self.state.visible else '')
         now = time.monotonic()
         if now - self.pointing_sent < .015: return
         self.pointing_sent, self.pointing_pending = now, None
         if self.state.visible and (config['showPointing'] or config['pointingPills']):
             self.surface.page().runJavaScript("window.dispatchEvent(new CustomEvent('keybard-host-pointing',{detail:" + json.dumps(pending, separators=(',', ':')) + "}))")
-
-    def show_multiplier(self, text):
-        if CursorBadge is None: return
-        if self.cursor_badge is None:
-            if not text: return
-            self.cursor_badge = CursorBadge()
-        self.cursor_badge.set_text(text)
 
     def start_demo_pointing(self):
         """--demo-pointing: an illustration board with a left touchpad and a right trackball, rolling, sniper on."""
@@ -755,7 +739,6 @@ class Host(QObject):
 
     def shutdown(self):
         self.modifier_timer.stop(); self.modifier_reader.close()
-        if self.cursor_badge is not None: self.cursor_badge.close()
         if self.demo_pointing is not None: self.demo_pointing.stop()
         self.scan_timer.stop(); self.timer.stop()
         if self.colors_panel is not None: self.colors_panel.close()
@@ -802,7 +785,6 @@ def main():
     parser.add_argument('--paranoid', action='store_true', help='serve Keybard Paranoid and accept no website origins')
     parser.add_argument('--keybard-url', default=KEYBARD_URL, help='Keybard page that Open Keybard opens (testing)')
     parser.add_argument('--demo-pointing', action='store_true', help='review: an illustration board with pointing devices, rolling, sniper on (no board needed)')
-    parser.add_argument('--cursor-multiplier', action='store_true', help='review: turn on Multiplier at the cursor for this run, without saving it')
     parser.add_argument('--show-pointing', action='store_true', help='review: turn on Show pointing devices for this run, without saving it')
     args = parser.parse_args()
     if args.paranoid:
@@ -832,7 +814,6 @@ def main():
     state = HostState(args.settings or folder / 'preferences.json')
     host = Host(app, args.assets, state, args.port, args.allow_origin, args.paranoid, page)
     host.keybard_url = args.keybard_url
-    if args.cursor_multiplier: state.config['cursorMultiplier'] = True
     if args.show_pointing: state.config['showPointing'] = True
     if args.demo_pointing: host.start_demo_pointing()
     if not args.no_open: host.open_controls()

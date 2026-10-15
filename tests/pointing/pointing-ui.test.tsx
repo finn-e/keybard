@@ -123,10 +123,10 @@ describe("the device and its menu", () => {
 
 describe("Keybard Host pointing settings", () => {
     it("defaults: devices off, pills on, cursor multiplier off, also for Hosts without the settings", () => {
-        expect(HOST_POINTING_DEFAULTS).toEqual({ showPointing: false, pointingPills: true, cursorMultiplier: false });
+        expect(HOST_POINTING_DEFAULTS).toEqual({ showPointing: false, pointingPills: true });
         expect(hostPointingConfig({ layoutId: "us" })).toEqual(HOST_POINTING_DEFAULTS);
         expect(hostPointingConfig(null)).toEqual(HOST_POINTING_DEFAULTS);
-        expect(hostPointingConfig({ showPointing: true, pointingPills: "yes", cursorMultiplier: true })).toEqual({ showPointing: true, pointingPills: true, cursorMultiplier: true });
+        expect(hostPointingConfig({ showPointing: true, pointingPills: "yes" })).toEqual({ showPointing: true, pointingPills: true });
         expect(hostHasPointing({ layoutId: "us" })).toBe(false);
         expect(hostHasPointing({ showPointing: false })).toBe(true);
     });

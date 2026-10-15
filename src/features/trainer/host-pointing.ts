@@ -9,15 +9,15 @@ import { appStorage } from '@/utils/app-storage';
 import type { PointingMotionReport } from '@/utils/pointing-motion';
 import { HOST_ORIGIN } from './host';
 
-/** The Host's pointing settings: devices off, the pills on, the cursor multiplier off. */
-export interface HostPointingConfig { showPointing: boolean; pointingPills: boolean; cursorMultiplier: boolean }
-export const HOST_POINTING_DEFAULTS: HostPointingConfig = { showPointing: false, pointingPills: true, cursorMultiplier: false };
+/** The Host's pointing settings: devices off, the pills on. */
+export interface HostPointingConfig { showPointing: boolean; pointingPills: boolean }
+export const HOST_POINTING_DEFAULTS: HostPointingConfig = { showPointing: false, pointingPills: true };
 
 /** The pointing settings from a Host config; missing or invalid fields take the defaults. */
 export function hostPointingConfig(config: unknown): HostPointingConfig {
     const c = (config && typeof config === 'object' ? config : {}) as Record<string, unknown>;
     const pick = (k: keyof HostPointingConfig) => (typeof c[k] === 'boolean' ? c[k] as boolean : HOST_POINTING_DEFAULTS[k]);
-    return { showPointing: pick('showPointing'), pointingPills: pick('pointingPills'), cursorMultiplier: pick('cursorMultiplier') };
+    return { showPointing: pick('showPointing'), pointingPills: pick('pointingPills') };
 }
 
 /** Whether this Host knows the pointing settings (it sends them in its config). */
