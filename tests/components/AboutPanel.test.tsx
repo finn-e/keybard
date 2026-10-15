@@ -19,7 +19,7 @@ describe('About', () => {
         render(<AboutPanel />);
         expect(screen.getByRole('link', { name: 'Manual' })).toHaveAttribute('href', expect.stringMatching(/manual\/$/));
         expect(screen.getByRole('link', { name: 'Release notes' })).toHaveAttribute('href', 'https://github.com/svalboard/keybard/releases');
-        expect(screen.getByRole('link', { name: 'Svalboard community' })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Svalboard community' })).toHaveAttribute('href', 'https://svalboard.com/discord');
     });
 
     it('links to the bleeding edge from stable', () => {

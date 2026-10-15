@@ -5,7 +5,8 @@ import { keybardVersion } from "@/utils/build-info";
 
 export const NEXT_URL = "https://next.keybard.svalboard.com/";
 export const RELEASE_NOTES_URL = "https://github.com/svalboard/keybard/releases";
-export const COMMUNITY_URL = "https://svalboard.com/";
+/** The Svalboard community: a permanent Discord invite. */
+export const COMMUNITY_URL = "https://svalboard.com/discord";
 
 const linkClass = "underline underline-offset-2 hover:text-kb-ink";
 
