@@ -5,6 +5,7 @@ import { useKeyboard, listPermittedDevices } from "@/contexts/KeyboardContext";
 import KeybardLogo from "@/components/icons/KeybardLogo";
 import { UnsupportedFirmwareCard } from "@/components/FirmwareUpdate";
 import demoLayoutUrl from "@/default-layouts/sval-default.svil?url";
+import { claimDemoStart, demoFromSearch, type DemoChoice, withDemoFeatures } from "@/lib/deepLinks";
 
 const ConnectKeyboard = () => {
     const { isConnected, connect, connectDevice, disconnect, loadFromFile, isWebHIDSupported, connectionState, connectionError, connectionFix, connectionFirmware } = useKeyboard();
@@ -104,13 +105,16 @@ const ConnectKeyboard = () => {
         }
     };
 
-    const handleLoadDemo = async () => {
+    const handleLoadDemo = async (choice: DemoChoice = "qwerty") => {
         setLoading(true);
         setError(null);
         try {
             const response = await fetch(demoLayoutUrl);
             if (!response.ok) throw new Error("Failed to fetch demo file");
-            const blob = await response.blob();
+            // ?demo=combos: the same layout with a few combos, tap dances and macros.
+            const blob = choice === "combos"
+                ? new Blob([withDemoFeatures(await response.text())], { type: "application/octet-stream" })
+                : await response.blob();
             // Generate a proper filename from the URL or name
             // The bundled file's real name; in Keybard Paranoid the URL is a data: URL.
             const filename = "sval-default.svil";
@@ -122,6 +126,14 @@ const ConnectKeyboard = () => {
             setLoading(false);
         }
     };
+
+    // ?demo / ?demo=combos (review links): load the example on start, once per page load.
+    useEffect(() => {
+        const demo = demoFromSearch(window.location.search);
+        if (!demo || isConnected || !claimDemoStart()) return;
+        void handleLoadDemo(demo);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     return (
         <div className="h-full flex flex-col justify-center">
             <div className="flex flex-col items-center mb-2">
@@ -214,7 +226,7 @@ const ConnectKeyboard = () => {
                                     </button>
                                     <input ref={fileInputRef} type="file" accept=".svil,.viable,.vil,.json" style={{ display: "none" }} onChange={handleLoadFile} />
                                     <button
-                                        onClick={handleLoadDemo}
+                                        onClick={() => handleLoadDemo()}
                                         disabled={loading || connectionState === "loading"}
                                         className="flex items-center justify-center gap-2 text-sm font-medium cursor-pointer transition-all bg-kb-gray text-kb-ink hover:bg-kb-gray-medium px-5 py-1.5 rounded-full w-full border border-gray-300 dark:border-neutral-500"
                                     >
