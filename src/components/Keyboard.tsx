@@ -3,8 +3,8 @@ import { cn } from "@/lib/utils";
 
 import { getKeyLabel, getKeycodeName } from "@/utils/layers";
 import React, { useMemo, useEffect, useRef, useState } from "react";
-import { MATRIX_COLS, SVALBOARD_LAYOUT, UNIT_SIZE } from "../constants/svalboard-layout";
-import { THUMB_OFFSET_U } from "../constants/keyboard-visuals";
+import { MATRIX_COLS, UNIT_SIZE } from "../constants/svalboard-layout";
+import { editorKeyLayout, editorYPos } from "@/utils/editor-key-layout";
 
 import { useKeyBinding } from "@/contexts/KeyBindingContext";
 import type { KeyboardInfo } from "../types/keyboard.types";
@@ -146,21 +146,8 @@ export const Keyboard: React.FC<KeyboardProps> = ({
         next.focus();
     };
 
-    // Use dynamic keylayout from fragments if available, otherwise fallback to hardcoded layout
-    const { keyboardLayout, useFragmentLayout } = useMemo(() => {
-        // Priority 1: Use composed keylayout if available (from fragment composition)
-        if (keyboard.keylayout && Object.keys(keyboard.keylayout).length > 0) {
-            return {
-                keyboardLayout: keyboard.keylayout as Record<number, { x: number; y: number; w: number; h: number; row?: number; col?: number }>,
-                useFragmentLayout: true,
-            };
-        }
-        // Priority 2: Fallback to hardcoded layout for backward compatibility
-        return {
-            keyboardLayout: SVALBOARD_LAYOUT,
-            useFragmentLayout: false,
-        };
-    }, [keyboard.keylayout]);
+    // The composed keylayout when the board has one, else the built-in schematic (shared with the trainer and Keybard Host).
+    const { layout: keyboardLayout, fragment: useFragmentLayout } = useMemo(() => editorKeyLayout(keyboard), [keyboard.keylayout]);
 
     // Use keyboard's cols if available, otherwise fallback to constant
     const matrixCols = keyboard.cols || MATRIX_COLS;
@@ -181,9 +168,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
         [keyVariant]
     );
 
-    const getYPos = (y: number) => (
-        (!useFragmentLayout && y >= 6) ? y + THUMB_OFFSET_U : y
-    );
+    const getYPos = (y: number) => editorYPos(y, useFragmentLayout);
 
     const layoutValues = useMemo(
         () => Object.values(keyboardLayout) as Array<{ x: number; y: number; w: number; h: number; row?: number; col?: number }>,

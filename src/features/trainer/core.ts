@@ -1,6 +1,6 @@
 import { LAYOUTS } from '@/components/Keyboards/layouts';
 import type { KeyboardInfo } from '@/types/keyboard.types';
-import { SVALBOARD_LAYOUT } from '@/constants/svalboard-layout';
+import { editorKeyRects } from '@/utils/editor-key-layout';
 
 export interface Appearance {
     fill: string; fillAlpha: number; outline: string; outlineAlpha: number;
@@ -55,8 +55,8 @@ export function resolveBinding(keymap: number[][], index: number, active: number
     return { code: keymap[0]?.[index] ?? 0, layer: 0 };
 }
 export function geometry(board: KeyboardInfo) {
-    const layout = board.keylayout && Object.keys(board.keylayout).length ? board.keylayout : SVALBOARD_LAYOUT;
-    return Object.entries(layout).flatMap(([id, raw]) => {
+    // The editor's positions, so the trainer previews and Keybard Host's overlay match it.
+    return Object.entries(editorKeyRects(board)).flatMap(([id, raw]) => {
         const index = Number(id), row = raw.row ?? Math.floor(index / board.cols), col = raw.col ?? index % board.cols;
         const x = Number(raw.x), y = Number(raw.y), w = Number(raw.w ?? 1), h = Number(raw.h ?? 1);
         if (![row, col, x, y, w, h].every(Number.isFinite) || !Number.isInteger(row) || !Number.isInteger(col)

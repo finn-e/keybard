@@ -197,7 +197,7 @@ def serialize_profile(profile):
     # String UIDs retain all 64 bits across JSON/JavaScript.
     return dict(name=profile.name, uid=str(profile.uid), fingerprint=profile.fingerprint, rows=10, cols=6,
         keymap=[[code for row in layer for code in row] for layer in profile.layers],
-        keylayout={str(k.row * 6 + k.col): dict(row=k.row, col=k.col, x=k.x, y=k.y, w=1, h=1) for k in profile.keys},
+        keylayout={str(k.row * 6 + k.col): dict(row=k.row, col=k.col, x=k.x, y=k.y, w=k.w, h=k.h) for k in profile.keys},
         cosmetic=dict(layer={str(i): profile.layer_name(i) for i in range(len(profile.layers))}),
         trainerLabels={str(code): profile.label(code) for layer in profile.layers for row in layer for code in row},
         pointing=dict(getattr(profile, 'pointing', ()) or ()))
