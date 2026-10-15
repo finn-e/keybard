@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import type { FlowState } from "@/services/updater/flow";
+import type { Afterwards, FlowState } from "@/services/updater/flow";
 import { handName, type Hand } from "@/services/updater/protocol";
 import { FailureView, type FailureAction } from "./failures";
 import { ProgressView, useTicker } from "./ProgressDialog";
@@ -37,7 +37,7 @@ export function ResultView({ state, notesUrl, onDone }: { state: FlowState; note
             <div className="flex flex-col gap-1 text-sm">
                 <p className="flex flex-wrap items-center gap-2">
                     <Check className="h-4 w-4 text-kb-green" aria-hidden />
-                    {r.layout === "restored" ? "Layout put back" : "Started from defaults"}
+                    {r.layout === "restored" ? "Layout put back" : r.layout === "blank" ? "Wiped to a blank board" : "Reset to the default layout"}
                     {state.backup && <span className="font-mono text-xs text-muted-foreground">{state.backup.fileName}</span>}
                 </p>
                 {r.trimmed.map((line) => (
@@ -59,7 +59,7 @@ export interface UpdateDialogProps {
     cancellable: boolean;
     notesUrl?: string;
     udevCommand?: string;
-    onAfterwards: (a: "restore" | "defaults") => void;
+    onAfterwards: (a: Afterwards) => void;
     onStart: () => void;
     onCancel: () => void;
     onClose: () => void;

@@ -7,19 +7,23 @@
 // - The chord is asked for at most once per update. A pair update asks for it at the
 //   other half's pair ARM; the half with USB then installs on the held approval. If the
 //   approval isn't there, the flow stops on F9 ("Halves differ") instead of asking again.
-// - Every install backs up first; the Afterwards choice is acted on with no prompt.
+// - Every install backs up first (Wipe to a blank board needs none); the layout choice is
+//   acted on with no prompt.
+// - A pair update whose other half doesn't come back stops before the half with USB, so
+//   one working half keeps its old release.
 // - 0x2A (clear the reset notice) is sent last, after the restore or the defaults.
 
 import { UpdaterClient, UpdaterStatusError } from "./client";
 import type { Plan, Target } from "./checks";
 import {
-    ARM_MODE_PAIR, ARM_MODE_SINGLE, CHUNK_PIECE_MAX, HAND_SELF, Presence, RelayPhase, SETTINGS_RESET_BOTH, State, Status,
+    ARM_MODE_PAIR, ARM_MODE_SINGLE, CHUNK_PIECE_MAX, HAND_SELF, Presence, RelayPhase, SETTINGS_RESET_BLANK, SETTINGS_RESET_BOTH, State, Status,
     handName, hex, otherHand, type Hand,
 } from "./protocol";
 import { loadSvup, type SvupFile } from "./svup";
 import { DisconnectedError, ReplyTimeoutError, type Clock, type UpdaterTransport } from "./transport";
 
-export type Afterwards = "restore" | "defaults";
+/** The layout choice before an install: Keep my layout, Reset to the default layout, Wipe to a blank board. */
+export type Afterwards = "restore" | "defaults" | "blank";
 
 export type Stage =
     | "waiting" | "approve" | "preparing" | "sending" | "checking" | "copying" | "installing" | "restarting"
@@ -30,7 +34,7 @@ export type Step =
     | "self-arm" | "self-erase" | "self-send" | "self-verify" | "self-install" | "reconnect" | "check-halves"
     | "settings-reset" | "restore" | "done" | "failed";
 
-export type FailureId = "F2" | "F3" | "F4" | "F5" | "F6" | "F9" | "F10" | "F11" | "F12" | "F14" | "F16" | "F17" | "F18" | "F19";
+export type FailureId = "F2" | "F3" | "F4" | "F5" | "F6" | "F9" | "F10" | "F11" | "F12" | "F14" | "F16" | "F17" | "F18" | "F19" | "F20";
 
 export interface Failure {
     id: FailureId;
@@ -61,7 +65,7 @@ export interface FlowFileRef {
 
 export interface FlowResult {
     tags: Partial<Record<Hand, string>>;
-    layout: "restored" | "defaults";
+    layout: "restored" | "defaults" | "blank";
     /** Lines the import preflight trimmed, e.g. "Combos: 6 of 8 (this firmware has 6)". */
     trimmed: string[];
 }
@@ -113,6 +117,8 @@ export interface FlowHost {
     clearStorageReset(): Promise<void>;
     /** Put the backup back through the import path; returns what the preflight trimmed. */
     restoreLayout(svil: string): Promise<{ trimmed: string[] }>;
+    /** After a blank wipe (D44): every key on every layer reads KC_NO once the layout has loaded. */
+    keymapBlank?(): Promise<boolean>;
     /** Hold a Web Lock and a Screen Wake Lock for the update; returns their release. */
     holdLocks?(): Promise<() => void>;
 }
@@ -259,7 +265,8 @@ export class UpdateFlow {
             toTag: plan.toTag,
             fromTag: plan.fromTag,
             files,
-            afterwards: input.backup ? input.afterwards : "defaults",
+            // No backup: the layout can't be kept. A blank board needs none.
+            afterwards: input.backup || input.afterwards === "blank" ? input.afterwards : "defaults",
             backup: input.backup ? { snapshotId: input.backup.snapshotId, fileName: input.backup.fileName } : null,
             noChord: plan.board.noChord,
             step: "start",
@@ -510,6 +517,12 @@ export class UpdateFlow {
         this.row(o, { stage: answered ? "done" : "restarting", progress: answered ? 1 : null });
         this.update({ halvesDone: answered ? [...this.state.halvesDone, o] : this.state.halvesDone });
         this.sessionHand = null;
+        if (pair && !answered) {
+            // Stop before the half with USB: it keeps its old release and keeps working, and
+            // the halves-differ guidance says what to do next (Finish update).
+            const u = handName(usbHand);
+            throw new Stop({ ...this.halvesDiffer(), detail: `The ${handName(o)} half didn't answer after its install, so Keybard stopped before the ${u} half. The ${u} half still runs ${this.state.fromTag} and works.` });
+        }
         if (!pair) {
             if (!answered) throw new Stop({ id: "F11", hand: o });
             // A one-half update of the other half: no restart of the half with USB.
@@ -639,6 +652,26 @@ export class UpdateFlow {
             } catch (error) {
                 throw new Stop({ id: "F16", detail: error instanceof Error ? error.message : String(error) });
             }
+        } else if (this.state.afterwards === "blank") {
+            // Wipe to a blank board (D44): always, whatever the install already reset.
+            if (!this.state.settingsResetSent) {
+                this.step("settings-reset");
+                this.row(usbHand, { stage: "restarting", progress: null });
+                const r = await c.settingsReset(usbHand, SETTINGS_RESET_BOTH, SETTINGS_RESET_BLANK);
+                if (r.status !== Status.OK) {
+                    const why = r.status === Status.INVALID ? "this firmware can't wipe to a blank board"
+                        : r.status === Status.UNAVAILABLE ? "the other half didn't answer, or its firmware can't wipe to a blank board" : "the keyboard was busy";
+                    throw new Stop({ id: "F20", detail: `Nothing was wiped: ${why}.` });
+                }
+                this.update({ settingsResetSent: true });
+                await this.reconnect();
+                c = this.connection();
+                flags = await this.host.readStorageFlags();
+                if (!(flags & 0x04)) console.warn("[firmware] blank wipe, but the reset notice isn't set");
+            }
+            if (this.host.keymapBlank && !(await this.host.keymapBlank())) {
+                throw new Stop({ id: "F20", detail: "The keyboard came back with keys still set." });
+            }
         } else if (!this.state.settingsResetSent && (!(flags & 0x04) || target !== "both")) {
             // An identical build kept the old settings, or only one half was installed: reset both (F-N2).
             this.step("settings-reset");
@@ -659,7 +692,7 @@ export class UpdateFlow {
             phase: "result",
             step: "done",
             finishedAt: this.now(),
-            result: { tags, layout: this.state.afterwards === "restore" && this.backupSvil ? "restored" : "defaults", trimmed },
+            result: { tags, layout: this.state.afterwards === "blank" ? "blank" : this.state.afterwards === "restore" && this.backupSvil ? "restored" : "defaults", trimmed },
         });
     }
 }

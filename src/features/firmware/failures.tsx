@@ -29,7 +29,7 @@ export function failureCopy(f: Failure, o: { fromTag?: string; udevCommand?: str
         F4: { title: "Not approved in time", body: "Nothing was changed.", actions: [{ action: "retry", label: "Try again", primary: true }, { action: "close", label: "Close" }] },
         F5: { title: "Update stopped", body: runs ? `Nothing was changed. Your keyboard still runs ${runs}.` : "Nothing was changed.", actions: [{ action: "retry", label: "Try again", primary: true }, { action: "close", label: "Close" }] },
         F6: { title: "Update didn't finish", body: "Nothing was changed.", actions: [{ action: "retry", label: "Try again", primary: true }, { action: "close", label: "Close" }] },
-        F9: { title: "Halves differ", body: both || "The halves run different firmware.", actions: [{ action: "finish", label: "Finish update", primary: true }] },
+        F9: { title: "Halves differ", body: f.detail ? <>{both && <p>{both}</p>}<p>{f.detail}</p></> : both || "The halves run different firmware.", actions: [{ action: "finish", label: "Finish update", primary: true }] },
         F10: { title: `${half(f.hand)} needs a manual install`, body: "Its light stays magenta and a drive named RPI-RP2 appeared.", actions: [{ action: "download", label: `Download ${handName(f.hand ?? 1)} half .uf2`, primary: true }, { action: "manual", label: "Install by hand" }] },
         F11: { title: `${half(f.hand)} needs a manual install`, body: `Plug USB into the ${handName(f.hand ?? 0)} half. It shows up as the RPI-RP2 drive.`, actions: [{ action: "download", label: `Download ${handName(f.hand ?? 0)} half .uf2`, primary: true }, { action: "manual", label: "Install by hand" }] },
         F12: { title: "Linux blocked the keyboard", body: "Run this command, then reconnect.", actions: [{ action: "copy-command", label: "Copy command" }, { action: "reconnect", label: "Reconnect", primary: true }] },
@@ -38,6 +38,7 @@ export function failureCopy(f: Failure, o: { fromTag?: string; udevCommand?: str
         F17: { title: "Your keyboard can't save settings", body: "Updates from Keybard are off until this is fixed.", actions: [{ action: "manual", label: "Install by hand" }, { action: "close", label: "Close", primary: true }] },
         F18: { title: "This keyboard installs firmware by hand", body: "", actions: [{ action: "manual", label: "Install by hand", primary: true }] },
         F19: { title: "This Keybard can't configure this firmware", body: "Reload Keybard to get a newer one.", actions: [{ action: "reload", label: "Reload", primary: true }] },
+        F20: { title: "Keyboard not wiped", body: f.detail ?? "The new firmware is installed.", actions: [{ action: "retry", label: "Try again", primary: true }, { action: "close", label: "Close" }] },
     };
     const copy = table[f.id];
     if (f.id === "F12" && o.udevCommand) copy.body = <>{copy.body}<code className="mt-2 block select-all break-all rounded bg-kb-gray-medium p-2 font-mono text-xs">{o.udevCommand}</code></>;

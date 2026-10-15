@@ -1,12 +1,12 @@
-// B1: the one confirm. Checks, backup, warnings, Afterwards, what to do on the keyboard.
+// B1: the one confirm. Checks, backup, warnings, the layout choice, what to do on the keyboard.
 
 import { Check, CircleAlert, Loader2, XCircle } from "lucide-react";
-import { useId } from "react";
-
 import { Button } from "@/components/ui/button";
 import type { CheckRow } from "@/services/updater/checks";
+import type { Afterwards } from "@/services/updater/flow";
 import { handName, otherHand, type Hand } from "@/services/updater/protocol";
 import { ChordDiagram } from "./ChordDiagram";
+import { LayoutChoice } from "./LayoutChoice";
 import type { UpdateUi } from "./useFirmwareUpdate";
 
 type SheetUi = Extract<UpdateUi, { kind: "sheet" }>;
@@ -33,7 +33,7 @@ function Row({ row }: { row: CheckRow }) {
 export interface UpdateSheetProps {
     ui: SheetUi;
     chordLegends: (hand: Hand) => [string, string];
-    onAfterwards: (a: "restore" | "defaults") => void;
+    onAfterwards: (a: Afterwards) => void;
     onStart: () => void;
     onCancel: () => void;
     onOpenBackups?: () => void;
@@ -42,7 +42,6 @@ export interface UpdateSheetProps {
 
 export function UpdateSheet({ ui, chordLegends, onAfterwards, onStart, onCancel, onOpenBackups, onSaveManually }: UpdateSheetProps) {
     const { plan, backup, afterwards } = ui;
-    const group = useId();
     if (ui.error) {
         return (
             <div className="flex flex-col gap-3">
@@ -70,11 +69,12 @@ export function UpdateSheet({ ui, chordLegends, onAfterwards, onStart, onCancel,
     const refusal = plan.refusal;
     const backupFailed = backup.state === "failed";
     const checks = plan.checks.filter((c) => c.state !== "warn");
-    const warnings = backupFailed ? [...plan.warnings, { id: "backup-failed", label: "Layout not saved", state: "warn" as const, detail: "Afterwards switched to Start from defaults." }] : plan.warnings;
+    const warnings = backupFailed ? [...plan.warnings, { id: "backup-failed", label: "Layout not saved", state: "warn" as const, detail: "Switched to Reset to the default layout." }] : plan.warnings;
     const anyWarning = warnings.length > 0;
     const onlyUsb = plan.otherSilent && plan.target === usb;
     const primary = onlyUsb ? `Update ${handName(usb)} half only` : anyWarning ? "Update anyway" : "Start update";
-    const ready = !refusal && backup.state !== "pending";
+    // A blank board needs no backup: Start doesn't wait for it.
+    const ready = !refusal && (backup.state !== "pending" || afterwards === "blank");
     const legends = chordLegends(usb);
     return (
         <div className="flex flex-col gap-4" data-testid="update-sheet">
@@ -107,17 +107,7 @@ export function UpdateSheet({ ui, chordLegends, onAfterwards, onStart, onCancel,
                         {backupFailed && onSaveManually && <button type="button" className="self-start text-sm text-kb-primary underline" onClick={onSaveManually}>Save layout manually</button>}
                     </section>
 
-                    <fieldset className="flex flex-col gap-1" aria-label="Afterwards">
-                        <legend className="mb-1 text-sm font-semibold">Afterwards</legend>
-                        <label className="flex items-center gap-2 text-sm">
-                            <input type="radio" name={group} checked={afterwards === "restore"} disabled={backup.state !== "ok"} onChange={() => onAfterwards("restore")} />
-                            Put my layout back{backupFailed && <span className="text-muted-foreground"> · No backup</span>}
-                        </label>
-                        <label className="flex items-center gap-2 text-sm">
-                            <input type="radio" name={group} checked={afterwards === "defaults"} onChange={() => onAfterwards("defaults")} />
-                            Start from the {plan.toTag} defaults
-                        </label>
-                    </fieldset>
+                    <LayoutChoice value={afterwards} onChange={onAfterwards} keepDisabled={backup.state !== "ok"} noBackup={backupFailed} />
 
                     <section aria-label="On the keyboard" className="flex flex-col gap-2 rounded-md border border-kb-gray-border p-3">
                         {plan.board.noChord ? (

@@ -47,6 +47,11 @@ export class FakeHost implements FlowHost {
         this.board.clearStorageReset();
     }
 
+    async keymapBlank(): Promise<boolean> {
+        this.events.push("keymap");
+        return this.board.settings[this.board.usbHand] === "blank";
+    }
+
     async restoreLayout(_svil: string): Promise<{ trimmed: string[] }> {
         this.restores++;
         this.events.push("restore");

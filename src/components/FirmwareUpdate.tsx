@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { SVALBOARD_FIRMWARE_URL } from "@/constants/firmware";
 import { currentSite, releasesForSite } from "@/constants/firmware-releases";
 import { ManualInstall } from "@/features/firmware/ManualInstall";
+import type { Afterwards } from "@/services/updater/flow";
 import { PARANOID } from "@/lib/paranoid";
 import type { UnsupportedFirmwareInfo } from "@/utils/unsupported-firmware";
 import { cn } from "@/lib/utils";
@@ -23,7 +24,7 @@ export function FirmwareLink() {
 /** The guided manual install (M), in its own dialog: the way onto firmware Keybard updates. */
 function ManualInstallButton({ fromVial }: { fromVial: boolean }) {
     const [open, setOpen] = useState(false);
-    const [afterwards, setAfterwards] = useState<"restore" | "defaults">("defaults");
+    const [afterwards, setAfterwards] = useState<Afterwards>("defaults");
     const release = releasesForSite(currentSite())[0] ?? null;
     return (
         <>

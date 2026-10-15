@@ -151,9 +151,9 @@ export class UpdaterClient {
         return reply;
     }
 
-    /** SETTINGS_RESET (F-N2): [status][done mask]. */
-    async settingsReset(hand: number, scope?: number): Promise<{ status: number; done: number }> {
-        const reply = await this.op(Op.SETTINGS_RESET, hand, settingsResetArgs(scope));
+    /** SETTINGS_RESET (F-N2; mode 1, a blank board: D44): [status][done mask]. */
+    async settingsReset(hand: number, scope?: number, mode?: number): Promise<{ status: number; done: number }> {
+        const reply = await this.op(Op.SETTINGS_RESET, hand, settingsResetArgs(scope, mode));
         return { status: reply.status, done: decodeResetMask(reply) };
     }
 }

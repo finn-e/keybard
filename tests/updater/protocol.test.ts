@@ -12,7 +12,9 @@ describe("updater packets", () => {
         const p = encodePacket(0x11223344, Op.ARM, 1, [1]);
         expect(p.length).toBe(64);
         expect(Array.from(p.subarray(0, 11))).toEqual([0xdd, 0x44, 0x33, 0x22, 0x11, 0xfe, 0x07, 0x55, 0x02, 0x01, 0x01]);
-        expect(encodeViaPayload(Op.SETTINGS_RESET, 1, settingsResetArgs(1))).toEqual([0x07, 0x55, 0x0e, 0x01, 0x52, 0x53, 0x45, 0x54, 0x01]);
+        expect(encodeViaPayload(Op.SETTINGS_RESET, 1, settingsResetArgs(1))).toEqual([0x07, 0x55, 0x0e, 0x01, 0x52, 0x53, 0x45, 0x54, 0x01, 0x00]);
+        // D44: mode 1, a blank board
+        expect(encodeViaPayload(Op.SETTINGS_RESET, 1, settingsResetArgs(1, 1))).toEqual([0x07, 0x55, 0x0e, 0x01, 0x52, 0x53, 0x45, 0x54, 0x01, 0x01]);
     });
 
     it("refuses arguments that don't fit a report", () => {

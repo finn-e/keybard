@@ -157,10 +157,20 @@ describe("the install flow", () => {
         expectOneChordAtMost(state);
     });
 
-    it("F11 the other half doesn't come back after its install", async () => {
-        const { state } = await run({ setup: { faults: [{ kind: "other-no-return" }] } });
-        expect(state.failure).toMatchObject({ id: "F11", hand: L });
+    it("P4-32 the other half doesn't come back after its install: stop before the half with USB (F9)", async () => {
+        const { board, state } = await run({ setup: { faults: [{ kind: "other-no-return" }] } });
+        expect(state.failure).toMatchObject({ id: "F9", tags: { 0: "x4", 1: "v3" } });
+        expect(state.failure?.detail).toMatch(/left half didn't answer after its install, so Keybard stopped before the right half/);
+        // The half with USB was never armed and still runs its old release.
+        expect(state.committed).toEqual([L]);
+        expect(board.requests.filter((r) => r.op === Op.ARM).map((a) => a.hand)).toEqual([L]);
+        expect(board.halves[R].cfg.fwVersion).toBe(3000);
         expectOneChordAtMost(state);
+    });
+
+    it("F11 a one-half update of the other half that doesn't come back", async () => {
+        const { state } = await run({ onlyHand: L, setup: { faults: [{ kind: "other-no-return" }] } });
+        expect(state.failure).toMatchObject({ id: "F11", hand: L });
     });
 
     it("F14 the keyboard doesn't come back after the USB half installs", async () => {
@@ -268,9 +278,41 @@ describe("afterwards", () => {
         expect(state.result?.layout).toBe("restored");
     });
 
-    it("with no backup, Afterwards is defaults", async () => {
+    it("with no backup, Keep my layout becomes the default layout", async () => {
         const { state } = await run({ backup: false, afterwards: "restore" });
         expect(state.afterwards).toBe("defaults");
+    });
+
+    it("P4-31 wipe to a blank board: no backup needed, SETTINGS_RESET mode 1 after the install, keymap checked, 0x2A last", async () => {
+        const { board, host, state } = await run({ afterwards: "blank", backup: false });
+        expect(state.phase).toBe("result");
+        expect(state.afterwards).toBe("blank");
+        expect(state.backup).toBeNull();
+        expect(state.result?.layout).toBe("blank");
+        expect(state.settingsResetSent).toBe(true);
+        expect(host.restores).toBe(0);
+        await clock.sleep(5000);
+        board.connected();
+        expect(board.settings).toEqual({ 0: "blank", 1: "blank" });
+        // Sent even though the new build had reset the settings already (bit 2 set).
+        expect(board.requests.filter((r) => r.op === Op.SETTINGS_RESET)).toHaveLength(1);
+        expect(host.events.slice(-2)).toEqual(["keymap", "0x2A"]);
+    });
+
+    it("P4-31 wipe to a blank board on a reinstall of the same build", async () => {
+        const { board, state } = await run({ release: v3, afterwards: "blank" });
+        expect(state.result?.layout).toBe("blank");
+        await clock.sleep(5000);
+        board.connected();
+        expect(board.settings).toEqual({ 0: "blank", 1: "blank" });
+    });
+
+    it("P4-31 wipe to a blank board with an other half that can't wipe: F20, nothing wiped, no 0x2A", async () => {
+        const { board, host, state } = await run({ release: v3, afterwards: "blank", setup: { half: { blankWipe: false } } });
+        expect(state.failure).toMatchObject({ id: "F20" });
+        expect(state.failure?.detail).toMatch(/Nothing was wiped/);
+        expect(board.settings[L]).not.toBe("blank");
+        expect(host.clears).toBe(0);
     });
 });
 

@@ -422,6 +422,59 @@ describe("updater protocol 4 against the mock board", () => {
         expect(board.settings).toEqual({ 0: "user", 1: "defaults" });
     });
 
+    it("P4-28 SETTINGS_RESET mode 1 wipes both halves to a blank board", async () => {
+        const { c, board } = setup();
+        expect(await c.settingsReset(R, 1, 1)).toEqual({ status: Status.OK, done: 3 });
+        await clock.sleep(6000);
+        board.connected();
+        expect(board.settings).toEqual({ 0: "blank", 1: "blank" });
+        expect(board.storageFlags & 4).toBe(4);
+    });
+
+    it("P4-28 SETTINGS_RESET with no mode byte, or mode 0, is the reset to defaults; mode 2 is INVALID", async () => {
+        const { c, board } = setup();
+        expect((await c.op(Op.SETTINGS_RESET, R, [0x52, 0x53, 0x45, 0x54, 1, 2])).status).toBe(Status.INVALID);
+        expect(settingsResetArgs(1)).toEqual([0x52, 0x53, 0x45, 0x54, 1, 0]);
+        expect(await c.settingsReset(R, 1)).toEqual({ status: Status.OK, done: 3 });
+        await clock.sleep(6000);
+        board.connected();
+        expect(board.settings).toEqual({ 0: "defaults", 1: "defaults" });
+    });
+
+    it("P4-28 SETTINGS_RESET mode 1 with an other half from before D44 is UNAVAILABLE and changes nothing", async () => {
+        const { c, board } = setup();
+        board.halves[L].cfg.blankWipe = false;
+        expect((await c.settingsReset(R, 1, 1)).status).toBe(Status.UNAVAILABLE);
+        await clock.sleep(6000);
+        expect(board.settings).toEqual({ 0: "user", 1: "user" });
+        expect((await c.settingsReset(R, 0, 1)).status).toBe(Status.OK); // this half can
+    });
+
+    it("P4-30 a release board refuses an image whose own build info says no-chord, though its manifest has no DIAGNOSTIC", async () => {
+        const nc = await fixtureRelease("x4", 4000, { noChord: true });
+        expect(nc.files[R].manifest.diagnostic).toBe(false);
+        const { c } = setup({ release: true });
+        await c.loadManifest(R, nc.files[R].manifestBytes);
+        const arm = await c.arm(R, ARM_MODE_SINGLE);
+        await until(async () => (await c.status(R)).chordMade);
+        await c.begin(R, arm.nonce);
+        await until(async () => (await c.status(R)).state === State.RECEIVING, 100);
+        for (let off = 0; off < nc.files[R].image.length;) off = (await c.chunk(R, off, nc.files[R].image.subarray(off, off + 50))).next;
+        await c.end(R, arm.nonce);
+        await until(async () => (await c.status(R)).state === State.ERROR, 100);
+        expect((await c.status(R)).lastError).toBe(Status.BAD_IMAGE);
+    });
+
+    it("P4-30 a developer board takes a no-chord image", async () => {
+        const nc = await fixtureRelease("x4", 4000, { noChord: true });
+        const { c, board } = setup();
+        await c.loadManifest(R, nc.files[R].manifestBytes);
+        const arm = await c.arm(R, ARM_MODE_SINGLE);
+        await until(async () => (await c.status(R)).chordMade);
+        await send(c, board, R, arm.nonce, nc.files[R]);
+        expect((await c.status(R)).state).toBe(State.VERIFIED);
+    });
+
     it("P4-22 SETTINGS_RESET with the other half on protocol 3 is UNAVAILABLE", async () => {
         const { c, board } = setup({ otherRunning: { tag: "vNext1", fwVersion: 2301 } });
         board.halves[L].cfg.protocol = 3;

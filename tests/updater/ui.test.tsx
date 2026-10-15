@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 
 import { currentSite, matchPin, parseReleaseTag, releasesForSite, type FirmwareReleasePin } from "@/constants/firmware-releases";
@@ -220,11 +220,22 @@ describe("the sheet (B1) and the dialog against the mock board", () => {
         expect(screen.getByText("Developer build")).toBeTruthy();
     });
 
-    it("a failed backup switches Afterwards to defaults and disables Put my layout back", async () => {
+    it("a failed backup switches Keep my layout to the default layout and disables it", async () => {
         await setup({ failBackup: true });
         await waitFor(() => expect(screen.getByText("Layout not saved")).toBeTruthy());
-        expect(screen.getByRole("radio", { name: /Put my layout back/ })).toBeDisabled();
-        expect(screen.getByRole("radio", { name: /Start from the x4 defaults/ })).toBeChecked();
+        expect(screen.getByRole("radio", { name: /Keep my layout/ })).toBeDisabled();
+        expect(screen.getByRole("radio", { name: "Reset to the default layout" })).toBeChecked();
+        expect(screen.getByRole("radio", { name: "Wipe to a blank board" })).not.toBeDisabled();
+    });
+
+    it("P4-31 the layout choice: three options, Keep my layout first and chosen", async () => {
+        await setup();
+        await waitFor(() => expect(screen.getByRole("radio", { name: /Keep my layout/ })).not.toBeDisabled());
+        const radios = within(screen.getByRole("group", { name: "Layout" })).getAllByRole("radio");
+        expect(radios.map((r) => r.getAttribute("value"))).toEqual(["restore", "defaults", "blank"]);
+        expect(screen.getByRole("radio", { name: /Keep my layout/ })).toBeChecked();
+        fireEvent.click(screen.getByRole("radio", { name: "Wipe to a blank board" }));
+        expect(screen.getByRole("radio", { name: "Wipe to a blank board" })).toBeChecked();
     });
 
     it("Start runs to the result with no further prompt", async () => {
@@ -234,6 +245,15 @@ describe("the sheet (B1) and the dialog against the mock board", () => {
         await screen.findByTestId("update-result", {}, { timeout: 10_000 });
         expect(screen.getByText("Installed custom firmware")).toBeTruthy();
         expect(fake.chordRequests).toBe(1);
+    });
+
+    it("P4-31 a blank board doesn't wait for the backup: Start is on while it saves", () => {
+        const plan = { board: { usb: { hand: 1 }, noChord: true }, target: "both", title: "Update to x4", toTag: "x4", checks: [], warnings: [], refusal: null, otherSilent: false } as unknown as Plan;
+        const sheet = (afterwards: "restore" | "blank") => <UpdateSheet ui={{ kind: "sheet", source: { kind: "file", files: [] }, plan, preFailure: null, backup: { state: "pending" }, afterwards, error: null }} chordLegends={() => ["M", ","]} onAfterwards={vi.fn()} onStart={vi.fn()} onCancel={vi.fn()} />;
+        const { rerender } = render(sheet("restore"));
+        expect(screen.getByRole("button", { name: "Start update" })).toBeDisabled();
+        rerender(sheet("blank"));
+        expect(screen.getByRole("button", { name: "Start update" })).not.toBeDisabled();
     });
 
     it("renders the sheet's integrity refusal with Reload and Close only", () => {

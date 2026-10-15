@@ -151,6 +151,9 @@ export const ARM_MODE_PAIR = 1;
 export const SETTINGS_RESET_MAGIC = [0x52, 0x53, 0x45, 0x54]; // "RSET"
 export const SETTINGS_RESET_THIS_HALF = 0;
 export const SETTINGS_RESET_BOTH = 1;
+/** SETTINGS_RESET mode (D44): the firmware's defaults, or a blank board (every key KC_NO). */
+export const SETTINGS_RESET_DEFAULTS = 0;
+export const SETTINGS_RESET_BLANK = 1;
 
 // Manifest flags (manifest bytes 10-11)
 export const MANIFEST_FLAG_RELEASE = 0x0001;
@@ -239,7 +242,7 @@ export const chunkArgs = (off: number, data: ArrayLike<number>): number[] => {
     return [...le24(off), data.length, ...Array.from(data)];
 };
 export const commitArgs = (nonce: number, crc16: number): number[] => [...le32(nonce), ...le16(crc16)];
-export const settingsResetArgs = (scope: number = SETTINGS_RESET_BOTH): number[] => [...SETTINGS_RESET_MAGIC, scope];
+export const settingsResetArgs = (scope: number = SETTINGS_RESET_BOTH, mode: number = SETTINGS_RESET_DEFAULTS): number[] => [...SETTINGS_RESET_MAGIC, scope, mode];
 
 /** The manifest's 108 bytes in pieces of at most `piece` bytes: [off, bytes]. */
 export function manifestPieces(manifest: Uint8Array, piece = MANIFEST_PIECE_MAX): Array<[number, Uint8Array]> {

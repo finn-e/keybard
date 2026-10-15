@@ -95,8 +95,8 @@ export function useFirmwareUpdate(host: FirmwareUiHost | null, o: UseFirmwareUpd
                 const backup = await h.makeBackup({ fromTag: result.fromTag, toTag: result.toTag });
                 setUi((u) => (u.kind === "sheet" ? { ...u, backup: { state: "ok", fileName: backup.fileName, backup } } : u));
             } catch (error) {
-                // Gentle: warn, and switch Afterwards to defaults (Q8).
-                setUi((u) => (u.kind === "sheet" ? { ...u, backup: { state: "failed", error: error instanceof Error ? error.message : String(error) }, afterwards: "defaults" } : u));
+                // Gentle: warn, and switch Keep my layout to the default layout (Q8). A blank board stays blank.
+                setUi((u) => (u.kind === "sheet" ? { ...u, backup: { state: "failed", error: error instanceof Error ? error.message : String(error) }, afterwards: u.afterwards === "blank" ? "blank" : "defaults" } : u));
             }
         } catch (error) {
             setUi((u) => (u.kind === "sheet" ? { ...u, error: error instanceof Error ? error.message : String(error) } : u));
@@ -104,12 +104,14 @@ export function useFirmwareUpdate(host: FirmwareUiHost | null, o: UseFirmwareUpd
     }, [releases, o.maxSvalProtocol]);
 
     const setAfterwards = useCallback((afterwards: Afterwards) => {
-        setUi((u) => (u.kind === "sheet" && (afterwards === "defaults" || u.backup.state === "ok") ? { ...u, afterwards } : u));
+        setUi((u) => (u.kind === "sheet" && (afterwards !== "restore" || u.backup.state === "ok") ? { ...u, afterwards } : u));
     }, []);
 
     const start = useCallback(() => {
         const h = hostRef.current;
-        if (!h || ui.kind !== "sheet" || !ui.plan || ui.plan.refusal || ui.backup.state === "pending") return;
+        if (!h || ui.kind !== "sheet" || !ui.plan || ui.plan.refusal) return;
+        // Keep my layout and the default layout wait for the backup; a blank board needs none.
+        if (ui.backup.state === "pending" && ui.afterwards !== "blank") return;
         const backup = ui.backup.state === "ok" ? ui.backup.backup : null;
         runFlow(UpdateFlow.create(h, storeRef.current, { plan: ui.plan, afterwards: ui.afterwards, backup }));
     }, [ui, runFlow]);

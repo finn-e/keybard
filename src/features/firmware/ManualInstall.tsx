@@ -1,5 +1,5 @@
 // M: the guided manual install. The first move off firmware without the one-chord updater,
-// and every recovery of a half stuck in BOOTSEL. Backup first, Afterwards up front, put back at the end.
+// and every recovery of a half stuck in BOOTSEL. Backup first, the layout choice up front, put back at the end.
 
 import { Check, Download } from "lucide-react";
 import { useState } from "react";
@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { carriedFileUrl, type FirmwareReleasePin } from "@/constants/firmware-releases";
 import { SVALBOARD_FIRMWARE_URL } from "@/constants/firmware";
 import { PARANOID } from "@/lib/paranoid";
+import type { Afterwards } from "@/services/updater/flow";
 import { handName, type Hand } from "@/services/updater/protocol";
+import { LayoutChoice } from "./LayoutChoice";
 import type { BackupStatus } from "./useFirmwareUpdate";
 
 export interface ManualInstallProps {
@@ -18,8 +20,8 @@ export interface ManualInstallProps {
     /** The half the user usually plugs in; the other goes first (U-Q5). */
     usualHand?: Hand;
     backup: BackupStatus | null;
-    afterwards: "restore" | "defaults";
-    onAfterwards: (a: "restore" | "defaults") => void;
+    afterwards: Afterwards;
+    onAfterwards: (a: Afterwards) => void;
     onConnect: () => void;
     connected: boolean;
     onClose: () => void;
@@ -53,11 +55,8 @@ export function ManualInstall({ release, only, usualHand = 1, backup, afterwards
                 <h2 className="text-lg font-semibold text-kb-ink">{only !== undefined ? `Install ${tag} on the ${HALF(only)} half` : `Install ${tag} by hand`}</h2>
                 {only === undefined && <p className="text-sm text-muted-foreground">Once per keyboard. Later updates come from Keybard.</p>}
             </header>
-            <fieldset className="flex flex-col gap-1" aria-label="Afterwards">
-                <legend className="mb-1 text-sm font-semibold">Afterwards</legend>
-                <label className="flex items-center gap-2 text-sm"><input type="radio" name="m-afterwards" checked={afterwards === "restore"} disabled={backup?.state !== "ok"} onChange={() => onAfterwards("restore")} />Put my layout back</label>
-                <label className="flex items-center gap-2 text-sm"><input type="radio" name="m-afterwards" checked={afterwards === "defaults"} onChange={() => onAfterwards("defaults")} />Start from the defaults</label>
-            </fieldset>
+            {/* No blank board here: a wipe needs the in-app updater (SETTINGS_RESET), which a manual install can't ask. */}
+            <LayoutChoice value={afterwards} onChange={onAfterwards} keepDisabled={backup?.state !== "ok"} choices={["restore", "defaults"]} />
             <ol className="flex flex-col gap-3">
                 <Step n={n++} title={backup?.state === "failed" ? "Layout not saved" : "Layout saved"} done={backup?.state === "ok"}>
                     {backup?.state === "ok" && <span className="text-sm"><span className="font-mono text-xs">{backup.fileName}</span> · Downloads</span>}

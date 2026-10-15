@@ -34,6 +34,8 @@ export interface FakeHalfConfig {
     maxImage?: number;
     flash16MiB?: boolean;
     writesFailing?: boolean;
+    /** SETTINGS_RESET mode 1 (D44): false for a protocol 4 build from before it. */
+    blankWipe?: boolean;
 }
 
 export type FaultPoint = "other-send" | "relay" | "subside" | "self-send" | "self-commit";
@@ -112,6 +114,8 @@ interface Half {
     bootedImage: string;
     /** SETTINGS_RESET invalidated the D39 record: the next boot resets settings. */
     forceReset: boolean;
+    /** ... to a blank board (D44): every key KC_NO after the reset. */
+    forceBlank: boolean;
 }
 
 interface Session {
@@ -142,6 +146,8 @@ interface Session {
     verifyOk: boolean;
     /** The staged image's build info says no chord (F-N1). */
     noChordImage: boolean;
+    /** The image's own build info says a dev build: no-chord 0x40 or kept settings 0x80 (D45). */
+    devImage: boolean;
 }
 
 interface Held {
@@ -152,7 +158,7 @@ interface Held {
 }
 
 /** What the mock host stores as "the user's settings" on each half. */
-export type FakeSettings = "user" | "defaults" | "restored";
+export type FakeSettings = "user" | "defaults" | "restored" | "blank";
 
 /** The identity the board gives an image: its manifest's SHA-512 prefix. */
 export const imageIdOf = (manifestOrSvup: Uint8Array): string => hex(manifestOrSvup.subarray(44, 60));
@@ -170,6 +176,7 @@ const fill = (c: FakeHalfConfig): Required<FakeHalfConfig> => ({
     maxImage: 0x160000,
     flash16MiB: true,
     writesFailing: false,
+    blankWipe: true,
     ...c,
 });
 
@@ -223,8 +230,8 @@ export class FakeSvalboard implements UpdaterTransport {
         this.otherHandId = otherHand(o.usbHand);
         this.boardName = o.boardName ?? "Kip";
         this.halves = {
-            0: { hand: 0, cfg: fill(o.left), alive: true, backAt: null, bootedImage: "", forceReset: false },
-            1: { hand: 1, cfg: fill(o.right), alive: true, backAt: null, bootedImage: "", forceReset: false },
+            0: { hand: 0, cfg: fill(o.left), alive: true, backAt: null, bootedImage: "", forceReset: false, forceBlank: false },
+            1: { hand: 1, cfg: fill(o.right), alive: true, backAt: null, bootedImage: "", forceReset: false, forceBlank: false },
         };
         for (const h of [this.halves[0], this.halves[1]]) h.bootedImage = h.cfg.imageId;
         this.settings = { 0: "user", 1: "user" };
@@ -382,6 +389,9 @@ export class FakeSvalboard implements UpdaterTransport {
         if (s.state === State.VERIFYING_IMAGE && now >= s.endAt + this.timing.verifyMs) {
             const bad = this.fault("bad-hash");
             if (!s.verifyOk || (bad && (bad.hand === undefined || bad.hand === s.hand))) return this.fail(Status.BAD_HASH);
+            // D45: a release half refuses a dev image by its own build info, whatever the manifest says.
+            // The half with USB checks either image; the other half checks its own again (the relay).
+            if (s.devImage && (this.usb().cfg.release || (s.hand !== this.usbHand && this.other().cfg.release))) return this.fail(Status.BAD_IMAGE);
             s.state = State.VERIFIED;
         }
         if (s.state === State.RELAYING) {
@@ -455,10 +465,11 @@ export class FakeSvalboard implements UpdaterTransport {
         h.alive = true;
         h.backAt = null;
         if (h.forceReset || h.bootedImage !== h.cfg.imageId) {
-            this.settings[h.hand] = "defaults";
+            this.settings[h.hand] = h.forceReset && h.forceBlank ? "blank" : "defaults";
             if (h === this.usb()) this.storageFlags |= 0x04;
         }
         h.forceReset = false;
+        h.forceBlank = false;
         h.bootedImage = h.cfg.imageId;
         if (h === this.usb() && !this.has("unplug")) this.isConnected = true;
     }
@@ -492,7 +503,7 @@ export class FakeSvalboard implements UpdaterTransport {
         return {
             hand, client, state: State.MANIFEST_LOADING, manifest: new Uint8Array(MANIFEST_BYTES), filled: 0, pair: null, pairFilled: 0,
             m: null, nonce: 0, armedAt: 0, chordAt: null, preApproved: false, byPair: false, image: new Uint8Array(0), staged: 0,
-            sectors: 0, beginAt: 0, endAt: 0, lastOpAt: this.clock.now(), relayAt: 0, relayedAt: 0, subsideAt: 0, commitAt: 0, crc: 0, verifyOk: false, noChordImage: false,
+            sectors: 0, beginAt: 0, endAt: 0, lastOpAt: this.clock.now(), relayAt: 0, relayedAt: 0, subsideAt: 0, commitAt: 0, crc: 0, verifyOk: false, noChordImage: false, devImage: false,
         };
     }
 
@@ -722,7 +733,9 @@ export class FakeSvalboard implements UpdaterTransport {
         s!.endAt = this.clock.now();
         s!.state = State.VERIFYING_IMAGE;
         s!.crc = imageCrc(s!.image);
-        s!.noChordImage = !!findBuildInfo(s!.image)?.noChord;
+        const info = findBuildInfo(s!.image);
+        s!.noChordImage = !!info?.noChord;
+        s!.devImage = !!info && (info.flags & 0xc0) !== 0;
         const want = hex(s!.m!.sha512);
         s!.verifyOk = hex(await sha512(s!.image)) === want;
         return makeRsp(Status.ACCEPTED, [s!.state]);
@@ -781,12 +794,17 @@ export class FakeSvalboard implements UpdaterTransport {
         if (hand !== this.usbHand) return makeRsp(Status.INVALID);
         if (!SETTINGS_RESET_MAGIC.every((b, i) => a[i] === b)) return makeRsp(Status.INVALID);
         const scope = a[4];
+        const mode = a[5] ?? 0;
         if (scope !== 0 && scope !== 1) return makeRsp(Status.INVALID);
+        if (mode > 1 || (mode === 1 && !this.usb().cfg.blankWipe)) return makeRsp(Status.INVALID);
         if (this.session || this.latched || this.held) return makeRsp(Status.BUSY);
         // The other half must answer and know the split op (protocol 4).
         if (scope === 1 && (!this.other().alive || this.other().cfg.protocol < 4)) return makeRsp(Status.UNAVAILABLE);
+        // A half from before D44 refuses the mode byte over the split link: nothing changes.
+        if (scope === 1 && mode === 1 && !this.other().cfg.blankWipe) return makeRsp(Status.UNAVAILABLE);
         this.usb().forceReset = true;
-        if (scope === 1) this.other().forceReset = true;
+        this.usb().forceBlank = mode === 1;
+        if (scope === 1) { this.other().forceReset = true; this.other().forceBlank = mode === 1; }
         this.pendingReset = { at: this.clock.now() + this.timing.resetDelayMs, scope };
         return makeRsp(Status.OK, [scope === 1 ? 3 : 1]);
     }
