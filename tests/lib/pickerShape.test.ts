@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
-    effectivePickerShape, fittedTrayHeight, isLShape, lSurfacePath, pickerShapeFromSearch, standardKeysInPlay,
-    TRAY_HANDLE_PX, TRAY_MIN_KEY_PX, QWERTY_KEY_PX, trayHeightFor, trayKeyboardScale, trayReserve, trayState, trayVisibleHeight,
+    CANVAS_CONTROLS_INSET_PX, effectivePickerShape, fittedTrayHeight, isLShape, LAYOUT_MARGIN_PX, layoutCanvasNeed, lSurfacePath,
+    openTraySizing, pickerShapeFromSearch, standardKeysInPlay, TRAY_EDGE_PX, TRAY_HANDLE_PX, TRAY_MAX_KEY_PX, TRAY_MIN_KEY_PX,
+    QWERTY_KEY_PX, trayHeightFor, PICKER_SHAPES, trayKeyboardHeight, trayKeyboardScale, trayReserve, trayState, trayVisibleHeight,
     type TrayInputs,
 } from "../../src/lib/pickerShape";
 
@@ -11,9 +12,9 @@ const base: TrayInputs = {
 };
 
 describe("pickerShape param", () => {
-    it("reads L and Lfull and ignores anything else", () => {
+    it("reads L and ignores anything else", () => {
         expect(pickerShapeFromSearch("?pickerShape=L")).toBe("L");
-        expect(pickerShapeFromSearch("?comboEditor=panel&pickerShape=Lfull")).toBe("Lfull");
+        expect(pickerShapeFromSearch("?comboEditor=panel&pickerShape=L")).toBe("L");
         expect(pickerShapeFromSearch("")).toBe("rect");
         expect(pickerShapeFromSearch("?pickerShape=l")).toBe("rect");
         expect(pickerShapeFromSearch("?pickerShape=bogus")).toBe("rect");
@@ -21,15 +22,21 @@ describe("pickerShape param", () => {
 
     it("has no effect in the bottom bar", () => {
         expect(effectivePickerShape("L", "bottombar")).toBe("rect");
-        expect(effectivePickerShape("Lfull", "bottombar")).toBe("rect");
         expect(effectivePickerShape("L", "sidebar")).toBe("L");
         expect(trayState({ ...base, shape: effectivePickerShape("L", "bottombar") })).toBe("hidden");
     });
 
     it("knows which shapes are L", () => {
         expect(isLShape("L")).toBe(true);
-        expect(isLShape("Lfull")).toBe(true);
         expect(isLShape("rect")).toBe(false);
+    });
+});
+
+describe("Lfull is gone", () => {
+    it("is not a shape: the param value falls back to the usual rectangle", () => {
+        expect(PICKER_SHAPES).toEqual(["rect", "L"]);
+        expect(pickerShapeFromSearch("?pickerShape=Lfull")).toBe("rect");
+        expect(trayState({ ...base, shape: pickerShapeFromSearch("?pickerShape=Lfull") })).toBe("hidden");
     });
 });
 
@@ -93,10 +100,95 @@ describe("tray sizes", () => {
     });
 
     it("scales the keyboard to fit, but keeps keys at least 24px", () => {
-        expect(trayKeyboardScale(1000, 400, 500, 200)).toBe(1.6);
         expect(trayKeyboardScale(600, 400, 500, 200)).toBeCloseTo(1.2);
         expect(trayKeyboardScale(800, 150, 500, 200)).toBeCloseTo(0.8);
         expect(trayKeyboardScale(100, 100, 500, 200) * QWERTY_KEY_PX).toBeGreaterThanOrEqual(TRAY_MIN_KEY_PX);
+    });
+});
+
+describe("tray sized from the layout", () => {
+    const at1440 = { viewportHeight: 900, canvasTop: 74, contentHeight: 214 };
+
+    it("gives the layout its content plus a margin, with the size controls clear of the keyboard", () => {
+        // Keyboard to 370, add-layer row to 400, controls 30px tall (beside the row, bottom-1).
+        expect(layoutCanvasNeed({ contentBottom: 400, keyboardBottom: 370, controlsHeight: 30 }))
+            .toBe(370 + LAYOUT_MARGIN_PX + 30 + CANVAS_CONTROLS_INSET_PX);
+        // Short controls: the content's bottom decides.
+        expect(layoutCanvasNeed({ contentBottom: 414, keyboardBottom: 370, controlsHeight: 10 })).toBe(414 + LAYOUT_MARGIN_PX);
+        expect(layoutCanvasNeed({ contentBottom: 0, keyboardBottom: 0, controlsHeight: 30 })).toBe(0);
+    });
+
+    it("takes all the height the layout leaves", () => {
+        const s = openTraySizing({ ...at1440, layoutNeed: 424 });
+        expect(s.fills).toBe(true);
+        expect(s.height).toBe(900 - TRAY_EDGE_PX - 74 - 424);
+        expect(s.keyboardHeight).toBe(trayKeyboardHeight(s.height));
+        // Canvas top + layout + tray + the gap under it is the whole window.
+        expect(74 + 424 + s.height + TRAY_EDGE_PX).toBe(900);
+    });
+
+    it("leaves room for anything else reserved under the canvas", () => {
+        expect(openTraySizing({ ...at1440, layoutNeed: 424, reserveBelow: 20 }).height)
+            .toBe(openTraySizing({ ...at1440, layoutNeed: 424 }).height - 20);
+    });
+
+    it("keeps the capped size when the layout needs more room (Normal keys, a short window)", () => {
+        const s = openTraySizing({ ...at1440, layoutNeed: 700 });
+        expect(s.fills).toBe(false);
+        expect(s.height).toBe(fittedTrayHeight(trayHeightFor(900), 214));
+        expect(s.keyboardHeight).toBe(trayKeyboardHeight(trayHeightFor(900)));
+        const short = openTraySizing({ viewportHeight: 720, canvasTop: 74, layoutNeed: 443, contentHeight: 180 });
+        expect(short.fills).toBe(false);
+        expect(short.height).toBe(fittedTrayHeight(trayHeightFor(720), 180));
+    });
+
+    it("keeps the capped size until the layout is measured", () => {
+        expect(openTraySizing({ ...at1440, layoutNeed: 0 }).fills).toBe(false);
+    });
+
+    it("never gives the tray less than it had before", () => {
+        for (const need of [300, 424, 500, 560, 600, 800]) {
+            expect(openTraySizing({ ...at1440, layoutNeed: need }).height)
+                .toBeGreaterThanOrEqual(fittedTrayHeight(trayHeightFor(900), 214));
+        }
+    });
+});
+
+describe("tray key size", () => {
+    const natural = { w: 496, h: 200 };
+    const keyPx = (w: number, h: number) => trayKeyboardScale(w, h, natural.w, natural.h) * QWERTY_KEY_PX;
+
+    it("fills the width when the tray is wide enough but short", () => {
+        // 680px wide, 316px tall: width-limited.
+        expect(keyPx(680, 316)).toBeCloseTo(680 / natural.w * QWERTY_KEY_PX);
+    });
+
+    it("fills the height when the tray is wide", () => {
+        expect(keyPx(1192, 316)).toBeCloseTo(316 / natural.h * QWERTY_KEY_PX);
+    });
+
+    it("keeps its shape: one scale for both directions", () => {
+        const s = trayKeyboardScale(1192, 316, natural.w, natural.h);
+        expect(natural.w * s).toBeLessThanOrEqual(1192 + 0.001);
+        expect(natural.h * s).toBeLessThanOrEqual(316 + 0.001);
+    });
+
+    it("caps keys at the largest size", () => {
+        expect(keyPx(4000, 2000)).toBeCloseTo(TRAY_MAX_KEY_PX);
+        expect(TRAY_MAX_KEY_PX).toBe(64);
+    });
+
+    it("never drops keys under 24px", () => {
+        expect(keyPx(100, 60)).toBeCloseTo(TRAY_MIN_KEY_PX);
+    });
+});
+
+describe("the multi-layer view", () => {
+    it("still collapses the tray to its handle, whatever size it would open to", () => {
+        const s = openTraySizing({ viewportHeight: 900, canvasTop: 74, layoutNeed: 424, contentHeight: 214 });
+        expect(trayState({ ...base, multiLayer: true })).toBe("handle");
+        expect(trayReserve("handle", s.height)).toBe(TRAY_HANDLE_PX);
+        expect(trayVisibleHeight("handle", s.height)).toBe(TRAY_HANDLE_PX);
     });
 });
 

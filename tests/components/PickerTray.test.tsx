@@ -50,7 +50,7 @@ describe('L-shaped picker: the side panel', () => {
     });
 
     it('is unchanged in the bottom bar', () => {
-        const { container } = render(<TooltipProvider><SecondarySidebar bottom comboPlacement="panel" pickerShape="Lfull" /></TooltipProvider>);
+        const { container } = render(<TooltipProvider><SecondarySidebar bottom comboPlacement="panel" pickerShape="L" /></TooltipProvider>);
         expect(container.querySelector('aside.detail-panel')?.hasAttribute('data-picker-shape')).toBe(false);
     });
 });
@@ -69,15 +69,25 @@ describe('L-shaped picker: the tray', () => {
         <PickerTray shape="L" state="open" height={250} panelOpen onToggle={vi.fn()} headerRef={vi.fn()} bodyRef={vi.fn()} onContentHeight={vi.fn()} {...props} />
     );
 
-    it('joins the panel at its right edge (L) and spans under it (Lfull)', () => {
+    it('joins the panel at its right edge', () => {
         const el = panel();
-        const { container, rerender } = render(tray());
+        const { container } = render(tray());
         const section = () => container.querySelector('[data-picker-tray]') as HTMLElement;
         expect(section().style.left).toBe('560px');
         expect(section().style.height).toBe('250px');
         expect(container.querySelector('[data-picker-surface] path')?.getAttribute('d')).toMatch(/0 0 0 /);
-        rerender(tray({ shape: 'Lfull' }));
-        expect(section().style.left).toBe('48px');
+        el.remove();
+    });
+
+    it('resizes live when its height changes (a key size clicked), instantly with reduced motion', () => {
+        const el = panel();
+        const { container, rerender } = render(tray({ height: 250 }));
+        const section = () => container.querySelector('[data-picker-tray]') as HTMLElement;
+        expect(section().style.height).toBe('250px');
+        rerender(tray({ height: 360 }));
+        expect(section().style.height).toBe('360px');
+        rerender(tray({ height: 200 }));
+        expect(section().style.height).toBe('200px');
         el.remove();
     });
 
