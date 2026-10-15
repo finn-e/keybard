@@ -40,19 +40,18 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); });
 const closing = () => screen.getByTestId('editor').getAttribute('data-should-close') === 'true';
 
 describe('ways out of a binding editor', () => {
-    it.each([false, true])('Done closes the editor (bottom=%s)', bottom => {
+    it.each([false, true])('the back arrow in the picker header closes the editor (bottom=%s)', bottom => {
         render(<TooltipProvider><SecondarySidebar bottom={bottom} comboPlacement="half" /></TooltipProvider>);
-        const done = screen.getAllByRole('button', { name: 'Done' }).find(b => !b.closest('[hidden]'))!;
-        fireEvent.click(done);
+        const back = screen.getAllByRole('button', { name: 'Go back' }).find(b => !b.closest('[hidden]'))!;
+        expect(back).toHaveAttribute('data-binding-editor-back');
+        fireEvent.click(back);
         if (bottom) expect(state.handleCloseEditor).toHaveBeenCalledTimes(1);
         else expect(closing()).toBe(true);
     });
 
-    it('the back arrow in the picker header closes the editor', () => {
+    it('has no Done button: the back arrow is the way out', () => {
         render(<TooltipProvider><SecondarySidebar comboPlacement="half" /></TooltipProvider>);
-        const back = screen.getAllByRole('button', { name: 'Go back' }).find(b => !b.closest('[hidden]'))!;
-        fireEvent.click(back);
-        expect(closing()).toBe(true);
+        expect(screen.queryAllByRole('button', { name: 'Done' })).toHaveLength(0);
     });
 
     it('picker tabs and picker keys never close the editor', () => {

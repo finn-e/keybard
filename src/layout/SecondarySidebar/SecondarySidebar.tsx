@@ -47,15 +47,17 @@ const AlternativeHeader = ({ onBack, menus }: AlternativeHeaderProps) => {
     const editing = isBindingEditorOpen(activePanel, itemToEdit);
 
     const title = `Add Keys to ${getPanelTitle(activePanel, menus)}`;
-    const done = () => onBack ? onBack() : handleCloseEditor();
+    const back = () => onBack ? onBack() : handleCloseEditor();
 
     return (
-        <div className="flex items-center justify-start gap-4" data-binding-editor-header={editing ? "" : undefined}>
+        <div className="flex items-center justify-start gap-4">
+            {/* The editor's way out: a click under the spotlight scrim pulses it (BindingSpotlight). */}
             <button
                 type="button"
-                onClick={done}
+                onClick={back}
                 className="bg-transparent hover:bg-muted/60 rounded-full p-2 cursor-pointer transition-colors"
                 aria-label="Go back"
+                data-binding-editor-back={editing ? "" : undefined}
             >
                 <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-neutral-400" />
             </button>
@@ -64,16 +66,6 @@ const AlternativeHeader = ({ onBack, menus }: AlternativeHeaderProps) => {
                     {title}
                 </h2>
             </div>
-            {/* The editor's explicit way out, named in the spotlight hint. */}
-            {editing && (
-                <button
-                    type="button"
-                    onClick={done}
-                    className="ml-auto shrink-0 rounded-full bg-kb-active text-kb-active-fg px-4 py-1.5 text-sm font-semibold cursor-pointer hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2"
-                >
-                    Done
-                </button>
-            )}
         </div>
     );
 };
