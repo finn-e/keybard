@@ -109,7 +109,7 @@ const SettingsPanel = () => {
             />
             <ExportDialog open={isExportOpen} onOpenChange={setIsExportOpen} />
 
-            <nav aria-label="Settings sections" className="flex flex-row flex-wrap gap-1.5">
+            <nav aria-label="Settings sections" className="sticky top-0 z-10 -mx-1 flex flex-row flex-wrap gap-1.5 bg-kb-surface px-1 py-1.5">
                 {SETTINGS_ANCHORS.map(({ id, label }) => (
                     <button
                         key={id}
@@ -135,7 +135,7 @@ const SettingsPanel = () => {
                                 key={section.id}
                                 id={sectionDomId(section.id)}
                                 aria-labelledby={`${sectionDomId(section.id)}-title`}
-                                className="scroll-mt-2 flex flex-col"
+                                className="scroll-mt-12 flex flex-col"
                             >
                                 {section.collapsible ? (
                                     <h4 id={`${sectionDomId(section.id)}-title`} className="text-sm font-semibold text-kb-ink">
