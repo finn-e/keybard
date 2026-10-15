@@ -40,9 +40,7 @@ import { useKeyBinding } from "@/contexts/KeyBindingContext";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { MatrixTester } from "@/components/MatrixTester";
-import { MATRIX_COLS } from "@/constants/svalboard-layout";
 
-import { InfoPanelWidget } from "@/components/InfoPanelWidget";
 import { EditorControls } from "./EditorControls";
 import { getBackdropLayerFromElements } from "@/utils/layer-drop-target";
 import { svalService } from "@/services/sval.service";
@@ -1100,7 +1098,6 @@ const EditorLayoutInner = () => {
     const showEditorOverlay = layoutMode === "bottombar" && itemToEdit !== null &&
         ["tapdances", "combos", "macros", "overrides", "altrepeat", "leaders"].includes(activePanel || "");
 
-    const [showInfoPanel, setShowInfoPanel] = React.useState(false);
     const [gitBranchLabel, setGitBranchLabel] = React.useState<string>(__GIT_BRANCH__);
 
     React.useEffect(() => {
@@ -1469,11 +1466,8 @@ const EditorLayoutInner = () => {
 
                     {/* Controls - bottom left corner for bottom bar mode (same style as sidebar mode) */}
                     {useBottomLayout && !showEditorOverlay && (
-                        <div className="fixed right-4 z-10 max-w-[calc(100vw-5rem)]" style={{ bottom: showBottomPanel ? `calc(${typeof bottomPanelHeight === "number" ? `${bottomPanelHeight}px` : bottomPanelHeight} + 16px)` : 16 }}>
-                            <EditorControls
-                                showInfoPanel={showInfoPanel}
-                                setShowInfoPanel={setShowInfoPanel}
-                            />
+                        <div data-inspector-avoid className="fixed right-4 z-10 max-w-[calc(100vw-5rem)]" style={{ bottom: showBottomPanel ? `calc(${typeof bottomPanelHeight === "number" ? `${bottomPanelHeight}px` : bottomPanelHeight} + 16px)` : 16 }}>
+                            <EditorControls />
                         </div>
                     )}
                 </div>
@@ -1482,19 +1476,9 @@ const EditorLayoutInner = () => {
                 {
                     !useBottomLayout && (
                         <>
-                            {activePanel !== "matrixtester" && (
-                                <div data-combo-editor-avoid className="absolute bottom-9 left-[37px] z-50" style={comboEditorReserve > 0 ? { bottom: `calc(2.25rem + ${comboEditorReserve}px)` } : undefined}>
-                                    <InfoPanelWidget showInfoPanel={showInfoPanel} setShowInfoPanel={setShowInfoPanel} />
-                                </div>
-                            )}
-
                             <div className="absolute bottom-4 right-2 max-w-[calc(100%-4rem)] flex flex-col items-end gap-1 pointer-events-none" style={comboEditorReserve > 0 ? { bottom: `calc(1rem + ${comboEditorReserve}px)` } : undefined}>
-                                <div className="pointer-events-auto" data-combo-editor-avoid>
-                                    <EditorControls
-                                        showInfoPanel={showInfoPanel}
-                                        setShowInfoPanel={setShowInfoPanel}
-                                        showInfoToggle={false}
-                                    />
+                                <div className="pointer-events-auto" data-combo-editor-avoid data-inspector-avoid>
+                                    <EditorControls />
                                 </div>
                                 {import.meta.env.DEV && (
                                     <div className="text-[10px] font-medium text-slate-400 dark:text-neutral-400 select-none px-1 pointer-events-auto">
@@ -1506,54 +1490,6 @@ const EditorLayoutInner = () => {
                     )
                 }
             </div >
-
-            {/* Picked Key Info Panel Display (Floating near bottom left button) */}
-            {
-                useBottomLayout && !showEditorOverlay && showInfoPanel && (
-                    <div className="absolute bottom-16 left-4 z-50 bg-kb-surface text-kb-ink shadow-lg rounded-xl p-4 w-[280px] border border-gray-200 dark:border-neutral-700">
-                        <div className="text-sm space-y-1">
-                            {(() => {
-                                const { hoveredKey, selectedTarget } = useKeyBinding();
-                                const { keyboard } = useKeyboard();
-                                const target = hoveredKey || selectedTarget;
-
-                                if (!target) {
-                                    return (
-                                        <p className="text-gray-300 dark:text-neutral-400 italic text-sm text-center">No key selected</p>
-                                    );
-                                }
-
-                                const matrixCols = keyboard?.cols || MATRIX_COLS;
-                                const pos = (typeof target.row === 'number' && typeof target.col === 'number')
-                                    ? (target.row * matrixCols + target.col)
-                                    : null;
-
-                                return (
-                                    <div className="text-sm space-y-1.5 select-none">
-                                        <div className="flex items-baseline gap-2">
-                                            <span className="font-bold text-gray-500 dark:text-neutral-400 text-[10px] uppercase tracking-wider">Keycode:</span>
-                                            <span className="font-mono bg-gray-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded text-xs">{target.keycode || "?"}</span>
-                                        </div>
-                                        {pos !== null && (
-                                            <div className="grid grid-cols-2 gap-4 border-t border-gray-100 dark:border-neutral-700 pt-1.5 mt-1.5">
-                                                <div>
-                                                    <span className="block font-bold text-gray-500 dark:text-neutral-400 text-[10px] uppercase tracking-wider">Position:</span>
-                                                    <span className="text-xs">R{target.row} C{target.col}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="block font-bold text-gray-500 dark:text-neutral-400 text-[10px] uppercase tracking-wider">Matrix:</span>
-                                                    <span className="text-xs">{pos}</span>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })()}
-                        </div>
-                    </div>
-                )
-            }
-
 
             {/* Paste Layer Dialog */}
             <PasteLayerDialog

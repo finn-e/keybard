@@ -148,10 +148,6 @@ vi.mock("@/components/DragReplaceLayerDialog", () => ({
   DragReplaceLayerDialog: () => null,
 }));
 
-vi.mock("@/components/InfoPanelWidget", () => ({
-  InfoPanelWidget: () => null,
-}));
-
 vi.mock("@/components/MatrixTester", () => ({
   MatrixTester: () => null,
 }));
