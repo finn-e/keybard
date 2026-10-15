@@ -4,7 +4,7 @@ import PointingDeviceBall01Icon from "@/components/icons/PointingDeviceBall01Ico
 import LayoutLayersIcon from "@/components/icons/LayoutLayersIcon";
 import AltRepeatArrowsIcon from "@/components/icons/AltRepeatArrowsIcon";
 import GraduationCapIcon from "@/components/icons/GraduationCapIcon";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { OverlayDialog, overlayRequested } from "@/features/trainer/OverlayDialog";
 
 import ComboIcon from "@/components/ComboIcon";
@@ -29,7 +29,7 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
 import { PARANOID } from "@/lib/paranoid";
-import { isBindingEditorOpen, pickerCategoryForRail, effectivePickerMode, nudgeBindingEditor } from "@/lib/bindingSpotlight";
+import { isBindingEditorOpen, pickerCategoryForRail, effectivePickerMode, nudgeBindingEditor, reviewChoice, RAIL_BARS, RAIL_BAR_PARAM } from "@/lib/bindingSpotlight";
 import { ALT_REPEAT_PANEL, panelAllowed, SHOW_ALT_REPEAT_SETTING } from "@/lib/altRepeatVisibility";
 import { useSettings } from "@/contexts/SettingsContext";
 
@@ -105,12 +105,40 @@ const footerItems: SidebarItem[] = [
 
 // --- Sub-components ---
 
+// The active bar shares its x, height and ends with the editing origin bar
+// (--kb-rail-bar-*, see index.css), so it keeps its shape when an editor opens.
 const SlidingIndicator = ({ y }: { y: number }) => (
     <div
-        className="absolute left-[4px] top-0 w-[3px] h-[26px] bg-kb-active z-20 transition-transform duration-300 ease-in-out pointer-events-none"
+        className="absolute left-(--kb-rail-bar-x) top-[calc((26px-var(--kb-rail-bar-h))/2)] w-[3px] h-(--kb-rail-bar-h) rounded-[var(--kb-spot-bar-radius)] bg-kb-active z-20 transition-transform duration-300 ease-in-out pointer-events-none"
         style={{ transform: `translateY(${y}px)` }}
     />
 );
+
+const NAV_BOX_PADDING_PX = 8;
+
+/**
+ * Centers the main navigation on a whole pixel: flex centering lands on a
+ * half pixel whenever the free space is odd, which leaves the rail items
+ * (and their pills and bar) at fractional positions at 1x.
+ */
+function useWholePixelCenter() {
+    const boxRef = useRef<HTMLDivElement>(null);
+    const menuRef = useRef<HTMLUListElement>(null);
+    const [offset, setOffset] = useState(0);
+    useLayoutEffect(() => {
+        const box = boxRef.current;
+        const menu = menuRef.current;
+        if (!box || !menu) return;
+        const measure = () => setOffset(Math.max(0, Math.floor((box.clientHeight - NAV_BOX_PADDING_PX * 2 - menu.offsetHeight) / 2)));
+        measure();
+        if (typeof ResizeObserver === "undefined") return;
+        const observer = new ResizeObserver(measure);
+        observer.observe(box);
+        observer.observe(menu);
+        return () => observer.disconnect();
+    }, []);
+    return { boxRef, menuRef, offset };
+}
 
 interface SidebarNavItemProps {
     item: SidebarItem;
@@ -214,6 +242,9 @@ const AppSidebar = () => {
         !editing ? undefined : pickerCategoryForRail(url, activePanel) ? "lift" : url === activePanel ? "origin" : "cover";
 
     const { keyboard } = useKeyboard();
+    const navCenter = useWholePixelCenter();
+    // Owner review: ?railBar=flush|gap2|kiss (unset is flush).
+    const railBar = useMemo(() => reviewChoice(window.location.search, RAIL_BAR_PARAM, RAIL_BARS), []);
 
     // Alt-Repeat is an app preference, off by default. Turning it off while its
     // panel or editor is open closes them; the board's entries are untouched.
@@ -339,7 +370,8 @@ const AppSidebar = () => {
         // Above the page scrim while editing; its own scrim covers what the editor cannot use.
         // The spotlight rules take the rim and shadow off (data-spotlight-rail-frame).
         editing ? "z-[47]" : "z-11",
-        "fixed transition-[box-shadow,border-color] duration-300 ease-out border border-sidebar-border shadow-lg ml-2 h-[98vh] mt-[1vh] transition-all",
+        // Whole-pixel insets: the rail's surface spans 8px to 100vh - 8px, the same as the side panel.
+        "fixed transition-[box-shadow,border-color] duration-300 ease-out border border-sidebar-border shadow-lg ml-2 h-[calc(100vh-14px)] mt-[7px] transition-all",
         "rounded-3xl select-none"
     );
 
@@ -351,7 +383,8 @@ const AppSidebar = () => {
 
 
             <Sidebar rounded name="primary-nav" defaultOpen={false} collapsible="icon" hideGap className={sidebarClasses}
-                data-spotlight-rail-frame={editing ? "" : undefined}>
+                data-spotlight-rail-frame={editing ? "" : undefined}
+                data-rail-bar={railBar ?? undefined}>
                 {/* The rail is its own fixed layer above the page scrim, so it carries the
                     same scrim over its own surface, the same shape as it. */}
                 {editing && <SpotlightScrim className="absolute inset-0 z-[5]" />}
@@ -359,7 +392,7 @@ const AppSidebar = () => {
                     {/* Header section - Logo, Connect, Import/Export */}
                     <SidebarMenu>
                         {/* While editing, the logo stays under the scrim and is not a control. */}
-                        <SidebarMenuItem inert={editing}>
+                        <SidebarMenuItem inert={editing} data-spotlight={editing ? "cover" : undefined}>
                             <SidebarMenuButton
                                 asChild
                                 size="nav"
@@ -385,8 +418,8 @@ const AppSidebar = () => {
                     </SidebarMenu>
 
                     {/* Main navigation - vertically centered in available space */}
-                    <div className="flex-1 flex flex-col justify-center py-2">
-                        <SidebarMenu className="relative">
+                    <div ref={navCenter.boxRef} className="flex-1 flex flex-col py-2" style={{ paddingTop: NAV_BOX_PADDING_PX + navCenter.offset }}>
+                        <SidebarMenu ref={navCenter.menuRef} className="relative">
                             {/* While editing, the current category is marked by weight and the origin by its own bar. */}
                             {indicatorY !== -1 && !editing && <SlidingIndicator y={indicatorY} />}
 
@@ -421,7 +454,7 @@ const AppSidebar = () => {
                             ))}
 
                             {/* Divider between top section and middle section */}
-                            <div className="mx-4 my-2 h-[1px] bg-slate-400 dark:bg-neutral-600" />
+                            <div data-spotlight-rail-rule={editing ? "" : undefined} className="mx-4 my-2 h-[1px] bg-slate-400 dark:bg-neutral-600" />
 
                             {/* Middle section items (Special, Layer Keys, Mouse Keys, Tap Dances, Macros) */}
                             {middleSectionItems.map((item) => (
@@ -438,7 +471,7 @@ const AppSidebar = () => {
                                 />
                             ))}
 
-                            <div className="mx-4 my-2 h-[1px] bg-slate-400 dark:bg-neutral-600" />
+                            <div data-spotlight-rail-rule={editing ? "" : undefined} className="mx-4 my-2 h-[1px] bg-slate-400 dark:bg-neutral-600" />
 
                             {featureSidebarItems.map((item) => (
                                 <SidebarNavItem
@@ -454,7 +487,7 @@ const AppSidebar = () => {
                                 />
                             ))}
 
-                            <div className="mx-4 my-2 h-[1px] bg-slate-400 dark:bg-neutral-600" />
+                            <div data-spotlight-rail-rule={editing ? "" : undefined} className="mx-4 my-2 h-[1px] bg-slate-400 dark:bg-neutral-600" />
 
                             {layoutSidebarItems.map((item) => (
                                 <SidebarNavItem

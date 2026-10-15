@@ -131,3 +131,38 @@ export const SPOTLIGHT_NUDGE_EVENT = "keybard:binding-spotlight-nudge";
 export function nudgeBindingEditor(at?: { x: number; y: number }) {
     window.dispatchEvent(new CustomEvent(SPOTLIGHT_NUDGE_EVENT, { detail: at ?? null }));
 }
+
+/**
+ * How the rail lights its usable categories while editing (owner review:
+ * ?spotLight=text|tint|pill). Unset, each theme takes its own default: light
+ * shows ink labels on the scrim with a pill only on the current category and
+ * the origin ("text"); dark keeps a pill on every lit item ("pill").
+ */
+export const SPOT_LIGHTS = ["text", "tint", "pill"] as const;
+export type SpotLight = typeof SPOT_LIGHTS[number];
+export const SPOT_LIGHT_PARAM = "spotLight";
+
+/**
+ * Where the rail meets the picker panel while editing (owner review:
+ * ?railJoin=tuck|gutter). "tuck" (default) squares the rail's right corners
+ * under the panel; "gutter" moves the panel 8px clear of the rounded rail.
+ */
+export const RAIL_JOINS = ["tuck", "gutter"] as const;
+export type RailJoin = typeof RAIL_JOINS[number];
+export const RAIL_JOIN_PARAM = "railJoin";
+
+/**
+ * The rail's active bar, editing or not (owner review: ?railBar=flush|gap2|kiss).
+ * "flush" (default) sits on the rail's inner edge, 20px tall, 3px clear of the
+ * pill; "gap2" sits 3px in with a 2px gap; "kiss" is the earlier 26px bar 1px
+ * from the pill.
+ */
+export const RAIL_BARS = ["flush", "gap2", "kiss"] as const;
+export type RailBar = typeof RAIL_BARS[number];
+export const RAIL_BAR_PARAM = "railBar";
+
+/** A review param's value when it is one of the choices, otherwise null (the default). */
+export function reviewChoice<T extends string>(search: string, param: string, choices: readonly T[]): T | null {
+    const value = new URLSearchParams(search).get(param);
+    return (choices as readonly string[]).includes(value ?? "") ? value as T : null;
+}

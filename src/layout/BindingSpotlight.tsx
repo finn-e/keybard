@@ -5,6 +5,7 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import {
     bindingEditorKind, isBindingEditorOpen, nudgeBindingEditor, SPOTLIGHT_NUDGE_EVENT, spotlightHint, spotStrength,
+    reviewChoice, SPOT_LIGHTS, SPOT_LIGHT_PARAM, RAIL_JOINS, RAIL_JOIN_PARAM,
 } from "@/lib/bindingSpotlight";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { cn } from "@/lib/utils";
@@ -115,9 +116,16 @@ export default function BindingSpotlight() {
         root.setAttribute("data-binding-spotlight", "");
         const strength = spotStrength(window.location.search);
         if (strength !== "medium") root.setAttribute("data-spot", strength);
+        // Owner review choices; unset means each theme's default (see index.css).
+        const lit = reviewChoice(window.location.search, SPOT_LIGHT_PARAM, SPOT_LIGHTS);
+        if (lit) root.setAttribute("data-spot-lit", lit);
+        const join = reviewChoice(window.location.search, RAIL_JOIN_PARAM, RAIL_JOINS);
+        if (join) root.setAttribute("data-rail-join", join);
         return () => {
             root.removeAttribute("data-binding-spotlight");
             root.removeAttribute("data-spot");
+            root.removeAttribute("data-spot-lit");
+            root.removeAttribute("data-rail-join");
         };
     }, [active]);
 

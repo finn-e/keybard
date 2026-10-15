@@ -94,9 +94,21 @@
     /* Lit surfaces (panel, L tray, rail) and lit rail items. */
     --kb-spot-radius: 18px;
     --kb-spot-pill-radius: 10px;
-    /* The bar on the rail item the editor was opened from. */
-    --kb-spot-bar-radius: 2px;
+    /* The rail while editing is one painted shape: its surface pre-dimmed by the scrim. */
+    --kb-spot-rail-bg: color-mix(in srgb, rgb(var(--kb-scrim-rgb)) calc(var(--kb-scrim-alpha) * 100%), var(--kb-surface));
+    /* Lit rail pills: 36px tall (5px above and below the 26px item), 6px in from the visible rail. */
+    --kb-spot-pill-inset-y: 5px;
+    --kb-spot-pill-left: 6px;
+    /* A half-lit pill (?spotLight=tint, and the hover of a pill-less lit item). */
+    --kb-spot-pill-tint: color-mix(in srgb, var(--kb-surface) 55%, transparent);
+    /* The rail's active bar, editing or not (?railBar=flush|gap2|kiss): 3px wide, capsule ends. */
+    --kb-spot-bar-radius: 1.5px;
+    --kb-rail-bar-x: 0px;
+    --kb-rail-bar-h: 20px;
+    /* Lit rail labels: on a pill, on the bare scrim (?spotLight=text), on a tinted pill. */
     --kb-spot-rail-fg: #6b7079;
+    --kb-spot-rail-ink: #111214;
+    --kb-spot-rail-fg-tint: #4a4f57;
     /* The selected slot's red, as a named token. */
     --kb-pick-accent: #ef4444;
     /* Back arrow highlight when a click lands under the spotlight (new; the brand green, beside the brand tokens). */
@@ -193,6 +205,8 @@
     --kb-scrim-rgb: 0 0 0;
     --kb-scrim-alpha: 0.58;
     --kb-spot-rail-fg: #a3a6ab;
+    --kb-spot-rail-ink: #a3a6ab;
+    --kb-spot-rail-fg-tint: #a3a6ab;
     --kb-back-highlight: #0bb48d;
     --kb-back-highlight-fg: #ffffff;
     --kb-back-highlight-soft: rgb(11 180 141 / 0.22);
@@ -395,6 +409,8 @@ html.dark {
      Covered controls inside it darken by the scrim's own strength.
    A click on anything covered pulses the back arrow (see BindingSpotlight). */
 :root[data-spot="soft"] { --kb-scrim-alpha: 0.32; }
+/* White pills on every lit item read as slabs on a stronger light scrim, so light pills take the soft one. */
+:root:not(.dark)[data-spot-lit="pill"]:not([data-spot]) { --kb-scrim-alpha: 0.32; }
 :root[data-spot="deep"] { --kb-scrim-alpha: 0.52; }
 :root.dark[data-spot="soft"] { --kb-scrim-alpha: 0.48; }
 :root.dark[data-spot="deep"] { --kb-scrim-alpha: 0.68; }
@@ -421,18 +437,45 @@ html.dark {
 :root[data-binding-spotlight] svg[data-spotlight-surface] path {
     stroke: none;
 }
-/* The rail while editing: its own surface under the scrim, edge to edge, no rim or shadow.
-   The rim is transparent so the surface and its scrim are one shape (no seam at the corners). */
+/* The rail while editing: one painted shape, its surface pre-dimmed by the scrim, no rim or
+   shadow. Its own scrim only takes clicks; covered items and rules darken by the scrim's strength,
+   as [data-spotlight-cover] does, so no edge pixel is painted twice (no light halo at the corners). */
 :root[data-binding-spotlight] [data-spotlight-rail-frame] {
     border-color: transparent;
     box-shadow: none;
-    /* The panel starts 8px inside the rail's right edge; pills end 8px clear of it. */
-    --kb-spot-pill-right: 16px;
+    /* The pills end 6px clear of the visible rail's right edge. */
+    --kb-spot-pill-right: 6px;
 }
 :root[data-binding-spotlight] [data-spotlight-rail-frame],
 :root[data-binding-spotlight] [data-spotlight-rail-frame] > [data-sidebar="sidebar"],
 :root[data-binding-spotlight] [data-spotlight-rail-frame] [data-binding-scrim] {
     border-radius: var(--kb-spot-radius);
+}
+:root[data-binding-spotlight] [data-spotlight-rail-frame] > [data-sidebar="sidebar"] {
+    background-color: var(--kb-spot-rail-bg);
+}
+:root[data-binding-spotlight] [data-spotlight-rail-frame] [data-binding-scrim] {
+    background-color: transparent;
+}
+:root[data-binding-spotlight] [data-spotlight-rail-frame] [data-spotlight="cover"],
+:root[data-binding-spotlight] [data-spotlight-rail-frame] [data-spotlight-rail-rule] {
+    filter: brightness(calc(1 - var(--kb-scrim-alpha)));
+}
+/* Rail and side panel (?railJoin=tuck|gutter). tuck (default): the rail's right corners go
+   square under the panel, which starts 7px inside the rail, so the two meet with no wedge and
+   the visible rail ends at the panel's edge. gutter: the panel starts 8px clear of the rounded
+   rail. Both sit at the same whole-pixel top and bottom (8px). */
+:root[data-binding-spotlight]:not([data-rail-join="gutter"]):has(aside.detail-panel[data-spotlight-surface="rounded"]) [data-spotlight-rail-frame] {
+    --kb-spot-pill-right: 13px;
+}
+:root[data-binding-spotlight]:not([data-rail-join="gutter"]):has(aside.detail-panel[data-spotlight-surface="rounded"]) [data-spotlight-rail-frame],
+:root[data-binding-spotlight]:not([data-rail-join="gutter"]):has(aside.detail-panel[data-spotlight-surface="rounded"]) [data-spotlight-rail-frame] > [data-sidebar="sidebar"],
+:root[data-binding-spotlight]:not([data-rail-join="gutter"]):has(aside.detail-panel[data-spotlight-surface="rounded"]) [data-spotlight-rail-frame] [data-binding-scrim] {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+:root[data-binding-spotlight][data-rail-join="gutter"] aside.detail-panel[data-spotlight-surface="rounded"] {
+    margin-left: 15px;
 }
 /* The picker sliding over the plain panel keeps the panel's corners. */
 :root[data-binding-spotlight] [data-spotlight-surface="rounded"] > [data-picker-overlay],
@@ -443,7 +486,24 @@ html.dark {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
 }
-/* Lit rail items: a surface pill inside the rail padding, clear of the panel. */
+/* The bar's place (?railBar=): flush on the rail's inner edge (default), 3px in, or the earlier
+   26px bar 4px in. The pill starts 3px, 2px or 1px after it. */
+[data-rail-bar="gap2"] {
+    --kb-rail-bar-x: 3px;
+    --kb-spot-pill-left: 8px;
+}
+[data-rail-bar="kiss"] {
+    --kb-rail-bar-x: 4px;
+    --kb-rail-bar-h: 26px;
+    --kb-spot-pill-left: 8px;
+}
+/* Lit rail items (?spotLight=text|tint|pill). Every lit item is above the rail's scrim; how it
+   reads as lit is the review choice:
+   - pill (dark default): a surface pill on every lit item, label in --kb-spot-rail-fg.
+   - text (light default): a pill only on the current category and the origin; the other lit
+     items are ink labels on the bare scrim, with a half-lit pill on hover.
+   - tint: the other lit items get a half-lit pill and a darker label.
+   Pills are 36px when only two show (text), 40px on a 2px gap when every lit item has one. */
 [data-spotlight-rail] {
     position: relative;
     z-index: 6;
@@ -452,32 +512,61 @@ html.dark {
     content: "";
     position: absolute;
     z-index: -1;
-    top: -5px;
-    bottom: -5px;
-    left: 8px;
-    right: var(--kb-spot-pill-right, 8px);
+    top: calc(var(--kb-spot-pill-inset-y) * -1);
+    bottom: calc(var(--kb-spot-pill-inset-y) * -1);
+    left: var(--kb-spot-pill-left);
+    right: var(--kb-spot-pill-right, 6px);
     border-radius: var(--kb-spot-pill-radius);
     background-color: var(--kb-surface);
 }
 [data-spotlight-rail] [data-sidebar="menu-button"] {
     color: var(--kb-spot-rail-fg);
 }
-[data-spotlight-rail][data-spotlight-current] [data-sidebar="menu-button"] {
+:root.dark:not([data-spot-lit]),
+:root[data-spot-lit="pill"],
+:root[data-spot-lit="tint"] {
+    --kb-spot-pill-inset-y: 7px;
+    --kb-spot-pill-radius: 11px;
+}
+:root:not(.dark):not([data-spot-lit]) [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"])::before,
+:root[data-spot-lit="text"] [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"])::before {
+    background-color: transparent;
+}
+:root:not(.dark):not([data-spot-lit]) [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"]):hover::before,
+:root[data-spot-lit="text"] [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"]):hover::before,
+:root[data-spot-lit="tint"] [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"])::before {
+    background-color: var(--kb-spot-pill-tint);
+}
+:root:not(.dark):not([data-spot-lit]) [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"]) [data-sidebar="menu-button"],
+:root[data-spot-lit="text"] [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"]) [data-sidebar="menu-button"] {
+    color: var(--kb-spot-rail-ink);
+}
+:root[data-spot-lit="tint"] [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"]) [data-sidebar="menu-button"] {
+    color: var(--kb-spot-rail-fg-tint);
+}
+/* The current category and the origin: ink, bold, on a full pill. */
+[data-spotlight-rail][data-spotlight-current] [data-sidebar="menu-button"],
+[data-spotlight-rail="origin"] [data-sidebar="menu-button"] {
     color: var(--kb-ink);
     font-weight: 600;
 }
-/* The item the editor was opened from carries the rail's active bar. */
+/* The item the editor was opened from carries the rail's active bar, in the same place and
+   shape as the bar outside the editor. */
 [data-spotlight-rail="origin"]::after {
     content: "";
     position: absolute;
-    left: 4px;
+    left: var(--kb-rail-bar-x);
     top: 0;
     bottom: 0;
     margin: auto 0;
     width: 3px;
-    height: 26px;
+    height: var(--kb-rail-bar-h);
     border-radius: var(--kb-spot-bar-radius);
     background-color: var(--kb-ink);
+}
+/* Lit surfaces are flat: the floating editor card drops its shadow on the scrim. */
+:root[data-binding-spotlight] .detail-panel .binding-workspace {
+    box-shadow: none;
 }
 /* An editor workspace beside the side panel joins it as one lit surface: the
    pair has the panel's outer corners, with a square seam between them. */
