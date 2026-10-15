@@ -20,17 +20,24 @@ import {
     colorClasses,
     isHexColor,
     textClassForHex,
-    layerColors,
     getColorByName
 } from "@/utils/colors";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { svalService } from "@/services/sval.service";
-// import { InfoIcon } from "./icons/InfoIcon";
 import { usePanels } from "@/contexts/PanelsContext";
 import { useChanges } from "@/hooks/useChanges";
 import { usePreviewedLayerColors } from "@/hooks/useLayerColorPreview";
 import { useIsDark } from "@/lib/theme";
+import { useComboPreview, type PreviewFocus } from "@/contexts/ComboPreviewContext";
+import { buildComboMembershipIndex, membershipCode, type ComboMembership } from "@/utils/combo-membership";
+import { assignComboHues } from "@/utils/combo-hues";
+import { keyComboAriaLabel } from "@/utils/combo-labels";
+import { keyLabel } from "@/utils/key-inspect";
+import { KeyInspector } from "@/components/combo/KeyInspector";
+import { useFoldMotion } from "@/hooks/useFoldMotion";
+import type { KeyComboProps } from "./Key";
 import { dark3DLabelColor, needsDarkIndicatorOutline, screenedBackdropHex } from "./layer3DColors";
+
+const NO_MEMBERSHIPS: ComboMembership[] = [];
 
 const TEXT_CLASS_TO_HEX: Record<string, string> = {
     "text-white": "#ffffff",
@@ -54,6 +61,8 @@ interface KeyboardProps {
     isToggling3D?: boolean;
     showDropTargetHighlight?: boolean;
     isLayerDragActive?: boolean;
+    /** Render the key inspector under this view (the primary view only, so it shows once). */
+    showKeyInspector?: boolean;
     /** Draw each hand's pointing slot (live module animation). Only the primary layer view does, so stacked and 3D views don't each run their own animations. */
 }
 
@@ -74,6 +83,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
     isToggling3D = false,
     showDropTargetHighlight = false,
     isLayerDragActive = false,
+    showKeyInspector = false,
 }) => {
     const {
         selectKeyboardKey,
@@ -85,6 +95,52 @@ export const Keyboard: React.FC<KeyboardProps> = ({
     const { activePanel, itemToEdit } = usePanels();
     const { hasPendingChangeForKey } = useChanges();
     const layerColorNames = usePreviewedLayerColors(keyboard.cosmetic?.layer_colors);
+
+    // Combo folded corners and preview (one setting owns whether they show; see ComboPreviewContext).
+    const comboPreview = useComboPreview();
+    const comboMembershipIndex = useMemo(() => buildComboMembershipIndex(keyboard.combos), [keyboard.combos]);
+    const comboHues = useMemo(
+        () => assignComboHues(keyboard, comboPreview.palette),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [keyboard.combos, keyboard.keymap, keyboard.cosmetic?.layer_colors, comboPreview.palette],
+    );
+    // "Small" folds grow while the pointer moves over the layout (no re-render per move).
+    const layoutRef = useRef<HTMLDivElement>(null);
+    useFoldMotion(layoutRef, comboPreview.mode === "small");
+
+    // The layout is one Tab stop (roving tabindex): arrows, Home and End move between keys.
+    const [tabStopPos, setTabStopPos] = useState<number | null>(null);
+    const navigateFrom = (fromPos: number, key: string) => {
+        const root = layoutRef.current;
+        if (!root) return;
+        const els = Array.from(root.querySelectorAll<HTMLElement>("[data-inspect-pos]"));
+        if (!els.length) return;
+        const posOf = (el: HTMLElement) => Number(el.dataset.inspectPos);
+        const byPos = [...els].sort((a, b) => posOf(a) - posOf(b));
+        const cur = byPos.findIndex(el => posOf(el) === fromPos);
+        let next: HTMLElement | undefined;
+        if (key === "Home") next = byPos[0];
+        else if (key === "End") next = byPos[byPos.length - 1];
+        else if (key === "ArrowLeft") next = byPos[Math.max(0, cur - 1)];
+        else if (key === "ArrowRight") next = byPos[Math.min(byPos.length - 1, cur + 1)];
+        else if (cur >= 0) {
+            // Up and Down: the geometrically nearest key above or below.
+            const r0 = byPos[cur].getBoundingClientRect();
+            const cx = r0.left + r0.width / 2, cy = r0.top + r0.height / 2;
+            const dir = key === "ArrowUp" ? -1 : 1;
+            let best = Infinity;
+            for (const el of els) {
+                const r = el.getBoundingClientRect();
+                const dy = (r.top + r.height / 2 - cy) * dir;
+                if (dy <= r0.height / 4) continue;
+                const d = dy + Math.abs(r.left + r.width / 2 - cx) * 2;
+                if (d < best) { best = d; next = el; }
+            }
+        }
+        if (!next) return;
+        setTabStopPos(posOf(next));
+        next.focus();
+    };
 
     // Use dynamic keylayout from fragments if available, otherwise fallback to hardcoded layout
     const { keyboardLayout, useFragmentLayout } = useMemo(() => {
@@ -351,6 +407,8 @@ export const Keyboard: React.FC<KeyboardProps> = ({
         keyboard.keymap?.[selectedLayer] || [],
         [keyboard.keymap, selectedLayer]
     );
+    // Until a key has been focused, the layout's Tab stop is its first key in matrix order.
+    const firstKeyPos = useMemo(() => Math.min(...Object.keys(keyboardLayout).map(Number)), [keyboardLayout]);
 
     const isKeySelected = (row: number, col: number) => {
         return selectedTarget?.type === "keyboard" &&
@@ -639,6 +697,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
     return (
         <div className="p-4 pointer-events-none" data-keyboard-instance={instanceId}>
             <div
+                ref={layoutRef}
                 className="keyboard-layout relative pointer-events-none"
                 style={{
                     width: `${keyboardSize.width}px`,
@@ -773,6 +832,44 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                     const keycodeName = getKeycodeName(keycode);
                     const label = getLabelForKeycode(keycodeName, internationalLayout) || defaultLabel;
 
+                    // Inspector and combos for this key. A transparent key describes, and shows the
+                    // combos of, the key it falls through to.
+                    const effectiveKey = keycode === KC_TRNS && selectedLayer > 0 ? findEffectiveKey(selectedLayer, pos) : null;
+                    const inherited = effectiveKey?.keycode;
+                    const comboCode = membershipCode(Number(keycode), inherited == null ? undefined : Number(inherited));
+                    const memberships = comboMembershipIndex.get(comboCode) ?? NO_MEMBERSHIPS;
+                    const comboKeycode = getKeycodeName(comboCode);
+                    const focus: PreviewFocus = {
+                        kind: "key",
+                        id: `${instanceId ?? "kb"}:${selectedLayer}:${row}:${col}`,
+                        combos: memberships.map(m => m.index),
+                        keycode: comboKeycode,
+                        key: {
+                            layer: selectedLayer, row, col, code: Number(keycode),
+                            effective: effectiveKey ? { code: Number(effectiveKey.keycode), layer: effectiveKey.sourceLayer } : undefined,
+                        },
+                    };
+                    const keyName = keyLabel(keyboard, comboCode > KC_TRNS ? comboCode : Number(keycode), internationalLayout);
+                    const combo: KeyComboProps = {
+                        memberships: comboPreview.enabled ? memberships : NO_MEMBERSHIPS,
+                        hues: comboHues,
+                        focusSet: comboPreview.focusSet,
+                        mode: comboPreview.mode,
+                        palette: comboPreview.palette,
+                        ariaLabel: memberships.length ? keyComboAriaLabel(keyName, memberships) : keyName,
+                        pinned: comboPreview.isPinned(focus.id),
+                        tabStop: (tabStopPos ?? firstKeyPos) === pos,
+                        onNavigate: (key) => navigateFrom(pos, key),
+                        onEnter: () => comboPreview.enter(focus),
+                        onLeave: comboPreview.leave,
+                        onFocus: (el) => { setTabStopPos(pos); comboPreview.focusIn(focus, el); },
+                        onBlur: comboPreview.blurOut,
+                        onToggle: () => {
+                            // While a combo editor is open, clicks assign keys; they do not pin.
+                            if (!isTransmitting) comboPreview.togglePin(focus);
+                        },
+                    };
+
                     // Styles for transmitting mode
                     const activeLayerColor = isTransmitting ? "sidebar" : layerColor;
                     const headerClass = headerClasses[activeLayerColor] || headerClasses["primary"];
@@ -841,6 +938,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                             h={layout.h}
                             keycode={keycodeName}
                             label={label}
+                            combo={combo}
                             row={row}
                             col={col}
                             data-key-x={layout.x}
@@ -849,6 +947,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                             data-key-h={layout.h}
                             data-key-label={label}
                             data-keycode={keycodeName}
+                            data-inspect-pos={pos}
                             selected={isSelectedOrDropTarget}
                             onClick={handleKeyClick}
                             onDoubleClick={isGhostKey ? () => {
@@ -909,12 +1008,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                     const ghostHeaderClassFull = `${ghostHeaderClass} ${ghostHoverHeaderClass}`;
 
 
-                    const sourceLayerName = svalService.getLayerName(keyboard, ghostSourceLayer);
-                    const tooltipText = sourceLayerName.startsWith("Layer") ? sourceLayerName : `Layer ${sourceLayerName}`;
-
                     // Calculate darker border color
-                    const layerColorObj = layerColors.find(c => c.name === ghostLayerColor) || layerColors[0];
-                    const hex = layerColorObj.hex;
                     const darkBorderColor = getDarkLayerHex(ghostLayerColor);
 
                     const ghostOverlay = (
@@ -926,6 +1020,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                             h={layout.h}
                             keycode={ghostKeycodeName}
                             label={ghostLabel}
+                            combo={combo && { ...combo, interactive: false }}
                             row={row}
                             col={col}
                             onClick={handleKeyClick} // Clicking ghost selects the key slot on CURRENT layer
@@ -976,7 +1071,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                             variant={keyVariant}
                             layerIndex={selectedLayer} // Important: belongs to current layer logic
                             hasPendingChange={hasPendingChangeForKey(selectedLayer, row, col)}
-                            disableTooltip={true} // Disable native tooltip, we use custom one
+                            disableTooltip={true}
                         />
                     );
 
@@ -990,34 +1085,32 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                         transform: (is3DMode && isThumbCluster) ? `translateY(${THUMB_3D_SHIFT_PX}px)` : undefined,
                     };
 
+                    // The source layer is named in the key inspector ("Falls Through ... from Layer m").
                     return (
-                        <Tooltip delayDuration={0} key={`${row}-${col}-fragment`}>
-                            <TooltipTrigger asChild>
-                                <div
-                                    className="group pointer-events-auto"
-                                    style={wrapperStyle}
-                                    onDoubleClick={() => {
-                                        if (onGhostNavigate) {
-                                            onGhostNavigate(ghostSourceLayer);
-                                        } else {
-                                            setSelectedLayer(ghostSourceLayer);
-                                        }
-                                    }}
-                                >
-                                    {React.cloneElement(standardKey, { x: 0, y: 0 })}
-                                    {React.cloneElement(ghostOverlay, { x: 0, y: 0 })}
-                                </div>
-                            </TooltipTrigger>
-                            <TooltipContent
-                                className={cn(`bg-kb-${ghostLayerColor} border-none`, colorClasses[ghostLayerColor] || "text-white")}
-                                arrowStyle={{ backgroundColor: hex, fill: 'transparent' }}
-                                side="top"
-                            >
-                                {tooltipText}
-                            </TooltipContent>
-                        </Tooltip>
+                        <div
+                            key={`${row}-${col}-fragment`}
+                            className="group pointer-events-auto"
+                            style={wrapperStyle}
+                            onDoubleClick={() => {
+                                if (onGhostNavigate) {
+                                    onGhostNavigate(ghostSourceLayer);
+                                } else {
+                                    setSelectedLayer(ghostSourceLayer);
+                                }
+                            }}
+                        >
+                            {React.cloneElement(standardKey, { x: 0, y: 0 })}
+                            {React.cloneElement(ghostOverlay, { x: 0, y: 0 })}
+                        </div>
                     );
                 })}
+                {showKeyInspector && (
+                    <KeyInspector
+                        keyboard={keyboard}
+                        hues={comboHues}
+                        className="absolute left-0 top-full mt-3 z-30 pointer-events-none"
+                    />
+                )}
             </div>
 
         </div>

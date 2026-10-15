@@ -60,9 +60,9 @@ export const getPanelTitle = (panel: string | null | undefined, menus?: CustomUI
     return titles[panel] ?? "Details";
 };
 
-export function PanelContent({ panel, horizontal = false, isPicker = false }: { panel: string | null | undefined; horizontal?: boolean; isPicker?: boolean }) {
+export function PanelContent({ panel, horizontal = false, isPicker = false, trayPortal = false }: { panel: string | null | undefined; horizontal?: boolean; isPicker?: boolean; /** Standard Keys only: put the keyboard in the L-shaped picker's tray. */ trayPortal?: boolean }) {
     if (isPicker) {
-        const pickers = {keyboard: BasicKeyboards, layers: LayersPanel, macros: MacrosPanel, qmk: QmkKeyPanel, oneshot: OneShotComposerPanel, special: SpecialKeysPanel, pointing: PointingPanel, mouse: MousePanel};
+        const pickers = {keyboard: BasicKeyboards, layers: LayersPanel, macros: MacrosPanel, tapdances: TapdancePanel, qmk: QmkKeyPanel, oneshot: OneShotComposerPanel, special: SpecialKeysPanel, pointing: PointingPanel, mouse: MousePanel};
         const Picker = pickers[panel as keyof typeof pickers] ?? BasicKeyboards;
         return <Picker isPicker />;
     }
@@ -79,6 +79,7 @@ export function PanelContent({ panel, horizontal = false, isPicker = false }: { 
         typing: TypingBehaviorPanel, scanlab: ScanLabPanel, settings: SettingsPanel,
         quickstart: QuickStartPanel, about: AboutPanel,
     };
+    if (panel === "keyboard") return <BasicKeyboards trayPortal={trayPortal} />;
     const Content = panels[panel as keyof typeof panels];
     return Content ? <Content /> : <p className="p-4 text-sm text-muted-foreground">Select a panel to view its settings.</p>;
 }

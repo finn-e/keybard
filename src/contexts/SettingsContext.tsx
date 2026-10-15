@@ -6,6 +6,9 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 
 import { SettingsService } from "@/services/settings.service";
 import { DEFAULT_THEME_PREF, THEME_SETTING_NAME } from "@/lib/theme";
+import { COMBO_EDITOR_PLACEMENT_SETTING, DEFAULT_COMBO_EDITOR_PLACEMENT } from "@/lib/comboEditorPlacement";
+import { DEFAULT_SHOW_ALT_REPEAT, SHOW_ALT_REPEAT_SETTING } from "@/lib/altRepeatVisibility";
+import { COMBO_COLORBLIND_SETTING, COMBO_INDICATOR_SETTING, DEFAULT_COMBO_INDICATOR_MODE } from "@/lib/comboIndicators";
 
 // Settings definitions - single source of truth
 export const SETTINGS: SettingDefinition[] = [
@@ -32,6 +35,46 @@ export const SETTINGS: SettingDefinition[] = [
         label: "Typing Binds a Key",
         description: "Select a key, then type to assign it. You can include held modifiers.",
         defaultValue: true,
+        type: "boolean",
+    },
+    {
+        name: COMBO_INDICATOR_SETTING,
+        label: "Combo Indicators",
+        description: "Fold the corner of keys in a combo. Small grows while you move over the keyboard.",
+        type: "select",
+        items: [
+            { label: "Off", value: "off" },
+            { label: "Small", value: "small" },
+            { label: "Large", value: "large" },
+        ],
+        defaultValue: DEFAULT_COMBO_INDICATOR_MODE,
+    },
+    {
+        name: COMBO_COLORBLIND_SETTING,
+        label: "Colorblind-Friendly Combo Colors",
+        description: "Combo colors that stay apart with color blindness, each with its own texture.",
+        defaultValue: false,
+        type: "boolean",
+    },
+    {
+        name: COMBO_EDITOR_PLACEMENT_SETTING,
+        label: "Binding Editor Placement",
+        description: "Where binding editors sit while you pick keys.",
+        type: "select",
+        items: [
+            { label: "Under a half", value: "half" },
+            { label: "Below the keyboard", value: "dock" },
+            { label: "Under the combo's keys", value: "anchored" },
+            { label: "Floating", value: "float" },
+            { label: "In the side panel", value: "panel" },
+        ],
+        defaultValue: DEFAULT_COMBO_EDITOR_PLACEMENT,
+    },
+    {
+        name: SHOW_ALT_REPEAT_SETTING,
+        label: "Show Alt-Repeat",
+        description: "Add Alt-Repeat to the rail.",
+        defaultValue: DEFAULT_SHOW_ALT_REPEAT,
         type: "boolean",
     },
     {
@@ -140,7 +183,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         name: "general",
         label: "General",
         icon: SettingsIcon,
-        settings: [THEME_SETTING_NAME, "typing-binds-key", "serial-assignment", "international-keyboards", "qmk-settings", "print"],
+        settings: [THEME_SETTING_NAME, "typing-binds-key", COMBO_INDICATOR_SETTING, COMBO_COLORBLIND_SETTING, COMBO_EDITOR_PLACEMENT_SETTING, SHOW_ALT_REPEAT_SETTING, "serial-assignment", "international-keyboards", "qmk-settings", "print"],
     },
     {
         name: "fragments",

@@ -11,6 +11,7 @@ const panels = vi.hoisted(() => ({
 vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => false }));
 vi.mock('@/features/trainer/OverlayDialog', () => ({ OverlayDialog: () => null, overlayRequested: () => false }));
 vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ keyboard: null }) }));
+vi.mock('@/contexts/SettingsContext', () => ({ useSettings: () => ({ getSetting: () => undefined }) }));
 const firmware = vi.hoisted(() => ({ dot: false }));
 vi.mock('@/features/firmware/FirmwareUpdateProvider', () => ({ useFirmwareUpdates: () => ({ status: { dot: firmware.dot } }) }));
 vi.mock('@/contexts/PanelsContext', () => ({ usePanels: () => ({
@@ -23,7 +24,7 @@ const renderRail = () => render(<SidebarProvider><AppSidebar /></SidebarProvider
 beforeEach(() => { vi.clearAllMocks(); panels.activePanel = null; panels.open = false; firmware.dot = false; takeSettingsSectionRequest(); });
 
 describe('rail homes for what left Settings', () => {
-    it('lists Typing Behavior after Overrides, and Clusters beside Layouts', () => {
+    it('lists Typing Behavior after Overrides (Alt-Repeat off), and Clusters beside Layouts', () => {
         renderRail();
         const names = screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'));
         expect(names.indexOf('Typing Behavior')).toBe(names.indexOf('Overrides') + 1);

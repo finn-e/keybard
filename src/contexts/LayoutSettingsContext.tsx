@@ -5,6 +5,7 @@ import {
     DEFAULT_KEY_SIZE, DEFAULT_PANEL_POSITION, isKeySizePreference, isPanelPositionPreference,
     KEY_SIZE_SETTING, PANEL_POSITION_SETTING,
 } from "@/lib/appearance-settings";
+import { autoKeySizeForWidth } from "@/lib/pickerShape";
 
 export type KeyVariant = "default" | "medium" | "small";
 export type LayoutMode = "sidebar" | "bottombar";
@@ -17,6 +18,8 @@ interface MeasuredDimensions {
     keyboardHeights: { default: number; medium: number; small: number };
     // Raw widths without squeeze reduction - used for squeeze calculation
     rawKeyboardWidths?: { default: number; medium: number; small: number };
+    // Auto picks by width alone (the L picker: the layout keeps the height it needs).
+    widthOnly?: boolean;
 }
 
 interface LayoutSettingsContextType {
@@ -141,7 +144,9 @@ export const LayoutSettingsProvider: React.FC<{ children: ReactNode }> = ({ chil
                 containerWidth >= widths[size] && containerHeight >= heights[size];
 
             let bestSize: KeyVariant = "small";
-            if (fitsAt("default")) {
+            if (measured.widthOnly) {
+                bestSize = autoKeySizeForWidth(containerWidth, widths);
+            } else if (fitsAt("default")) {
                 bestSize = "default";
             } else if (fitsAt("medium")) {
                 bestSize = "medium";

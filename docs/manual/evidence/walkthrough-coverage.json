@@ -17,7 +17,7 @@
   },
   "override-action": {
     "title": "Make Shift + Backspace send Delete",
-    "description": "Enable the entry, choose Backspace and Delete, and select Shift in both Trigger and Suspended. Suspending Shift means the replacement is Delete without Shift."
+    "description": "Enable the entry, choose Backspace and Delete, and select Shift in both Trigger and Suppressed. Suppressing Shift means the replacement is Delete without Shift."
   },
   "leader-action": {
     "title": "Set up Leader, A, B",

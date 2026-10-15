@@ -1,4 +1,4 @@
-import { FC, useEffect, useState, useRef } from "react";
+import { FC, ReactNode, useEffect, useState, useRef } from "react";
 
 import PlusIcon from "@/components/icons/Plus";
 import { useKeyBinding } from "@/contexts/KeyBindingContext";
@@ -6,13 +6,77 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { DragItem } from "@/contexts/DragContext";
 import { MacroAction } from "@/types/keyboard.types";
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, ArrowRight, Plus, X } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import MacroEditorKey from "./MacroEditorKey";
 import MacroEditorText from "./MacroEditorText";
 import { useBindingChanges } from "@/hooks/useBindingChanges";
 import { isEditorInput } from "@/utils/editor-input";
+import EditorKey from "./EditorKey";
+import { BAR_KEY_PX, BAR_KEY_SIZE, BAR_KEY_VARIANT, BarEnd, BarRow, BarSep, BarSlot } from "./EditorBar";
 
-const MacroEditor: FC = () => {
+const ADD_TYPES = [
+    { type: "tap", label: "Key Tap" },
+    { type: "down", label: "Key Down" },
+    { type: "up", label: "Key Up" },
+    { type: "text", label: "Text" },
+    { type: "delay", label: "Delay" },
+] as const;
+
+interface Props {
+    /** The compact bar of the side-panel placement, with these controls at the row's end. */
+    bar?: boolean;
+    barEnd?: ReactNode;
+}
+
+/** A text or delay action's field in the bar, with a remove button on hover. */
+const BarTextAction: FC<{ type: string; value: string | number; onChange: (value: string) => void; onDelete: () => void; autoFocus: boolean }> = ({ type, value, onChange, onDelete, autoFocus }) => {
+    const ref = useRef<HTMLTextAreaElement & HTMLInputElement>(null);
+    useEffect(() => {
+        if (autoFocus && ref.current) {
+            ref.current.focus();
+            const len = String(value).length;
+            ref.current.setSelectionRange?.(len, len);
+        }
+    }, [autoFocus]);
+    const label = type === "delay" ? "Delay (ms)" : "Text";
+    return (
+        <BarSlot label={label}>
+            <div className="relative group/action">
+                {type === "text" ? (
+                    <Textarea
+                        ref={ref}
+                        aria-label="Macro text"
+                        rows={1}
+                        value={String(value)}
+                        onChange={(e) => onChange(e.target.value)}
+                        className="w-36 min-h-10 resize-none px-2 py-2 bg-kb-surface text-kb-ink text-sm select-text"
+                    />
+                ) : (
+                    <Input
+                        ref={ref}
+                        aria-label="Macro delay in milliseconds"
+                        value={String(value)}
+                        onChange={(e) => onChange(e.target.value)}
+                        className="w-16 h-10 px-1 text-center bg-kb-surface text-kb-ink text-sm select-text"
+                    />
+                )}
+                <button
+                    type="button"
+                    aria-label={`Remove ${label.toLowerCase()}`}
+                    onClick={onDelete}
+                    className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-kb-gray-medium text-gray-400 dark:text-neutral-400 hover:bg-red-500 hover:text-white opacity-0 group-hover/action:opacity-100 focus-visible:opacity-100 transition-opacity"
+                >
+                    <X className="w-3 h-3" />
+                </button>
+            </div>
+        </BarSlot>
+    );
+};
+
+const MacroEditor: FC<Props> = ({ bar = false, barEnd }) => {
     const [actions, setActions] = useState<MacroAction[]>([]);
     const [focusIndex, setFocusIndex] = useState<number | null>(null);
     const hasAppliedInitialSelection = useRef(false);
@@ -173,6 +237,73 @@ const MacroEditor: FC = () => {
             }
         }
     };
+
+    // Bar: the actions in order in one row that wraps, an add menu, controls at the end.
+    if (bar) {
+        return (
+            <BarRow label="Macro actions">
+                {actions.map((item, index) => {
+                    const [type, value] = item;
+                    const isKey = ["down", "up", "tap"].includes(type);
+                    return [
+                        index > 0 && <BarSep key={`sep${index}`}><ArrowRight /></BarSep>,
+                        isKey ? (
+                            <BarSlot key={index} label={type.charAt(0).toUpperCase() + type.slice(1)}>
+                                <EditorKey
+                                    keycode={(value as string) || "KC_NO"}
+                                    selected={selectedTarget?.type === "macro" && selectedTarget.macroId === itemToEdit && selectedTarget.macroIndex === index}
+                                    onClick={() => {
+                                        selectMacroKey(itemToEdit!, index);
+                                        setFocusIndex(null);
+                                    }}
+                                    onClear={() => handleDeleteItem(index)}
+                                    clearOnDragOff={false}
+                                    onDrop={(dragged) => handleDrop(index, dragged)}
+                                    size={BAR_KEY_SIZE}
+                                    trashCorner
+                                    unitSize={BAR_KEY_PX}
+                                    variant={BAR_KEY_VARIANT}
+                                    wrapperClassName={`relative ${BAR_KEY_SIZE}`}
+                                    editorType="macro"
+                                    editorId={itemToEdit!}
+                                    editorSlot={index}
+                                />
+                            </BarSlot>
+                        ) : (
+                            <BarTextAction
+                                key={index}
+                                type={type}
+                                value={value}
+                                onChange={(v) => handleTextChange(index, v)}
+                                onDelete={() => handleDeleteItem(index)}
+                                autoFocus={index === focusIndex}
+                            />
+                        ),
+                    ];
+                })}
+                {actions.length > 0 && <BarSep><ArrowRight /></BarSep>}
+                <BarSlot label="Add">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                type="button"
+                                aria-label="Add a macro action"
+                                className="w-10 h-10 flex items-center justify-center rounded-md border-2 border-dashed border-kb-gray-border text-kb-ink hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2"
+                            >
+                                <Plus className="w-4 h-4" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                            {ADD_TYPES.map(({ type, label }) => (
+                                <DropdownMenuItem key={type} onSelect={() => handleAddItem(type)}>{label}</DropdownMenuItem>
+                            ))}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </BarSlot>
+                <BarEnd>{barEnd}</BarEnd>
+            </BarRow>
+        );
+    }
 
     return (
         <div

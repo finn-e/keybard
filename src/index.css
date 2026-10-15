@@ -63,6 +63,12 @@
     --color-kb-gray-border: var(--kb-gray-border);
     --color-kb-sidebar-base: #3E3E3E;
     --color-kb-sidebar-dark: #000000;
+    --color-kb-combo-row-lit: var(--kb-combo-row-lit);
+    --color-kb-combo-chip: var(--kb-combo-chip);
+    --color-kb-combo-chip-border: var(--kb-combo-chip-border);
+    --color-kb-scrim: var(--kb-scrim);
+    --color-kb-back-highlight: var(--kb-back-highlight);
+    --color-kb-back-highlight-fg: var(--kb-back-highlight-fg);
 }
 
 :root {
@@ -76,6 +82,80 @@
     --kb-active: #000000;
     --kb-active-fg: #ffffff;
     --kb-popover: #EEEEEE;
+    /* Underslung combo editor card (new; sits beside the brand tokens). */
+    --kb-combo-editor-border: #d6d7d8;
+    --kb-combo-editor-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+    /* Binding editor spotlight (new; beside the brand tokens). One scrim, in one color and
+       strength, over everything the editor cannot use; ?spot=soft|deep tries other strengths.
+       Covered controls inside a lit area darken by the same strength (see the spotlight rules). */
+    --kb-scrim-rgb: 17 18 20;
+    --kb-scrim-alpha: 0.42;
+    --kb-scrim: rgb(var(--kb-scrim-rgb) / var(--kb-scrim-alpha));
+    /* Lit surfaces (panel, L tray, rail) and lit rail items. */
+    --kb-spot-radius: 18px;
+    --kb-spot-pill-radius: 10px;
+    /* The rail while editing is one painted shape: its surface pre-dimmed by the scrim. */
+    --kb-spot-rail-bg: color-mix(in srgb, rgb(var(--kb-scrim-rgb)) calc(var(--kb-scrim-alpha) * 100%), var(--kb-surface));
+    /* ?railMode=modal: the rail is the editor's own and keeps its own lit surface. */
+    --kb-spot-rail-lit-bg: var(--sidebar);
+    /* Lit rail pills: 36px tall (5px above and below the 26px item), 6px in from the visible rail. */
+    --kb-spot-pill-inset-y: 5px;
+    --kb-spot-pill-left: 6px;
+    /* A half-lit pill (?spotLight=tint, and the hover of a pill-less lit item). */
+    --kb-spot-pill-tint: color-mix(in srgb, var(--kb-surface) 55%, transparent);
+    /* The rail's active bar, editing or not (?railBar=flush|gap2|kiss): 3px wide, capsule ends. */
+    --kb-spot-bar-radius: 1.5px;
+    --kb-rail-bar-x: 0px;
+    --kb-rail-bar-h: 20px;
+    /* Lit rail labels: on a pill, on the bare scrim (?spotLight=text), on a tinted pill. */
+    --kb-spot-rail-fg: #6b7079;
+    --kb-spot-rail-ink: #111214;
+    --kb-spot-rail-fg-tint: #4a4f57;
+    /* The selected slot's red, as a named token. */
+    --kb-pick-accent: #ef4444;
+    /* Back arrow highlight when a click lands under the spotlight (new; the brand green, beside the brand tokens). */
+    --kb-back-highlight: #099e7c;
+    --kb-back-highlight-fg: #ffffff;
+    /* Translucent tones of the highlight, as plain values: color-mix() inside
+       @keyframes falls back to the solid color after the CSS build. */
+    --kb-back-highlight-soft: rgb(9 158 124 / 0.22);
+    --kb-back-highlight-ring: rgb(9 158 124 / 0.85);
+    /* Pinned side-panel editor cues (new; beside the brand tokens, owner review: ?pinCue=). */
+    --kb-pin-shadow: 0 10px 14px -10px rgb(0 0 0 / 0.28);
+    --kb-pin-divider: #d6d7d8;
+    --kb-pin-zone: #f4f4f3;
+    --kb-pin-notch: var(--kb-back-highlight);
+    /* L-shaped picker surface (new; owner review: ?pickerShape=). */
+    --kb-picker-surface-shadow: drop-shadow(0 8px 12px rgb(0 0 0 / 0.08)) drop-shadow(0 2px 4px rgb(0 0 0 / 0.06));
+
+    /* Combo folded corner. Each combo hue has a light tone (on mid and dark layer colors) and
+       a deep tone (on orange, yellow, light gray and white keys), the way legends switch
+       between white and black ink. The fold sits on the key's own color, which does not
+       change with the theme, so the hues are the same in both themes; only the crease, seam
+       and chrome tokens are tuned per theme. Values mirror HUES in src/utils/combo-hues.ts;
+       the colorblind-friendly palette (CB_HUES) swaps them below. */
+    --kb-combo-fold-amber: #ffa923;
+    --kb-combo-fold-amber-deep: #bd6400;
+    --kb-combo-fold-violet: #b795fe;
+    --kb-combo-fold-violet-deep: #793cfe;
+    --kb-combo-fold-sky: #5bbbff;
+    --kb-combo-fold-sky-deep: #0584e1;
+    --kb-combo-fold-lemon: #f8df05;
+    --kb-combo-fold-lemon-deep: #9e7e06;
+    --kb-combo-fold-orchid: #ff7dec;
+    --kb-combo-fold-orchid-deep: #ce0caf;
+    --kb-combo-fold-mint: #08eb9d;
+    --kb-combo-fold-mint-deep: #049a60;
+    --kb-combo-fold-crease: rgb(0 0 0 / 0.42);
+    --kb-combo-fold-crease-strong: rgb(0 0 0 / 0.7);
+    --kb-combo-fold-seam: rgb(0 0 0 / 0.24);
+    /* Texture cue ink (colorblind palette only), picked per piece by its lightness. */
+    --kb-combo-fold-cue-dark: rgb(0 0 0 / 0.42);
+    --kb-combo-fold-cue-light: rgb(255 255 255 / 0.72);
+    /* Combos list row whose combo is previewed, and the preview readout. */
+    --kb-combo-row-lit: rgb(0 0 0 / 0.045);
+    --kb-combo-chip: #f1f2f2;
+    --kb-combo-chip-border: #d9dadb;
 
     --radius: 0.625rem;
     --background: oklch(1 0 0);
@@ -122,6 +202,29 @@
     --kb-active: #e8e9ea;
     --kb-active-fg: #111214;
     --kb-popover: #33363b;
+    --kb-combo-editor-border: #3a3d42;
+    --kb-combo-editor-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+    --kb-scrim-rgb: 0 0 0;
+    --kb-scrim-alpha: 0.58;
+    --kb-spot-rail-fg: #a3a6ab;
+    --kb-spot-rail-ink: #a3a6ab;
+    --kb-spot-rail-fg-tint: #a3a6ab;
+    --kb-back-highlight: #0bb48d;
+    --kb-back-highlight-fg: #ffffff;
+    --kb-back-highlight-soft: rgb(11 180 141 / 0.22);
+    --kb-back-highlight-ring: rgb(11 180 141 / 0.85);
+    --kb-pin-shadow: 0 10px 14px -10px rgb(0 0 0 / 0.7);
+    --kb-pin-divider: #3a3d42;
+    --kb-pin-zone: #232528;
+    --kb-pin-notch: var(--kb-back-highlight);
+    --kb-picker-surface-shadow: drop-shadow(0 8px 14px rgb(0 0 0 / 0.45)) drop-shadow(0 2px 4px rgb(0 0 0 / 0.3));
+
+    --kb-combo-fold-crease: rgb(0 0 0 / 0.5);
+    --kb-combo-fold-crease-strong: rgb(0 0 0 / 0.74);
+    --kb-combo-fold-seam: rgb(0 0 0 / 0.28);
+    --kb-combo-row-lit: rgb(255 255 255 / 0.06);
+    --kb-combo-chip: #2a2c30;
+    --kb-combo-chip-border: #3a3d42;
 
     --background: #1d1e21;
     --foreground: #f1f2f2;
@@ -158,6 +261,75 @@
 
 html.dark {
     color-scheme: dark;
+}
+
+/* Colorblind-friendly combo colors (the "Colorblind-Friendly Combo Colors" setting sets the
+   attribute). Okabe-Ito-derived; mirrors CB_HUES in src/utils/combo-hues.ts. */
+:root[data-combo-palette="colorblind"] {
+    --kb-combo-fold-amber: #ffb000;
+    --kb-combo-fold-amber-deep: #5c3200;
+    --kb-combo-fold-violet: #1f5fbf;
+    --kb-combo-fold-violet-deep: #1556b8;
+    --kb-combo-fold-sky: #9fd8ff;
+    --kb-combo-fold-sky-deep: #c8eaff;
+    --kb-combo-fold-lemon: #fffeab;
+    --kb-combo-fold-lemon-deep: #fff6b0;
+    --kb-combo-fold-orchid: #b8410f;
+    --kb-combo-fold-orchid-deep: #aa2964;
+    --kb-combo-fold-mint: #341d6b;
+    --kb-combo-fold-mint-deep: #201048;
+}
+
+/* Combo fold size. Each fold is drawn at its large size and scaled toward the key corner by
+   --kb-fold-rest (its compact size) while at rest. Pointer movement over the keyboard sets
+   data-combo-motion="active" on the layout, and a previewed key's fold carries data-fold-big;
+   both grow it to full size. One transform per fold, no layout. */
+[data-fold-scale] {
+    transform: scale(var(--kb-fold-rest, 1));
+    transition: transform 450ms ease-in-out;
+}
+[data-combo-motion="active"] [data-fold-scale],
+[data-fold-scale][data-fold-big] {
+    transform: none;
+    transition: transform 160ms ease-out;
+}
+/* Touch and other pointers that cannot hover: always large. */
+@media (hover: none), (pointer: coarse) {
+    [data-fold-scale] {
+        transform: none;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    [data-fold-scale],
+    [data-combo-motion="active"] [data-fold-scale],
+    [data-fold-scale][data-fold-big] {
+        transition: none;
+    }
+}
+
+/* Key inspector: fades in on first show, swaps at once between keys, fades out on leave. */
+@keyframes kb-inspector-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+}
+@keyframes kb-inspector-in-still {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@keyframes kb-inspector-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+.kb-inspector-in {
+    animation: kb-inspector-in 120ms ease-out;
+}
+.kb-inspector-out {
+    animation: kb-inspector-out 90ms ease-in forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+    .kb-inspector-in {
+        animation-name: kb-inspector-in-still;
+    }
 }
 
 /* Printed output stays light even when the editor is in dark mode.
@@ -227,4 +399,290 @@ html.dark {
     .hg-button.hg-functionBtn.hg-button-space {
         width: 350px;
     }
+}
+
+/* Binding editor spotlight. One system, every value from the spotlight tokens:
+   - One scrim (--kb-scrim) covers the page; SpotlightScrim draws it. The rail
+     is its own fixed layer, so it carries the same scrim over its own surface;
+     no pixel is ever covered twice.
+   - Lit surfaces (panel, L tray, bottom bar, rail items) sit above it, flat:
+     no border, no shadow, --kb-spot-radius corners.
+   - The lifted canvas has no fill: only the keys and layer tabs read as lit.
+     Covered controls inside it darken by the scrim's own strength.
+   A click on anything covered pulses the back arrow (see BindingSpotlight). */
+:root[data-spot="soft"] { --kb-scrim-alpha: 0.32; }
+/* White pills on every lit item read as slabs on a stronger light scrim, so light pills take the soft one. */
+:root:not(.dark)[data-spot-lit="pill"]:not([data-spot]) { --kb-scrim-alpha: 0.32; }
+:root[data-spot="deep"] { --kb-scrim-alpha: 0.52; }
+:root.dark[data-spot="soft"] { --kb-scrim-alpha: 0.48; }
+:root.dark[data-spot="deep"] { --kb-scrim-alpha: 0.68; }
+
+/* Under the scrim the page is the canvas tone everywhere, as in one app frame. */
+:root[data-binding-spotlight] [data-spotlight-page] {
+    background-color: var(--kb-gray);
+}
+:root[data-binding-spotlight] [data-spotlight-cover] {
+    filter: brightness(calc(1 - var(--kb-scrim-alpha)));
+    cursor: default;
+}
+:root[data-binding-spotlight] [data-spotlight-surface] {
+    border-color: transparent;
+    box-shadow: none;
+}
+:root[data-binding-spotlight] [data-spotlight-surface="rounded"] {
+    border-radius: var(--kb-spot-radius);
+}
+/* The L outline is the same flat surface as the plain panel. */
+:root[data-binding-spotlight] svg[data-spotlight-surface] {
+    filter: none;
+}
+:root[data-binding-spotlight] svg[data-spotlight-surface] path {
+    stroke: none;
+}
+/* The rail while editing: one painted shape, its surface pre-dimmed by the scrim, no rim or
+   shadow. Its own scrim only takes clicks; covered items and rules darken by the scrim's strength,
+   as [data-spotlight-cover] does, so no edge pixel is painted twice (no light halo at the corners). */
+:root[data-binding-spotlight] [data-spotlight-rail-frame] {
+    border-color: transparent;
+    box-shadow: none;
+    /* The pills end 6px clear of the visible rail's right edge. */
+    --kb-spot-pill-right: 6px;
+}
+:root[data-binding-spotlight] [data-spotlight-rail-frame],
+:root[data-binding-spotlight] [data-spotlight-rail-frame] > [data-sidebar="sidebar"],
+:root[data-binding-spotlight] [data-spotlight-rail-frame] [data-binding-scrim] {
+    border-radius: var(--kb-spot-radius);
+}
+:root[data-binding-spotlight] [data-spotlight-rail-frame] > [data-sidebar="sidebar"] {
+    background-color: var(--kb-spot-rail-bg);
+}
+:root[data-binding-spotlight] [data-spotlight-rail-frame] [data-binding-scrim] {
+    background-color: transparent;
+}
+/* ?railMode=modal: the rail is the editor's own, so its surface stays lit (no scrim on it). */
+:root[data-binding-spotlight] [data-spotlight-rail-frame][data-rail-modal-frame] > [data-sidebar="sidebar"] {
+    background-color: var(--kb-spot-rail-lit-bg);
+}
+:root[data-binding-spotlight] [data-spotlight-rail-frame] [data-spotlight="cover"],
+:root[data-binding-spotlight] [data-spotlight-rail-frame] [data-spotlight-rail-rule] {
+    filter: brightness(calc(1 - var(--kb-scrim-alpha)));
+}
+/* Rail and side panel (?railJoin=tuck|gutter). tuck (default): the rail's right corners go
+   square under the panel, which starts 7px inside the rail, so the two meet with no wedge and
+   the visible rail ends at the panel's edge. gutter: the panel starts 8px clear of the rounded
+   rail. Both sit at the same whole-pixel top and bottom (8px). */
+:root[data-binding-spotlight]:not([data-rail-join="gutter"]):has(aside.detail-panel[data-spotlight-surface="rounded"]) [data-spotlight-rail-frame] {
+    --kb-spot-pill-right: 13px;
+}
+:root[data-binding-spotlight]:not([data-rail-join="gutter"]):has(aside.detail-panel[data-spotlight-surface="rounded"]) [data-spotlight-rail-frame],
+:root[data-binding-spotlight]:not([data-rail-join="gutter"]):has(aside.detail-panel[data-spotlight-surface="rounded"]) [data-spotlight-rail-frame] > [data-sidebar="sidebar"],
+:root[data-binding-spotlight]:not([data-rail-join="gutter"]):has(aside.detail-panel[data-spotlight-surface="rounded"]) [data-spotlight-rail-frame] [data-binding-scrim] {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+:root[data-binding-spotlight][data-rail-join="gutter"] aside.detail-panel[data-spotlight-surface="rounded"] {
+    margin-left: 15px;
+}
+/* The picker sliding over the plain panel keeps the panel's corners. */
+:root[data-binding-spotlight] [data-spotlight-surface="rounded"] > [data-picker-overlay],
+:root[data-binding-spotlight] [data-spotlight-surface="rounded"] > [data-picker-overlay] > :first-child {
+    border-radius: inherit;
+}
+:root[data-binding-spotlight] [data-spotlight-surface="rounded"] > [data-picker-overlay] > :first-child {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+/* The bar's place (?railBar=): flush on the rail's inner edge (default), 3px in, or the earlier
+   26px bar 4px in. The pill starts 3px, 2px or 1px after it. */
+[data-rail-bar="gap2"] {
+    --kb-rail-bar-x: 3px;
+    --kb-spot-pill-left: 8px;
+}
+[data-rail-bar="kiss"] {
+    --kb-rail-bar-x: 4px;
+    --kb-rail-bar-h: 26px;
+    --kb-spot-pill-left: 8px;
+}
+/* Lit rail items (?spotLight=text|tint|pill). Every lit item is above the rail's scrim; how it
+   reads as lit is the review choice:
+   - pill (dark default): a surface pill on every lit item, label in --kb-spot-rail-fg.
+   - text: a pill only on the current category and the origin; the other lit items are ink
+     labels on the bare scrim, with a half-lit pill on hover.
+   - tint (light default): the other lit items get a half-lit pill and a darker label.
+   Pills are 36px when only two show (text), 40px on a 2px gap when every lit item has one. */
+[data-spotlight-rail] {
+    position: relative;
+    z-index: 6;
+}
+[data-spotlight-rail]::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: calc(var(--kb-spot-pill-inset-y) * -1);
+    bottom: calc(var(--kb-spot-pill-inset-y) * -1);
+    left: var(--kb-spot-pill-left);
+    right: var(--kb-spot-pill-right, 6px);
+    border-radius: var(--kb-spot-pill-radius);
+    background-color: var(--kb-surface);
+}
+[data-spotlight-rail] [data-sidebar="menu-button"] {
+    color: var(--kb-spot-rail-fg);
+}
+:root.dark:not([data-spot-lit]),
+:root:not(.dark):not([data-spot-lit]),
+:root[data-spot-lit="pill"],
+:root[data-spot-lit="tint"] {
+    --kb-spot-pill-inset-y: 7px;
+    --kb-spot-pill-radius: 11px;
+}
+:root[data-spot-lit="text"] [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"])::before {
+    background-color: transparent;
+}
+:root[data-spot-lit="text"] [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"]):hover::before,
+:root:not(.dark):not([data-spot-lit]) [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"])::before,
+:root[data-spot-lit="tint"] [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"])::before {
+    background-color: var(--kb-spot-pill-tint);
+}
+:root[data-spot-lit="text"] [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"]) [data-sidebar="menu-button"] {
+    color: var(--kb-spot-rail-ink);
+}
+:root:not(.dark):not([data-spot-lit]) [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"]) [data-sidebar="menu-button"],
+:root[data-spot-lit="tint"] [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"]) [data-sidebar="menu-button"] {
+    color: var(--kb-spot-rail-fg-tint);
+}
+/* The current category and the origin: ink, bold, on a full pill. */
+[data-spotlight-rail][data-spotlight-current] [data-sidebar="menu-button"],
+[data-spotlight-rail="origin"] [data-sidebar="menu-button"] {
+    color: var(--kb-ink);
+    font-weight: 600;
+}
+/* The item the editor was opened from carries the rail's active bar, in the same place and
+   shape as the bar outside the editor. */
+[data-spotlight-rail="origin"]::after {
+    content: "";
+    position: absolute;
+    left: var(--kb-rail-bar-x);
+    top: 0;
+    bottom: 0;
+    margin: auto 0;
+    width: 3px;
+    height: var(--kb-rail-bar-h);
+    border-radius: var(--kb-spot-bar-radius);
+    background-color: var(--kb-ink);
+}
+/* Lit surfaces are flat: the floating editor card drops its shadow on the scrim. */
+:root[data-binding-spotlight] .detail-panel .binding-workspace {
+    box-shadow: none;
+}
+/* An editor workspace beside the side panel joins it as one lit surface: the
+   pair has the panel's outer corners, with a square seam between them. */
+:root[data-binding-spotlight] .detail-panel[data-placement="side"]:not([data-combo-placement]):not([data-editor-placement]) {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+:root[data-binding-spotlight] .detail-panel[data-placement="side"]:not([data-combo-placement]):not([data-editor-placement]) .binding-workspace {
+    border-top-right-radius: var(--kb-spot-radius);
+    border-bottom-right-radius: var(--kb-spot-radius);
+}
+@media (max-width: 1000px) {
+    :root[data-binding-spotlight] .detail-panel[data-placement="side"]:not([data-combo-placement]):not([data-editor-placement]) {
+        border-radius: var(--kb-spot-radius);
+    }
+    :root[data-binding-spotlight] .detail-panel[data-placement="side"]:not([data-combo-placement]):not([data-editor-placement]) .binding-workspace {
+        border-radius: var(--kb-spot-radius);
+    }
+}
+/* The floating editor card: a lit surface, its edge leaning to the pick accent while a slot is selected. */
+:root[data-binding-spotlight] .binding-workspace:has([data-editor-slot-selected]) {
+    border-color: color-mix(in srgb, var(--kb-pick-accent) 40%, var(--kb-combo-editor-border));
+}
+.binding-back-pulse {
+    position: relative;
+    border-radius: 9999px;
+}
+/* Blocked click: an expanding ring around the arrow button, twice, with the callout. */
+@keyframes bindingBackRing {
+    0% { box-shadow: 0 0 0 0 var(--kb-back-highlight-ring), 0 0 0 2px var(--kb-back-highlight); }
+    100% { box-shadow: 0 0 0 16px transparent, 0 0 0 2px var(--kb-back-highlight); }
+}
+.binding-back-pulse[data-back-cue="blocked"] {
+    animation: bindingBackRing 650ms ease-out 2;
+}
+/* Editor opened: a softer single ring, no outline and no callout. */
+@keyframes bindingBackPrecue {
+    0% { box-shadow: 0 0 0 0 var(--kb-back-highlight-ring); }
+    100% { box-shadow: 0 0 0 12px transparent; }
+}
+.binding-back-pulse[data-back-cue="precue"] {
+    animation: bindingBackPrecue 700ms ease-out 1;
+}
+/* The callout under the arrow. */
+.binding-back-callout {
+    background-color: var(--kb-back-highlight);
+    color: var(--kb-back-highlight-fg);
+    animation: bindingBackCallout 160ms ease-out 1;
+}
+.binding-back-callout-arrow::before {
+    content: "";
+    position: absolute;
+    top: -5px;
+    left: 15px;
+    width: 10px;
+    height: 10px;
+    background-color: var(--kb-back-highlight);
+    transform: rotate(45deg);
+    border-radius: 2px;
+}
+@keyframes bindingBackCallout {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+}
+/* ?railMode=collapse: a rail click also lights the side panel's category strip
+   (the picker selector while editing), with "Pick keys here" beside it. */
+/* The strip sits in a scrolling column, so its cue stays inside it: an inset
+   outline and a fill that flashes twice in step with the back arrow's rings. */
+@keyframes pickerStripCue {
+    0% { background-color: transparent; }
+    35% { background-color: var(--kb-back-highlight-soft); }
+    100% { background-color: transparent; }
+}
+.picker-strip-cue {
+    box-shadow: inset 0 0 0 2px var(--kb-back-highlight);
+    animation: pickerStripCue 650ms ease-out 2;
+}
+.picker-strip-callout::before {
+    content: "";
+    position: absolute;
+    top: 13px;
+    left: -5px;
+    width: 10px;
+    height: 10px;
+    background-color: var(--kb-back-highlight);
+    transform: rotate(45deg);
+    border-radius: 2px;
+}
+/* ?railMode=modal: entering or leaving an editor, the rail's contents swap in
+   place with a short fade (RAIL_MODAL_SWAP_MS). Nothing slides; none with reduced motion. */
+@keyframes railModeSwap {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.rail-mode-swap {
+    animation: railModeSwap 200ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+    .rail-mode-swap { animation: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .picker-strip-cue { animation: none; background-color: var(--kb-back-highlight-soft); }
+}
+@media (prefers-reduced-motion: reduce) {
+    /* A brief static highlight instead of the rings, with no motion. */
+    .binding-back-pulse[data-back-cue],
+    .binding-back-callout { animation: none; }
+    .binding-back-pulse[data-back-cue] {
+        background-color: var(--kb-back-highlight-soft);
+        box-shadow: 0 0 0 2px var(--kb-back-highlight);
+    }
+    .binding-back-pulse[data-back-cue] svg { color: var(--kb-back-highlight); }
 }

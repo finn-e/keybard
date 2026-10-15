@@ -1,6 +1,6 @@
 import { useBindingChanges } from "@/hooks/useBindingChanges";
 import { useChanges } from "@/contexts/ChangesContext";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Plus, ArrowRightFromLine } from "lucide-react";
 
 import ComboIcon from "@/components/ComboIcon";
@@ -20,6 +20,12 @@ import { Key } from "@/components/Key";
 import { KeyContent, ComboOptions } from "@/types/keyboard.types";
 import { cn } from "@/lib/utils";
 import DescriptionBlock from "@/layout/SecondarySidebar/components/DescriptionBlock";
+import { ComboPreviewRow } from "@/components/combo/ComboPreviewRow";
+import { FoldGlyph } from "@/components/combo/FoldGlyph";
+import { useComboPreview } from "@/contexts/ComboPreviewContext";
+import { assignComboHues } from "@/utils/combo-hues";
+import { comboInputs } from "@/utils/combo-membership";
+import { comboSentence } from "@/utils/combo-labels";
 
 const CombosPanel: React.FC = () => {
     const { keyboard, isConnected, setKeyboard } = useKeyboard();
@@ -38,8 +44,26 @@ const CombosPanel: React.FC = () => {
     const [timeoutInput, setTimeoutInput] = useState<string>("");
 
     const isHorizontal = layoutMode === "bottombar";
+    const { enabled: showComboIndicators, palette: comboPalette } = useComboPreview();
+    const comboHues = useMemo(
+        () => assignComboHues(keyboard, comboPalette),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [keyboard?.combos, keyboard?.keymap, keyboard?.cosmetic?.layer_colors, comboPalette],
+    );
 
     if (!keyboard) return null;
+
+    /** Combo `i` as a preview row (hover/focus previews it, click pins), or the row unchanged when it has no keys. */
+    const previewRow = (i: number, row: React.ReactElement) => {
+        const combo = keyboard.combos?.[i];
+        const inputs = comboInputs(combo);
+        if (!combo || !inputs.length) return row;
+        const label = comboSentence({ index: i, enabled: isEnabled(combo.options), output: combo.output, inputs });
+        return <ComboPreviewRow key={i} index={i} ariaLabel={label}>{row}</ComboPreviewRow>;
+    };
+    const glyph = (i: number) => showComboIndicators && comboInputs(keyboard.combos?.[i]).length > 0
+        ? <FoldGlyph hue={comboHues.get(i) ?? 0} disabled={!isEnabled(keyboard.combos![i].options)} />
+        : null;
 
     const findFirstEmptyCombo = (): number => {
         if (!keyboard.combos) return 0;
@@ -190,11 +214,11 @@ const CombosPanel: React.FC = () => {
 
                     const enabled = isEnabled(combo.options);
 
-                    return (
+                    return previewRow(i,
                         <div
                             key={i}
                             className={cn(
-                                "relative flex flex-col bg-gray-50 dark:bg-neutral-800/60 rounded-lg p-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors min-w-[100px] group",
+                                "relative flex flex-col bg-gray-50 dark:bg-neutral-800/60 rounded-lg p-2 cursor-pointer in-data-[lit=true]:ring-2 in-data-[lit=true]:ring-kb-gray-border hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors min-w-[100px] group",
                                 !enabled && "opacity-50"
                             )}
                             onClick={() => handleEdit(i)}
@@ -205,6 +229,7 @@ const CombosPanel: React.FC = () => {
                                     <ComboIcon />
                                 </div>
                                 <span className="text-xs font-bold text-slate-600 dark:text-neutral-300">Combo {i}</span>
+                                {glyph(i)}
                                 <OnOffToggle
                                     value={enabled}
                                     onToggle={() => handleToggleEnabled(i)}
@@ -291,6 +316,7 @@ const CombosPanel: React.FC = () => {
 
                     const rowChildren = hasAssignment ? (
                         <div className="flex flex-row items-center gap-1 ml-4 overflow-hidden w-full">
+                            {glyph(i) && <span className="inline-flex w-[18px] justify-center mr-1">{glyph(i)}</span>}
                             {inputs.map((input, idx) => (
                                 <React.Fragment key={input.id}>
                                     {idx > 0 && <Plus className="w-3 h-3 text-kb-ink" />}
@@ -309,7 +335,7 @@ const CombosPanel: React.FC = () => {
 
                     const keyContents = { type: "combo" } as KeyContent;
 
-                    return (
+                    return previewRow(i,
                         <SidebarItemRow
                             key={i}
                             index={i}

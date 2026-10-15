@@ -1,6 +1,7 @@
 import { appStorage } from "@/utils/app-storage";
 import { HARDWARE_SETTINGS_REGISTRY } from "@/services/hardware-settings.registry";
 import { SettingsState } from "@/types/settings.types";
+import { migrateComboIndicatorSetting } from "@/lib/comboIndicators";
 
 export class SettingsService {
     private readonly storageKey = "keyboard-settings";
@@ -9,7 +10,7 @@ export class SettingsService {
         try {
             const stored = appStorage.getItem(this.storageKey);
             if (stored) {
-                return JSON.parse(stored);
+                return migrateComboIndicatorSetting(JSON.parse(stored));
             }
         } catch (error) {
             console.warn("Failed to load settings from localStorage:", error);
