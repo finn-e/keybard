@@ -450,6 +450,15 @@ describe("updater protocol 4 against the mock board", () => {
         expect((await c.settingsReset(R, 0, 1)).status).toBe(Status.OK); // this half can
     });
 
+    it("P4-28 SETTINGS_RESET mode 1 on a half with USB from before D44 is its reset to defaults (it reads no mode byte)", async () => {
+        const { c, board } = setup();
+        board.halves[R].cfg.blankWipe = false;
+        expect(await c.settingsReset(R, 1, 1)).toEqual({ status: Status.OK, done: 3 });
+        await clock.sleep(6000);
+        board.connected();
+        expect(board.settings).toEqual({ 0: "defaults", 1: "defaults" });
+    });
+
     it("P4-30 a release board refuses an image whose own build info says no-chord, though its manifest has no DIAGNOSTIC", async () => {
         const nc = await fixtureRelease("x4", 4000, { noChord: true });
         expect(nc.files[R].manifest.diagnostic).toBe(false);

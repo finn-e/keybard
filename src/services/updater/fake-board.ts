@@ -794,9 +794,11 @@ export class FakeSvalboard implements UpdaterTransport {
         if (hand !== this.usbHand) return makeRsp(Status.INVALID);
         if (!SETTINGS_RESET_MAGIC.every((b, i) => a[i] === b)) return makeRsp(Status.INVALID);
         const scope = a[4];
-        const mode = a[5] ?? 0;
+        // A half with USB from before D44 reads no mode byte: there, mode 1 is the reset to
+        // defaults on both halves (it sends the split link protocol 4's 4-byte payload).
+        const mode = this.usb().cfg.blankWipe ? a[5] ?? 0 : 0;
         if (scope !== 0 && scope !== 1) return makeRsp(Status.INVALID);
-        if (mode > 1 || (mode === 1 && !this.usb().cfg.blankWipe)) return makeRsp(Status.INVALID);
+        if (mode > 1) return makeRsp(Status.INVALID);
         if (this.session || this.latched || this.held) return makeRsp(Status.BUSY);
         // The other half must answer and know the split op (protocol 4).
         if (scope === 1 && (!this.other().alive || this.other().cfg.protocol < 4)) return makeRsp(Status.UNAVAILABLE);

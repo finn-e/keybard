@@ -659,9 +659,9 @@ export class UpdateFlow {
                 this.row(usbHand, { stage: "restarting", progress: null });
                 const r = await c.settingsReset(usbHand, SETTINGS_RESET_BOTH, SETTINGS_RESET_BLANK);
                 if (r.status !== Status.OK) {
-                    const why = r.status === Status.INVALID ? "this firmware can't wipe to a blank board"
+                    const why = r.status === Status.INVALID ? "the keyboard refused the request"
                         : r.status === Status.UNAVAILABLE ? "the other half didn't answer, or its firmware can't wipe to a blank board" : "the keyboard was busy";
-                    throw new Stop({ id: "F20", detail: `Nothing was wiped: ${why}.` });
+                    throw new Stop({ id: "F20", detail: `The new firmware is installed, but the keyboard wasn't wiped: ${why}.` });
                 }
                 this.update({ settingsResetSent: true });
                 await this.reconnect();
@@ -670,7 +670,8 @@ export class UpdateFlow {
                 if (!(flags & 0x04)) console.warn("[firmware] blank wipe, but the reset notice isn't set");
             }
             if (this.host.keymapBlank && !(await this.host.keymapBlank())) {
-                throw new Stop({ id: "F20", detail: "The keyboard came back with keys still set." });
+                // A half with USB on a build from before D44 ignores the mode and resets to defaults.
+                throw new Stop({ id: "F20", detail: "The new firmware is installed, but the keyboard came back with keys still set. Its firmware may not wipe to a blank board." });
             }
         } else if (!this.state.settingsResetSent && (!(flags & 0x04) || target !== "both")) {
             // An identical build kept the old settings, or only one half was installed: reset both (F-N2).

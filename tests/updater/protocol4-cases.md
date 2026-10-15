@@ -35,7 +35,7 @@ with the next free ID; never renumber one. `K-` cases are Keybard's own.
 | P4-25 | A host pair update on protocol 4: one chord; with the approval gone it stops after the first half and never asks again | `flow.test.ts` (Keybard's flow in place of `sval_update.py`) |
 | P4-26 | `sval_update.py pair` on protocol 3: two chords | firmware only (Keybard sends protocol-3 boards to the manual install) |
 | P4-27 | `sval_update.py reset-settings` | firmware only (Keybard's SETTINGS_RESET: P4-17) |
-| P4-28 | SETTINGS_RESET mode 1 (D44): both halves wiped to a blank board; no mode byte or mode 0 is the reset to defaults; mode 2 is INVALID; an other half from before D44: UNAVAILABLE, nothing changed | `protocol4-cases.test.ts` |
+| P4-28 | SETTINGS_RESET mode 1 (D44): both halves wiped to a blank board; no mode byte or mode 0 is the reset to defaults; mode 2 is INVALID; an other half from before D44: UNAVAILABLE, nothing changed; a half with USB from before D44 reads no mode byte, so mode 1 is its reset to defaults (the keymap check then stops on F20) | `protocol4-cases.test.ts` |
 | P4-29 | The blank mark in the build reset record | firmware only (`test_build_reset.c`) |
 | P4-30 | A release board refuses an image whose own build-info record says no-chord or kept settings (BAD_IMAGE at the image check), whatever its manifest says; a developer board takes it | `protocol4-cases.test.ts` (the mock board), `checks.test.ts` (the sheet refuses it first) |
 | P4-31 | The layout choice has three options: Keep my layout (default), Reset to the default layout, Wipe to a blank board (no backup needed; SETTINGS_RESET scope 1 mode 1 after the install, whatever bit 2 says; the keymap read back blank; `0x2A` last) | `flow.test.ts`, `ui.test.tsx` |

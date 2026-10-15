@@ -308,10 +308,24 @@ describe("afterwards", () => {
     });
 
     it("P4-31 wipe to a blank board with an other half that can't wipe: F20, nothing wiped, no 0x2A", async () => {
+        const { board, host, plan: p } = await plan({ release: v3 });
+        if ("id" in p) throw new Error(`plan failed: ${p.id}`);
+        board.halves[L].cfg.blankWipe = false; // the other half on a build from before D44
+        const state = await UpdateFlow.create(host, memoryFlowStore(), { plan: p, afterwards: "blank", backup: null }).run();
+        expect(state.failure).toMatchObject({ id: "F20" });
+        expect(state.failure?.detail).toMatch(/wasn't wiped/);
+        expect(board.settings).toEqual({ 0: "user", 1: "user" }); // a reinstall of the same build kept them
+        expect(host.clears).toBe(0);
+    });
+
+    it("P4-31 wipe to a blank board on a half with USB from before D44: it resets to defaults, so F20 from the keymap check, no 0x2A", async () => {
         const { board, host, state } = await run({ release: v3, afterwards: "blank", setup: { half: { blankWipe: false } } });
         expect(state.failure).toMatchObject({ id: "F20" });
-        expect(state.failure?.detail).toMatch(/Nothing was wiped/);
-        expect(board.settings[L]).not.toBe("blank");
+        expect(state.failure?.detail).toMatch(/keys still set/);
+        await clock.sleep(5000);
+        board.connected();
+        expect(board.settings).toEqual({ 0: "defaults", 1: "defaults" });
+        expect(host.events).toContain("keymap");
         expect(host.clears).toBe(0);
     });
 });
