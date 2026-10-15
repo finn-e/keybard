@@ -179,8 +179,10 @@ export function nudgeBindingEditor(at?: { x: number; y: number }, from?: NudgeSo
 /**
  * How the rail lights its usable categories while editing (owner review:
  * ?spotLight=text|tint|pill). Unset, each theme takes its own default: light
+ * gives the other lit items a half-lit pill and a darker label ("tint", the
+ * owner's pick); dark keeps a full pill on every lit item ("pill"). "text"
  * shows ink labels on the scrim with a pill only on the current category and
- * the origin ("text"); dark keeps a pill on every lit item ("pill").
+ * the origin.
  */
 export const SPOT_LIGHTS = ["text", "tint", "pill"] as const;
 export type SpotLight = typeof SPOT_LIGHTS[number];

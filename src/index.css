@@ -506,9 +506,9 @@ html.dark {
 /* Lit rail items (?spotLight=text|tint|pill). Every lit item is above the rail's scrim; how it
    reads as lit is the review choice:
    - pill (dark default): a surface pill on every lit item, label in --kb-spot-rail-fg.
-   - text (light default): a pill only on the current category and the origin; the other lit
-     items are ink labels on the bare scrim, with a half-lit pill on hover.
-   - tint: the other lit items get a half-lit pill and a darker label.
+   - text: a pill only on the current category and the origin; the other lit items are ink
+     labels on the bare scrim, with a half-lit pill on hover.
+   - tint (light default): the other lit items get a half-lit pill and a darker label.
    Pills are 36px when only two show (text), 40px on a 2px gap when every lit item has one. */
 [data-spotlight-rail] {
     position: relative;
@@ -529,24 +529,24 @@ html.dark {
     color: var(--kb-spot-rail-fg);
 }
 :root.dark:not([data-spot-lit]),
+:root:not(.dark):not([data-spot-lit]),
 :root[data-spot-lit="pill"],
 :root[data-spot-lit="tint"] {
     --kb-spot-pill-inset-y: 7px;
     --kb-spot-pill-radius: 11px;
 }
-:root:not(.dark):not([data-spot-lit]) [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"])::before,
 :root[data-spot-lit="text"] [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"])::before {
     background-color: transparent;
 }
-:root:not(.dark):not([data-spot-lit]) [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"]):hover::before,
 :root[data-spot-lit="text"] [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"]):hover::before,
+:root:not(.dark):not([data-spot-lit]) [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"])::before,
 :root[data-spot-lit="tint"] [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"])::before {
     background-color: var(--kb-spot-pill-tint);
 }
-:root:not(.dark):not([data-spot-lit]) [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"]) [data-sidebar="menu-button"],
 :root[data-spot-lit="text"] [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"]) [data-sidebar="menu-button"] {
     color: var(--kb-spot-rail-ink);
 }
+:root:not(.dark):not([data-spot-lit]) [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"]) [data-sidebar="menu-button"],
 :root[data-spot-lit="tint"] [data-spotlight-rail]:not([data-spotlight-current]):not([data-spotlight-rail="origin"]) [data-sidebar="menu-button"] {
     color: var(--kb-spot-rail-fg-tint);
 }
