@@ -119,5 +119,22 @@ export function coatAt(mat: BallId, gloss: number): Coat {
     return { coat: mix(a.coat, b.coat), rough: Math.exp(mix(Math.log(a.rough), Math.log(b.rough))), rim: mix(a.rim, b.rim), box: mix(a.box, b.box), sheen: mix(a.sheen, b.sheen) };
 }
 
+/* TEMPORARY (removable): "Ball lightness", a tuning slider the owner asked for to judge the sense of
+   saturation. It moves every ball's body color (flake base, pearl deep/body/swirl), independent of
+   the sparkle and the coat. At LIGHTNESS_DEFAULT nothing changes; above it the body mixes toward
+   white, below it toward black. To remove: delete this block, the Settings entry and the prop. */
+export const LIGHTNESS_DEFAULT = 0.5;
+/** A linear RGB body color at lightness l (0..1): unchanged at LIGHTNESS_DEFAULT. */
+export function bodyAt(rgb: readonly number[], lightness: number | undefined): number[] {
+    const l = clamp01(lightness ?? LIGHTNESS_DEFAULT);
+    if (l === LIGHTNESS_DEFAULT) return [...rgb];
+    if (l > LIGHTNESS_DEFAULT) {
+        const t = ((l - LIGHTNESS_DEFAULT) / (1 - LIGHTNESS_DEFAULT)) * 0.85;   // stops short of flat white
+        return rgb.map((v) => v + (1 - v) * t);
+    }
+    const k = 0.15 + 0.85 * (l / LIGHTNESS_DEFAULT);                            // stops short of flat black
+    return rgb.map((v) => v * k);
+}
+
 /** Ball diameter in mm; the touchpad's glass is 43 x 40 mm. */
 export const TOUCHPAD_MM = { w: 43, h: 40 } as const;

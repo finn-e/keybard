@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { POINTING_GLOSS_SETTING, POINTING_SPARKLE_SETTING, useSettings } from "@/contexts/SettingsContext";
+import { POINTING_GLOSS_SETTING, POINTING_LIGHTNESS_SETTING, POINTING_SPARKLE_SETTING, useSettings } from "@/contexts/SettingsContext";
 import { pointingDemo } from "@/features/pointing-demo";
 import { notifyHostPointingLook } from "@/features/trainer/host-pointing";
 import { usePointingKinds, usePointingLive } from "@/hooks/usePointingDevices";
@@ -11,7 +11,7 @@ import { placeDevice, type KeyRect } from "@/utils/pointing-geometry";
 import { boostLabel, pointingFactors, sniperLabel } from "@/utils/pointing-multiplier";
 import { BallMenu } from "./BallMenu";
 import { PointingDevice } from "./PointingDevice";
-import { GLOSS_DEFAULT, SPARKLE_DEFAULT, type BallId } from "./webgl/materials";
+import { GLOSS_DEFAULT, LIGHTNESS_DEFAULT, SPARKLE_DEFAULT, type BallId } from "./webgl/materials";
 import type { PillColors } from "./overlay-draw";
 
 
@@ -47,6 +47,8 @@ export function PointingLayer({ keyboard, keys, unitPx }: Props) {
     const { getSetting } = useSettings();
     const gloss = Number(getSetting(POINTING_GLOSS_SETTING, GLOSS_DEFAULT));
     const sparkle = Number(getSetting(POINTING_SPARKLE_SETTING, SPARKLE_DEFAULT));
+    // TEMPORARY "Ball lightness" (removable); Keybard only, the Host overlay keeps the designed body color.
+    const lightness = Number(getSetting(POINTING_LIGHTNESS_SETTING, LIGHTNESS_DEFAULT));
     const dark = useIsDark();
     const factors = useMemo(() => pointingFactors(keyboard.keymap), [keyboard.keymap]);
     const labels = useMemo(() => ({ sniper: sniperLabel(factors.sniperDivisor), boost: boostLabel(factors.boostFactor) }), [factors]);
@@ -90,6 +92,7 @@ export function PointingLayer({ keyboard, keys, unitPx }: Props) {
                         ball={balls[side]}
                         gloss={gloss}
                         sparkle={sparkle}
+                        lightness={lightness}
                         theme={dark ? "dark" : "light"}
                         feed={live.feed}
                         sniper={live.sniper}

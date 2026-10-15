@@ -4,7 +4,7 @@
 // a still 2D stand-in is drawn and nothing is said about it.
 
 import { FS, VS } from "./shader";
-import { BALLS, coatAt, GLASS, GROUND, spkAt, type BallId } from "./materials";
+import { BALLS, bodyAt, coatAt, GLASS, GROUND, spkAt, type BallId } from "./materials";
 
 export type Theme = "light" | "dark";
 const GLSIZE = 1024;
@@ -22,6 +22,8 @@ export interface DrawSpec {
     corner?: number;
     gloss: number;
     sparkle: number;
+    /** TEMPORARY "Ball lightness" (removable): the body color's lightness; omitted = as designed. */
+    lightness?: number;
 }
 
 type U = Record<string, WebGLUniformLocation | null>;
@@ -187,7 +189,7 @@ export function drawDevice(canvas: HTMLCanvasElement, px: number, spec: DrawSpec
         const ct = coatAt(spec.mat, spec.gloss);
         if (b.type === "pearl") {
             const k = dark && !b.vein ? 0.84 : dark ? 0.86 : 1.0;
-            const put = (name: string, hex: string, scale: boolean) => { if (U[name]) gl.uniform3fv(U[name], lin(hex).map((v) => (scale ? v * k : v))); };
+            const put = (name: string, hex: string, scale: boolean) => { if (U[name]) gl.uniform3fv(U[name], scale ? bodyAt(lin(hex).map((v) => v * k), spec.lightness) : lin(hex)); };
             put("uDeep", b.deep, true); put("uBody", b.body, true); put("uSwirl", b.swirl, true); put("uHi", b.hi, false);
             set1("uContrast", b.contrast); set1("uArea", b.area); set1("uVein", b.vein || 0);
             set1("uMetal", 0); set1("uFlake", 0);
@@ -197,7 +199,7 @@ export function drawDevice(canvas: HTMLCanvasElement, px: number, spec: DrawSpec
             gl.uniform2fv(U.uBakeSize, [1, 1]);
             gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, t);
         } else {
-            set3("uBase", b.base); set3("uFlakeTint", b.flakeTint || "#ffffff");
+            if (U.uBase) gl.uniform3fv(U.uBase, bodyAt(lin(b.base), spec.lightness)); set3("uFlakeTint", b.flakeTint || "#ffffff");
             set1("uMetal", b.metal); set1("uRough", b.rough); set1("uFlake", b.flake);
             set1("uFlakeFreq", b.freq); set1("uTilt", b.tilt); set1("uHueJit", b.hue); set1("uRimDark", b.rimDark);
             set1("uCoat", ct.coat); set1("uCoatRough", ct.rough); set1("uRimK", ct.rim); set1("uBox", ct.box); set1("uSheen", ct.sheen);

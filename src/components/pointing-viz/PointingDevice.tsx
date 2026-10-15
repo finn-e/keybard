@@ -24,6 +24,8 @@ export interface PointingDeviceProps {
     ball: BallId;
     gloss: number;
     sparkle: number;
+    /** TEMPORARY "Ball lightness" (removable); omitted = as designed. */
+    lightness?: number;
     theme: Theme;
     feed: PointingFeed | null;
     /** Sniper and boost in force (the pills show at this hand only when `showModes`). */
@@ -112,7 +114,7 @@ export function PointingDevice(props: PointingDeviceProps) {
                 const dpr = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2);
                 drawDevice(deviceRef.current, p.placement.sizeU * p.unitPx * dpr, {
                     kind: p.placement.kind, mat: p.ball, M: s.M, view: p.placement.view,
-                    w: p.placement.w, h: p.placement.h, corner: p.placement.corner, gloss: p.gloss, sparkle: p.sparkle,
+                    w: p.placement.w, h: p.placement.h, corner: p.placement.corner, gloss: p.gloss, sparkle: p.sparkle, lightness: p.lightness,
                 }, p.theme);
                 s.dirty = false;
             }
@@ -152,7 +154,7 @@ export function PointingDevice(props: PointingDeviceProps) {
     // Anything that changes the look redraws once.
     useEffect(() => {
         sim.current.dirty = true; sim.current.ovDirty = true; wake.current();
-    }, [props.ball, props.gloss, props.sparkle, props.theme, sizeCss, props.sniper, props.boost, props.showModes, props.labels.sniper, props.labels.boost, ghost, props.pillColors.bg, props.pillColors.fg]);
+    }, [props.ball, props.gloss, props.sparkle, props.lightness, props.theme, sizeCss, props.sniper, props.boost, props.showModes, props.labels.sniper, props.labels.boost, ghost, props.pillColors.bg, props.pillColors.fg]);
 
     // Motion from the feed rolls the ball or moves the fingertip.
     useEffect(() => {
