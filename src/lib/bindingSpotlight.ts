@@ -72,12 +72,36 @@ export function bindingEditorTitle(
     }
 }
 
-/** The short hint shown when something under the spotlight scrim is clicked. */
-export const spotlightHint = (title: string) => `Finish ${title} to use this. Press Done.`;
+/** The open editor's kind and number, for the back-arrow callout ("Combo 0", "Tap Dance 2"). */
+export function bindingEditorKind(editor: string | null | undefined, index: number | null): string {
+    if (index === null || !editor) return "this editor";
+    switch (editor) {
+        case "macros": return `Macro ${index}`;
+        case "tapdances": return `Tap Dance ${index}`;
+        case "combos": return `Combo ${index}`;
+        case "overrides": return `Override ${index}`;
+        case "altrepeat": return `Alt-Repeat ${index}`;
+        case "leaders": return `Leader ${index}`;
+        default: return "this editor";
+    }
+}
+
+/** The callout at the back arrow when something under the spotlight scrim is clicked. */
+export const spotlightHint = (kind: string) => `Done with ${kind}? Go back to use the rest.`;
+
+/** How the back arrow pulses (owner review: ?backPulse=ring|glow|nudge). */
+export const BACK_PULSE_STYLES = ["ring", "glow", "nudge"] as const;
+export type BackPulseStyle = typeof BACK_PULSE_STYLES[number];
+export const BACK_PULSE_PARAM = "backPulse";
+
+export function backPulseStyle(search: string): BackPulseStyle {
+    const value = new URLSearchParams(search).get(BACK_PULSE_PARAM);
+    return (BACK_PULSE_STYLES as readonly string[]).includes(value ?? "") ? value as BackPulseStyle : "ring";
+}
 
 export const SPOTLIGHT_NUDGE_EVENT = "keybard:binding-spotlight-nudge";
 
-/** Ask the open editor to say how to finish: pulses its header and shows the hint near (x, y). */
+/** Ask the open editor to point at its way out: pulses the back arrow and shows the callout there. */
 export function nudgeBindingEditor(at?: { x: number; y: number }) {
     window.dispatchEvent(new CustomEvent(SPOTLIGHT_NUDGE_EVENT, { detail: at ?? null }));
 }

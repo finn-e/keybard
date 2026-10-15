@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-    BINDING_EDITOR_PANELS, effectivePickerMode, isBindingEditorOpen, pickerCategoryForRail, usablePickerCategories,
+    backPulseStyle, BINDING_EDITOR_PANELS, bindingEditorKind, effectivePickerMode, spotlightHint, isBindingEditorOpen, pickerCategoryForRail, usablePickerCategories,
 } from '@/lib/bindingSpotlight';
 
 const ALL = ['keyboard', 'pointing', 'special', 'layers', 'mouse', 'tapdances', 'macros'];
@@ -34,5 +34,24 @@ describe('binding editor picker categories', () => {
         expect(effectivePickerMode('tapdances', 'tapdances')).toBe('keyboard');
         expect(effectivePickerMode('tapdances', 'combos')).toBe('tapdances');
         expect(effectivePickerMode('macros', 'macros')).toBe('keyboard');
+    });
+});
+
+describe('back arrow callout', () => {
+    it('names the editor by kind and number', () => {
+        expect(spotlightHint(bindingEditorKind('combos', 0))).toBe('Done with Combo 0? Go back to use the rest.');
+        expect(spotlightHint(bindingEditorKind('tapdances', 2))).toBe('Done with Tap Dance 2? Go back to use the rest.');
+        expect(bindingEditorKind('macros', 1)).toBe('Macro 1');
+        expect(bindingEditorKind('overrides', 4)).toBe('Override 4');
+        expect(bindingEditorKind('altrepeat', 5)).toBe('Alt-Repeat 5');
+        expect(bindingEditorKind('leaders', 6)).toBe('Leader 6');
+    });
+
+    it('picks the pulse style from ?backPulse, ring by default', () => {
+        expect(backPulseStyle('')).toBe('ring');
+        expect(backPulseStyle('?backPulse=glow')).toBe('glow');
+        expect(backPulseStyle('?x=1&backPulse=nudge')).toBe('nudge');
+        expect(backPulseStyle('?backPulse=ring')).toBe('ring');
+        expect(backPulseStyle('?backPulse=sparkle')).toBe('ring');
     });
 });

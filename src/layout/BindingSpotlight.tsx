@@ -1,10 +1,9 @@
 import * as React from "react";
 
 import { useKeyBinding } from "@/contexts/KeyBindingContext";
-import { useKeyboard } from "@/contexts/KeyboardContext";
 import { usePanels } from "@/contexts/PanelsContext";
 import {
-    bindingEditorTitle, isBindingEditorOpen, nudgeBindingEditor, SPOTLIGHT_NUDGE_EVENT, spotlightHint,
+    backPulseStyle, bindingEditorKind, isBindingEditorOpen, nudgeBindingEditor, SPOTLIGHT_NUDGE_EVENT, spotlightHint,
 } from "@/lib/bindingSpotlight";
 import { cn } from "@/lib/utils";
 import { isEditorInput } from "@/utils/editor-input";
@@ -17,7 +16,7 @@ export function useBindingSpotlight(): boolean {
 
 /**
  * A scrim over part of the page while a binding editor is open. Clicking it
- * never leaves the editor: it pulses the editor header and says how to finish.
+ * never leaves the editor: it pulses the back arrow and points to it.
  */
 export function SpotlightScrim({ className }: { className?: string }) {
     return (
@@ -34,8 +33,18 @@ export function SpotlightScrim({ className }: { className?: string }) {
     );
 }
 
-const PULSE_CLASS = "binding-spotlight-pulse";
-const HINT_MS = 1800;
+const PULSE_CLASS = "binding-back-pulse";
+const HINT_MS = 2600;
+/** The editor's way out (the picker header's back arrow); the visible one gets the pulse. */
+const BACK = "[data-binding-editor-back]";
+
+function visibleBackArrow(): HTMLElement | null {
+    for (const el of document.querySelectorAll<HTMLElement>(BACK)) {
+        if (el.closest("[hidden], [inert], [aria-hidden='true']")) continue;
+        return el;
+    }
+    return null;
+}
 /** Covered controls inside lifted areas (the canvas): dimmed, out of the Tab order, and a click nudges. */
 const COVER = "[data-spotlight-cover]";
 const FOCUSABLE = "button, a[href], input, select, textarea, [tabindex]";
@@ -50,11 +59,11 @@ const BLOCKED_EVENTS = ["click", "dblclick", "pointerdown", "mousedown", "dragst
  */
 export default function BindingSpotlight() {
     const { activePanel, itemToEdit, handleCloseEditor } = usePanels();
-    const { keyboard } = useKeyboard();
     const { selectedTarget } = useKeyBinding();
     const active = isBindingEditorOpen(activePanel, itemToEdit);
-    const title = bindingEditorTitle(activePanel, itemToEdit, keyboard?.cosmetic);
-    const [hint, setHint] = React.useState<{ x: number; y: number; key: number } | null>(null);
+    const kind = bindingEditorKind(activePanel, itemToEdit);
+    /** Where the callout sits: under the back arrow (arrow), or near the click when there is none. */
+    const [hint, setHint] = React.useState<{ x: number; y: number; arrow: boolean; key: number } | null>(null);
 
     const selectedRef = React.useRef(selectedTarget);
     selectedRef.current = selectedTarget;
@@ -68,24 +77,30 @@ export default function BindingSpotlight() {
         return () => root.removeAttribute("data-binding-spotlight");
     }, [active]);
 
-    // A click on anything covered: pulse the editor header and show the hint.
+    // A click on anything covered: pulse the back arrow and show the callout under it.
     React.useEffect(() => {
         if (!active) return;
         const onNudge = (event: Event) => {
-            document.querySelectorAll<HTMLElement>("[data-binding-editor-header]").forEach(el => {
-                el.classList.remove(PULSE_CLASS);
-                void el.offsetWidth;
-                el.classList.add(PULSE_CLASS);
-            });
+            const back = visibleBackArrow();
+            if (back) {
+                back.dataset.backPulse = backPulseStyle(window.location.search);
+                back.classList.remove(PULSE_CLASS);
+                void back.offsetWidth;
+                back.classList.add(PULSE_CLASS);
+                const r = back.getBoundingClientRect();
+                setHint({ x: r.left, y: r.bottom + 10, arrow: true, key: Date.now() });
+                return;
+            }
             let at = (event as CustomEvent<{ x: number; y: number } | null>).detail;
             if (!at) {
                 const card = document.querySelector(".binding-workspace")?.getBoundingClientRect();
                 at = card ? { x: card.left, y: card.top } : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
             }
-            setHint({ ...at, key: Date.now() });
+            setHint({ x: at.x + 10, y: at.y - 36, arrow: false, key: Date.now() });
         };
+        // The pulse ends with its last animation; a reduced-motion static highlight ends with the callout.
         const onEnd = (event: AnimationEvent) => {
-            if (event.target instanceof HTMLElement) event.target.classList.remove(PULSE_CLASS);
+            if (event.target instanceof HTMLElement && event.animationName.startsWith("bindingBack")) event.target.classList.remove(PULSE_CLASS);
         };
         window.addEventListener(SPOTLIGHT_NUDGE_EVENT, onNudge);
         document.addEventListener("animationend", onEnd);
@@ -97,9 +112,17 @@ export default function BindingSpotlight() {
 
     React.useEffect(() => {
         if (!hint) return;
-        const timer = window.setTimeout(() => setHint(null), HINT_MS);
+        const timer = window.setTimeout(() => {
+            setHint(null);
+            document.querySelectorAll(`.${PULSE_CLASS}`).forEach(el => el.classList.remove(PULSE_CLASS));
+        }, HINT_MS);
         return () => window.clearTimeout(timer);
     }, [hint]);
+
+    React.useEffect(() => {
+        if (active) return;
+        document.querySelectorAll(`.${PULSE_CLASS}`).forEach(el => el.classList.remove(PULSE_CLASS));
+    }, [active]);
 
     // Covered controls inside the lifted canvas: out of the Tab order, and
     // pointer input on them nudges the editor instead of acting.
@@ -156,20 +179,22 @@ export default function BindingSpotlight() {
     }, [active]);
 
     if (!active) return null;
-    const left = hint ? Math.max(8, Math.min(hint.x + 10, window.innerWidth - 320)) : 0;
-    const top = hint ? Math.max(8, hint.y - 36) : 0;
+    const text = spotlightHint(kind);
+    const left = hint ? Math.max(8, Math.min(hint.x, window.innerWidth - 320)) : 0;
+    const top = hint ? Math.max(8, Math.min(hint.y, window.innerHeight - 48)) : 0;
     return (
         <>
             <SpotlightScrim className="fixed inset-0 z-[45]" />
-            <div role="status" aria-live="polite" className="sr-only">{hint ? spotlightHint(title) : ""}</div>
+            <div role="status" aria-live="polite" className="sr-only">{hint ? text : ""}</div>
             {hint && (
                 <div
                     key={hint.key}
                     aria-hidden="true"
-                    className="binding-spotlight-hint fixed z-[80] pointer-events-none rounded-full bg-kb-active text-kb-active-fg px-3 py-1.5 text-xs font-medium shadow-lg whitespace-nowrap"
+                    data-binding-back-callout={hint.arrow ? "arrow" : "point"}
+                    className={cn("binding-back-callout fixed z-[80] pointer-events-none rounded-lg px-3 py-2 text-[13px] font-medium shadow-lg whitespace-nowrap", hint.arrow && "binding-back-callout-arrow")}
                     style={{ left, top }}
                 >
-                    {spotlightHint(title)}
+                    {text}
                 </div>
             )}
         </>

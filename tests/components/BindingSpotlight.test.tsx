@@ -8,7 +8,6 @@ const panels = vi.hoisted(() => ({ activePanel: 'combos' as string | null, itemT
 const binding = vi.hoisted(() => ({ selectedTarget: null as object | null }));
 vi.mock('@/contexts/PanelsContext', () => ({ usePanels: () => panels }));
 vi.mock('@/contexts/KeyBindingContext', () => ({ useKeyBinding: () => binding }));
-vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ keyboard: { cosmetic: { tapdances: { '2': 'Shift Tap' } } } }) }));
 
 beforeEach(() => {
     panels.activePanel = 'combos';
@@ -31,20 +30,63 @@ describe('binding editor spotlight', () => {
         expect(document.documentElement.hasAttribute('data-binding-spotlight')).toBe(false);
     });
 
-    it('does not exit on a scrim click: it pulses the header and says how to finish', () => {
-        render(<><div data-binding-editor-header="">Combo 3</div><BindingSpotlight /></>);
+    it('does not exit on a scrim click: it pulses the back arrow and points to it', () => {
+        render(<><button type="button" aria-label="Go back" data-binding-editor-back="" /><BindingSpotlight /></>);
         fireEvent.click(document.querySelector('[data-binding-scrim]')!, { clientX: 100, clientY: 200 });
         expect(panels.handleCloseEditor).not.toHaveBeenCalled();
-        expect(screen.getByRole('status')).toHaveTextContent('Finish Combo 3 to use this. Press Done.');
-        expect(screen.getByText('Combo 3')).toHaveClass('binding-spotlight-pulse');
+        expect(screen.getByRole('status')).toHaveTextContent('Done with Combo 3? Go back to use the rest.');
+        const back = screen.getByRole('button', { name: 'Go back' });
+        expect(back).toHaveClass('binding-back-pulse');
+        expect(back).toHaveAttribute('data-back-pulse', 'ring');
+        const callout = document.querySelector('[data-binding-back-callout]')!;
+        expect(callout).toHaveAttribute('data-binding-back-callout', 'arrow');
+        expect(callout).toHaveTextContent('Done with Combo 3? Go back to use the rest.');
     });
 
-    it('names the editor in the hint, with a tap dance by its own name', () => {
+    it('pulses only the visible back arrow, never a hidden header', () => {
+        render(
+            <>
+                <div hidden><button type="button" aria-label="Hidden back" data-binding-editor-back="" /></div>
+                <button type="button" aria-label="Go back" data-binding-editor-back="" />
+                <BindingSpotlight />
+            </>,
+        );
+        act(() => nudgeBindingEditor());
+        expect(screen.getByRole('button', { name: 'Go back' })).toHaveClass('binding-back-pulse');
+        expect(document.querySelector('[aria-label="Hidden back"]')).not.toHaveClass('binding-back-pulse');
+    });
+
+    it.each(['ring', 'glow', 'nudge'])('uses the ?backPulse=%s style, with the same callout', style => {
+        window.history.replaceState(null, '', `/?backPulse=${style}`);
+        render(<><button type="button" aria-label="Go back" data-binding-editor-back="" /><BindingSpotlight /></>);
+        act(() => nudgeBindingEditor());
+        expect(screen.getByRole('button', { name: 'Go back' })).toHaveAttribute('data-back-pulse', style);
+        expect(document.querySelector('[data-binding-back-callout]')).toHaveTextContent('Done with Combo 3? Go back to use the rest.');
+        window.history.replaceState(null, '', '/');
+    });
+
+    it('clears the pulse and the callout after a moment', () => {
+        vi.useFakeTimers();
+        try {
+            render(<><button type="button" aria-label="Go back" data-binding-editor-back="" /><BindingSpotlight /></>);
+            act(() => nudgeBindingEditor());
+            act(() => { vi.advanceTimersByTime(3000); });
+            expect(screen.getByRole('button', { name: 'Go back' })).not.toHaveClass('binding-back-pulse');
+            expect(document.querySelector('[data-binding-back-callout]')).toBeNull();
+            expect(screen.getByRole('status')).toHaveTextContent('');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('names the editor kind and number in the callout', () => {
         panels.activePanel = 'tapdances';
         panels.itemToEdit = 2;
         render(<BindingSpotlight />);
         act(() => nudgeBindingEditor());
-        expect(screen.getByRole('status')).toHaveTextContent('Finish Shift Tap to use this. Press Done.');
+        expect(screen.getByRole('status')).toHaveTextContent('Done with Tap Dance 2? Go back to use the rest.');
+        // With no back arrow on screen the callout sits near the click instead.
+        expect(document.querySelector('[data-binding-back-callout]')).toHaveAttribute('data-binding-back-callout', 'point');
     });
 
     it('closes on Esc when no slot is selected', () => {
@@ -98,7 +140,7 @@ describe('binding editor spotlight', () => {
         fireEvent.click(rename);
         fireEvent.click(screen.getByText('Show All Layers'));
         expect(onClick).not.toHaveBeenCalled();
-        expect(screen.getByRole('status')).toHaveTextContent('Finish Combo 3');
+        expect(screen.getByRole('status')).toHaveTextContent('Done with Combo 3?');
         fireEvent.click(screen.getByText('Layer 2'));
         expect(onClick).toHaveBeenCalledTimes(1);
         // Closing the editor gives the controls back.

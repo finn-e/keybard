@@ -483,7 +483,7 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compac
     // one row that wraps when narrow. Placement is owned by the sidebar.
     if (compact && bindingTypeToEdit === "combos") {
         const title = (
-            <div className="flex flex-row items-center gap-3 shrink-0" data-binding-editor-header="">
+            <div className="flex flex-row items-center gap-3 shrink-0">
                 {movable && (
                     <span data-float-drag-handle aria-hidden="true" title="Move" className="cursor-move touch-none text-kb-gray-border dark:text-neutral-400 hover:text-kb-ink">
                         <GripVertical className="h-4 w-4" />
@@ -553,7 +553,7 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compac
                     <GripHorizontal className="h-4 w-4 text-gray-400 dark:text-neutral-400 group-hover:text-gray-600 dark:group-hover:text-neutral-300" />
                 </div>}
                 <div className={inline ? "p-3 pt-0" : "p-5 pt-0"}>
-                    <div data-binding-editor-header="" className={cn(
+                    <div className={cn(
                         "flex flex-row w-full items-start justify-between",
                         inline ? "pr-3 pt-2 pb-2 pl-4" : "pt-2 pb-[6px] pl-[84px]"
                     )}>
