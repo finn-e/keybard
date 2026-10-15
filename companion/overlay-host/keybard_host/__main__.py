@@ -13,10 +13,15 @@ import time
 # so keys could stay lit or patches go blank until the next change. Software rendering hands
 # the window whole frames, and the overlay is small enough that it costs nothing noticeable.
 # Must be set before Qt WebEngine starts.
-# WebGL then runs on SwiftShader (software GL through ANGLE), so the overlay can draw the
-# pointing devices with the same renderer as Keybard; without these three, WebGL has no
-# context at all under --disable-gpu and only the flat stand-in ball is drawn. The overlay
-# shows only the Host's own Keybard build, which is what makes the "unsafe" flag acceptable.
+# The last three give WebGL a context, so the overlay draws the pointing devices with the
+# same renderer as Keybard; without them WebGL has none under --disable-gpu and only the flat
+# stand-in ball is drawn. With them, Qt 6.11 on Windows still runs WebGL on the GPU (ANGLE,
+# Direct3D 11), with SwiftShader as the fallback; only compositing stays in software. The
+# renderer copies its pixels out with a readback there, since drawImage from WebGL into a
+# software canvas took 50-110 ms a frame (see src/components/pointing-viz/webgl/renderer.ts).
+# Full GPU compositing measured 60 fps too, but brought back keys left lit (2 in 100 rapid
+# taps), so it stays off. The overlay shows only the Host's own Keybard build, which is what
+# makes the "unsafe" flag acceptable.
 WINDOWS_CHROMIUM_FLAGS = ('--disable-gpu', '--disable-gpu-compositing',
                           '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader')
 if sys.platform == 'win32':

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { SETTINGS, SETTINGS_CATEGORIES, POINTING_GLOSS_SETTING, POINTING_LIGHTNESS_SETTING, POINTING_SPARKLE_SETTING } from "@/contexts/SettingsContext";
 import { BALLS, bodyAt, coatAt, GLOSS_DEFAULT, LIGHTNESS_DEFAULT, MAT_ORDER, SPARKLE_DEFAULT, spkAt } from "@/components/pointing-viz/webgl/materials";
-import { _setWebGLDisabledForTest, drawDevice, rotFromEuler, webglAvailable } from "@/components/pointing-viz/webgl/renderer";
+import { _setWebGLDisabledForTest, drawDevice, rotFromEuler, unpremultiplyFlipped, webglAvailable } from "@/components/pointing-viz/webgl/renderer";
 import { demoReport, pointingDemoFromSearch } from "@/features/pointing-demo";
 import { freeCircle, MM_PER_U, placeDevice, placedKeyRects, type KeyRect } from "@/utils/pointing-geometry";
 import { boostLabel, multiplierLabels, pointingFactors, sniperLabel } from "@/utils/pointing-multiplier";
@@ -190,5 +190,25 @@ describe("renderer without WebGL", () => {
         expect(calls).toContain("arc");
         expect(calls).toContain("fill");
         expect(canvas.width).toBe(100);
+    });
+});
+
+describe("pointing renderer readback (Keybard Host's software-composited overlay)", () => {
+    it("turns WebGL's bottom-up premultiplied rows into top-down straight-alpha ImageData", () => {
+        // 1 px wide, 2 rows: GL row 0 is the bottom one.
+        const src = new Uint8Array([
+            100, 50, 0, 128, // bottom: half-covered orange, premultiplied
+            10, 20, 30, 255, // top: opaque
+        ]);
+        const px = 1;
+        // A 1x1 device would only read one row; use a 2x2 to check the flip on a square.
+        const sq = new Uint8Array([...src.slice(0, 4), ...src.slice(0, 4), ...src.slice(4), ...src.slice(4)]);
+        const dst = new Uint8ClampedArray(16);
+        unpremultiplyFlipped(sq, dst, 2);
+        expect(Array.from(dst.slice(0, 4))).toEqual([10, 20, 30, 255]);
+        expect(Array.from(dst.slice(8, 12))).toEqual([199, 100, 0, 128]);
+        const clear = new Uint8ClampedArray(4);
+        unpremultiplyFlipped(new Uint8Array([0, 0, 0, 0]), clear, px);
+        expect(Array.from(clear)).toEqual([0, 0, 0, 0]);
     });
 });

@@ -229,9 +229,60 @@ export function drawDevice(canvas: HTMLCanvasElement, px: number, spec: DrawSpec
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.disable(gl.SCISSOR_TEST);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    copyOut(s, ctx, px);
+    return true;
+}
+
+/*
+ * Copying the render into the device's 2D canvas. drawImage from the WebGL
+ * canvas is the fast path where 2D canvases live on the GPU (Chrome). Where
+ * they don't (Keybard Host's overlay, which composites in software so its
+ * transparent window gets whole frames), Chromium copies the whole 1024 px
+ * WebGL canvas for every drawImage: 50-110 ms a frame, so the ball rolled at
+ * 10-15 frames a second. Reading back only the device's pixels costs about
+ * 1 ms there. A slow drawImage switches this page to the readback for good.
+ */
+const SLOW_COPY_MS = 12;
+let copyMode: "draw" | "read" = "draw";
+let slowCopies = 0;
+let readBuf: { px: number; raw: Uint8Array; img: ImageData } | null = null;
+
+/** Test hook: start over with drawImage. */
+export function _resetCopyModeForTest() { copyMode = "draw"; slowCopies = 0; readBuf = null; }
+export function copyModeForTest() { return copyMode; }
+
+function copyOut(s: GLState, ctx: CanvasRenderingContext2D, px: number) {
+    if (copyMode === "read" && typeof ImageData !== "undefined") {
+        const { gl } = s;
+        if (!readBuf || readBuf.px !== px) readBuf = { px, raw: new Uint8Array(px * px * 4), img: new ImageData(px, px) };
+        gl.readPixels(0, 0, px, px, gl.RGBA, gl.UNSIGNED_BYTE, readBuf.raw);
+        unpremultiplyFlipped(readBuf.raw, readBuf.img.data, px);
+        ctx.putImageData(readBuf.img, 0, 0);
+        return;
+    }
+    const t0 = performance.now();
     ctx.clearRect(0, 0, px, px);
     ctx.drawImage(s.canvas, 0, GLSIZE - px, px, px, 0, 0, px, px);
-    return true;
+    // Two slow copies in a row, not one: the first frame also pays for shader warm-up.
+    if (performance.now() - t0 > SLOW_COPY_MS) { if (++slowCopies >= 2) copyMode = "read"; }
+    else slowCopies = 0;
+}
+
+/**
+ * WebGL's bottom-up, premultiplied pixels to ImageData's top-down, straight
+ * alpha (what putImageData expects).
+ */
+export function unpremultiplyFlipped(src: Uint8Array, dst: Uint8ClampedArray, px: number) {
+    const row = px * 4;
+    for (let y = 0; y < px; y++) {
+        let i = (px - 1 - y) * row, o = y * row;
+        for (let x = 0; x < px; x++, i += 4, o += 4) {
+            const a = src[i + 3];
+            if (a === 255 || a === 0) { dst[o] = src[i]; dst[o + 1] = src[i + 1]; dst[o + 2] = src[i + 2]; }
+            else { const k = 255 / a; dst[o] = src[i] * k; dst[o + 1] = src[i + 1] * k; dst[o + 2] = src[i + 2] * k; }
+            dst[o + 3] = a;
+        }
+    }
 }
 
 /** The still stand-in: a shaded disc in the ball's swatch, or the pad's glass. */
