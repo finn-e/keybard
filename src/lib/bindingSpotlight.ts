@@ -54,17 +54,19 @@ export function effectivePickerMode(mode: PickerMode, editor: string | null | un
     return (usablePickerCategories(editor) as string[]).includes(mode) ? mode : "keyboard";
 }
 
-/** The open editor's name, as its header shows it ("Combo 3", a tap dance's own name). */
+type BindingNames = { macros?: Record<string, string>; tapdances?: Record<string, string>; combos?: Record<string, string> };
+
+/** The open editor's name, as its header shows it ("Combo 3", or the item's own name). */
 export function bindingEditorTitle(
     editor: string | null | undefined,
     index: number | null,
-    cosmetic?: { macros?: Record<string, string>; tapdances?: Record<string, string> },
+    cosmetic?: BindingNames,
 ): string {
     if (index === null || !editor) return "the editor";
     switch (editor) {
         case "macros": return cosmetic?.macros?.[String(index)] || `Macro Key ${index}`;
         case "tapdances": return cosmetic?.tapdances?.[String(index)] || `Tap Dance Key ${index}`;
-        case "combos": return `Combo ${index}`;
+        case "combos": return cosmetic?.combos?.[String(index)]?.trim() || `Combo ${index}`;
         case "overrides": return `Override ${index}`;
         case "altrepeat": return `Alt-Repeat Key ${index}`;
         case "leaders": return `Leader Sequence ${index}`;
@@ -96,15 +98,16 @@ export const bindingEditorHeading = (editor: string | null | undefined, index: n
 
 /**
  * The open item's custom name, shown under the picker header; null when it
- * has none. Tap dances and macros are the kinds that store a name.
+ * has none. Tap dances, macros and combos are the kinds that have a name.
  */
 export function bindingEditorSubtitle(
     editor: string | null | undefined,
     index: number | null,
-    cosmetic?: { macros?: Record<string, string>; tapdances?: Record<string, string> },
+    cosmetic?: BindingNames,
 ): string | null {
     if (index === null || !editor) return null;
-    const names = editor === "macros" ? cosmetic?.macros : editor === "tapdances" ? cosmetic?.tapdances : undefined;
+    const names = editor === "macros" ? cosmetic?.macros : editor === "tapdances" ? cosmetic?.tapdances
+        : editor === "combos" ? cosmetic?.combos : undefined;
     const name = names?.[String(index)]?.trim();
     return name ? name : null;
 }

@@ -26,6 +26,7 @@ import { useComboPreview } from "@/contexts/ComboPreviewContext";
 import { assignComboHues } from "@/utils/combo-hues";
 import { comboInputs } from "@/utils/combo-membership";
 import { comboSentence } from "@/utils/combo-labels";
+import { comboName } from "@/utils/combo-names";
 
 const CombosPanel: React.FC = () => {
     const { keyboard, isConnected, setKeyboard } = useKeyboard();
@@ -58,8 +59,13 @@ const CombosPanel: React.FC = () => {
         const combo = keyboard.combos?.[i];
         const inputs = comboInputs(combo);
         if (!combo || !inputs.length) return row;
-        const label = comboSentence({ index: i, enabled: isEnabled(combo.options), output: combo.output, inputs });
+        const label = comboSentence({ index: i, enabled: isEnabled(combo.options), output: combo.output, inputs }, comboName(keyboard.cosmetic, i));
         return <ComboPreviewRow key={i} index={i} ariaLabel={label}>{row}</ComboPreviewRow>;
+    };
+    /** A named combo's name, as a quiet second line under its row. */
+    const nameLine = (i: number, className?: string) => {
+        const name = comboName(keyboard.cosmetic, i);
+        return name ? <span className={cn("block truncate text-xs text-muted-foreground", className)} data-combo-row-name="">{name}</span> : null;
     };
     const glyph = (i: number) => showComboIndicators && comboInputs(keyboard.combos?.[i]).length > 0
         ? <FoldGlyph hue={comboHues.get(i) ?? 0} disabled={!isEnabled(keyboard.combos![i].options)} />
@@ -236,6 +242,7 @@ const CombosPanel: React.FC = () => {
                                     className="ml-auto scale-75 origin-right"
                                 />
                             </div>
+                            {nameLine(i, "-mt-1.5 mb-1.5 pl-7 max-w-[180px]")}
                             <div className="flex flex-row items-center justify-center gap-1 flex-wrap">
                                 {inputs.map((input, idx) => (
                                     <React.Fragment key={input.id}>
@@ -314,8 +321,8 @@ const CombosPanel: React.FC = () => {
 
                     const enabled = isEnabled(combo.options);
 
-                    const rowChildren = hasAssignment ? (
-                        <div className="flex flex-row items-center gap-1 ml-4 overflow-hidden w-full">
+                    const keysRow = hasAssignment ? (
+                        <div className="flex flex-row items-center gap-1 ml-4 overflow-hidden min-w-0 flex-1">
                             {glyph(i) && <span className="inline-flex w-[18px] justify-center mr-1">{glyph(i)}</span>}
                             {inputs.map((input, idx) => (
                                 <React.Fragment key={input.id}>
@@ -332,6 +339,8 @@ const CombosPanel: React.FC = () => {
                             />
                         </div>
                     ) : undefined;
+                    const name = keysRow ? nameLine(i, "ml-4 mt-1") : null;
+                    const rowChildren = name ? <div className="flex flex-col min-w-0 w-full">{keysRow}{name}</div> : keysRow;
 
                     const keyContents = { type: "combo" } as KeyContent;
 

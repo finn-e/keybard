@@ -5,7 +5,8 @@
  * review params (comboEditor, railMode, spotLight, pickerShape...).
  *
  * - ?demo loads the QWERTY Example on start; ?demo=combos loads it with a
- *   few combos, tap dances and macros filled in (DEMO_FEATURES).
+ *   few combos, tap dances and macros filled in (DEMO_FEATURES), two of the
+ *   combos named (DEMO_COMBO_NAMES).
  * - ?theme=light|dark forces the theme for this load only.
  * - ?edit=combo:N | tapdance:N | macro:N opens that editor once a layout is loaded.
  */
@@ -85,6 +86,9 @@ export const DEMO_FEATURES = {
     ],
 } as const;
 
+/** Names for two of the ?demo=combos combos (Keybard-only names); the middle one stays unnamed. */
+export const DEMO_COMBO_NAMES: Readonly<Record<string, string>> = { "0": "Quick escape", "2": "Next field" };
+
 /**
  * The demo layout text with DEMO_FEATURES written over its first entries.
  * The file's uid is too large for a JS number, so its exact digits are put
@@ -99,6 +103,7 @@ export function withDemoFeatures(svilText: string): string {
         entries.forEach((entry, i) => { if (i < list.length) list[i] = structuredClone(entry); });
         js[field] = list;
     }
+    js.cosmetic = { ...js.cosmetic, combos: { ...DEMO_COMBO_NAMES } };
     js.uid = 0;
     const out = JSON.stringify(js, null, 2);
     return rawUid ? out.replace(/"uid"\s*:\s*0\b/, `"uid": ${rawUid}`) : out;

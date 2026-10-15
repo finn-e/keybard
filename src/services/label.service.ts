@@ -9,6 +9,18 @@ const labelTypes = {
 };
 
 /**
+ * The rules every stored name follows: up to 16 UTF-8 bytes, no control
+ * characters. Combo names, which Keybard keeps only in files and backups,
+ * follow them too, so they can move to the board unchanged later.
+ */
+export function validateLabelText(name: string): void {
+    if (new TextEncoder().encode(name).length > SvilUSB.SVIL_LABEL_SIZE) {
+        throw new Error("Names can use up to 16 UTF-8 bytes; accented letters and emoji use more than one byte.");
+    }
+    if (/[\u0000-\u001f\u007f]/.test(name)) throw new Error("Names cannot contain control characters.");
+}
+
+/**
  * Labels stored on the keyboard (CMD_SVIL_LABEL_*): a fixed 16-byte, null-padded
  * UTF-8 name per layer, tap dance or macro (SvilUSB.SVIL_LABEL_TYPE_*).
  */
@@ -44,10 +56,7 @@ export class LabelService {
 
     validateName(kb: KeyboardInfo, kind: LabelKind, name: string): void {
         if ((kb.svil_proto ?? 1) < 2) throw new Error(`This firmware cannot save ${kind} names on the keyboard. Names in offline layouts are included in exported backups.`);
-        if (new TextEncoder().encode(name).length > SvilUSB.SVIL_LABEL_SIZE) {
-            throw new Error("Names can use up to 16 UTF-8 bytes; accented letters and emoji use more than one byte.");
-        }
-        if (/[\u0000-\u001f\u007f]/.test(name)) throw new Error("Names cannot contain control characters.");
+        validateLabelText(name);
     }
 
     async saveName(kb: KeyboardInfo, kind: LabelKind, index: number, name: string): Promise<void> {

@@ -6,6 +6,7 @@ import { fileService } from "@/services/file.service";
 import { identityService, SerialSource, type IdentityInfo } from "@/services/identity.service";
 import { folderPickerSupported, getBackupService, type BackupService, type FolderStatus, type SnapshotKind, type SnapshotMeta } from "@/services/backup/backup.service";
 import type { KeyboardInfo } from "@/types/keyboard.types";
+import { comboNamesFromSvil, seedComboNames } from "@/utils/combo-names";
 
 /** Wait this long after the last edit before saving an "edited" snapshot. */
 export const EDIT_SETTLE_MS = 10_000;
@@ -40,6 +41,18 @@ export function boardKeyFor(identity: IdentityInfo | null, keyboard: KeyboardInf
     return null;
 }
 
+/** Names from the board's latest backup that still fit its combos, or null. Never throws. */
+async function restoreComboNames(service: BackupService, boardKey: string, loaded: KeyboardInfo): Promise<Record<string, string> | null> {
+    try {
+        const latest = (await service.listSnapshots()).find(s => s.boardKey === boardKey);
+        if (!latest) return null;
+        return seedComboNames(comboNamesFromSvil(await service.getSvil(latest.id)), loaded);
+    } catch (error) {
+        console.warn("[Backups] could not restore combo names", error);
+        return null;
+    }
+}
+
 export function serializeForBackup(keyboard: KeyboardInfo): string {
     return fileService.kbinfoToSvil(structuredClone(keyboard), true);
 }
@@ -52,7 +65,7 @@ interface BackupProviderProps {
 
 export const BackupProvider: React.FC<BackupProviderProps> = ({ children, service: injected, readIdentity = () => identityService.getInfo() }) => {
     const service = injected === undefined ? getBackupService() : injected;
-    const { keyboard, isConnected, connectionSessionId, loadedFrom } = useKeyboard();
+    const { keyboard, setKeyboard, isConnected, connectionSessionId, loadedFrom } = useKeyboard();
     const { getPendingCount } = useChanges();
     const pendingCount = getPendingCount();
     const [snapshots, setSnapshots] = useState<SnapshotMeta[]>([]);
@@ -69,6 +82,8 @@ export const BackupProvider: React.FC<BackupProviderProps> = ({ children, servic
     boardRef.current = board;
     const readIdentityRef = useRef(readIdentity);
     readIdentityRef.current = readIdentity;
+    const setKeyboardRef = useRef(setKeyboard);
+    setKeyboardRef.current = setKeyboard;
 
     const refresh = useCallback(async () => {
         if (!service) return;
@@ -106,6 +121,20 @@ export const BackupProvider: React.FC<BackupProviderProps> = ({ children, servic
             if (!key) return;
             const target = { key, name: identity?.name || loadedFrom || loaded.name || "Keyboard" };
             setBoard({ ...target, session });
+            // Combo names live only in Keybard: bring them back from this board's
+            // latest backup, for the combos that are unchanged, before the
+            // connected snapshot is taken (so it keeps them too).
+            const seeded = await restoreComboNames(service, key, loaded);
+            if (sessionRef.current !== session) return;
+            if (seeded) {
+                loaded.cosmetic = { ...loaded.cosmetic, combos: { ...seeded, ...loaded.cosmetic?.combos } };
+                setKeyboardRef.current?.(cur => {
+                    if (!cur || sessionRef.current !== session) return cur;
+                    // Check again against the live state: a combo edited meanwhile keeps no old name.
+                    const names = seedComboNames({ combos: loaded.combos, cosmetic: { combos: seeded } } as KeyboardInfo, cur);
+                    return names ? { ...cur, cosmetic: { ...cur.cosmetic, combos: { ...names, ...cur.cosmetic?.combos } } } : cur;
+                });
+            }
             await save(target, loaded, "connected");
         })();
     }, [service, isConnected, keyboard, connectionSessionId, loadedFrom, save]);

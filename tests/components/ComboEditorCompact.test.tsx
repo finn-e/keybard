@@ -4,7 +4,7 @@ import BindingEditorContainer from '@/layout/SecondarySidebar/components/Binding
 import { ComboOptions } from '@/types/keyboard.types';
 
 const state = vi.hoisted(() => ({
-    board: {} as any, setKeyboard: vi.fn(), persist: vi.fn(async () => {}),
+    board: {} as any, setKeyboard: vi.fn(), persist: vi.fn(async () => {}), rename: vi.fn(async () => true),
     binding: { selectedTarget: null as any, selectComboKey: vi.fn() },
     panels: { itemToEdit: 0, bindingTypeToEdit: 'combos', initialEditorSlot: null, setPanelToGoBack: vi.fn(), setAlternativeHeader: vi.fn(), handleCloseEditor: vi.fn() },
 }));
@@ -13,7 +13,7 @@ vi.mock('@/contexts/KeyBindingContext', () => ({ useKeyBinding: () => state.bind
 vi.mock('@/contexts/PanelsContext', () => ({ usePanels: () => state.panels }));
 vi.mock('@/contexts/LayoutSettingsContext', () => ({ useLayoutSettings: () => ({ layoutMode: 'sidebar' }) }));
 vi.mock('@/hooks/useBindingChanges', () => ({ useBindingChanges: () => state.persist }));
-vi.mock('@/hooks/useBindingNames', () => ({ useBindingNames: () => ({ renameBinding: vi.fn(), nameError: null }) }));
+vi.mock('@/hooks/useBindingNames', () => ({ useBindingNames: () => ({ renameBinding: state.rename, nameError: null }) }));
 vi.mock('@/components/Key', () => ({ Key: () => <div /> }));
 vi.mock('@/layout/SecondarySidebar/components/BindingEditor/OverrideEditor', () => ({ default: () => <p>Full override editor</p> }));
 vi.mock('@/layout/SecondarySidebar/components/BindingEditor/EditorKey', () => ({
@@ -59,6 +59,26 @@ describe('compact combo editor', () => {
         expect(view.container.querySelector('[data-float-drag-handle]')).not.toBeNull();
         view.rerender(<BindingEditorContainer inline compact />);
         expect(view.container.querySelector('[data-float-drag-handle]')).toBeNull();
+    });
+
+    it('titles a named combo with its name and renames it from the title', async () => {
+        state.board.cosmetic = { combos: { '0': 'Dictation' } };
+        render(<BindingEditorContainer inline compact />);
+        expect(screen.getByRole('heading', { name: 'Dictation' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Rename Dictation' }));
+        const input = screen.getByRole('textbox', { name: 'Combo name' });
+        expect(input).toHaveValue('Dictation');
+        fireEvent.change(input, { target: { value: 'Zoom mute' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+        expect(state.rename).toHaveBeenCalledWith('combo', 0, 'Zoom mute');
+    });
+
+    it('starts an unnamed combo empty, with its number as the placeholder', () => {
+        render(<BindingEditorContainer inline compact />);
+        fireEvent.click(screen.getByRole('button', { name: 'Rename Combo 0' }));
+        const input = screen.getByRole('textbox', { name: 'Combo name' });
+        expect(input).toHaveValue('');
+        expect(input).toHaveAttribute('placeholder', 'Combo 0');
     });
 
     it('keeps the full editor for other binding types', () => {

@@ -856,7 +856,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                         focusSet: comboPreview.focusSet,
                         mode: comboPreview.mode,
                         palette: comboPreview.palette,
-                        ariaLabel: memberships.length ? keyComboAriaLabel(keyName, memberships) : keyName,
+                        ariaLabel: memberships.length ? keyComboAriaLabel(keyName, memberships, keyboard.cosmetic?.combos) : keyName,
                         pinned: comboPreview.isPinned(focus.id),
                         tabStop: (tabStopPos ?? firstKeyPos) === pos,
                         onNavigate: (key) => navigateFrom(pos, key),

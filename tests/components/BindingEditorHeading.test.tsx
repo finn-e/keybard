@@ -86,6 +86,7 @@ describe('picker header while a binding editor is open', () => {
     it.each([
         ['tapdances', 'tapdances', 'Shift or caps'],
         ['macros', 'macros', 'Email signature'],
+        ['combos', 'combos', 'Dictation'],
     ])('%s shows its custom name under the header', (panel, store, name) => {
         state.activePanel = panel;
         state.itemToEdit = 3;
@@ -93,7 +94,7 @@ describe('picker header while a binding editor is open', () => {
         for (const placement of ['half', 'panel'] as const) {
             const { unmount } = render(<TooltipProvider><SecondarySidebar comboPlacement={placement} /></TooltipProvider>);
             expect(subtitles()).toEqual([name]);
-            expect(visibleHeadings()).toEqual([panel === 'macros' ? 'Editing Macro 3' : 'Editing Tap Dance 3']);
+            expect(visibleHeadings()).toEqual([panel === 'macros' ? 'Editing Macro 3' : panel === 'combos' ? 'Editing Combo 3' : 'Editing Tap Dance 3']);
             unmount();
         }
     });
