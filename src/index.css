@@ -100,6 +100,8 @@
     --kb-pin-divider: #d6d7d8;
     --kb-pin-zone: #f4f4f3;
     --kb-pin-notch: var(--kb-back-highlight);
+    /* L-shaped picker surface (new; owner review: ?pickerShape=). */
+    --kb-picker-surface-shadow: drop-shadow(0 8px 12px rgb(0 0 0 / 0.08)) drop-shadow(0 2px 4px rgb(0 0 0 / 0.06));
 
     /* Combo folded corner. Each combo hue has a light tone (on mid and dark layer colors) and
        a deep tone (on orange, yellow, light gray and white keys), the way legends switch
@@ -187,6 +189,7 @@
     --kb-pin-divider: #3a3d42;
     --kb-pin-zone: #232528;
     --kb-pin-notch: var(--kb-back-highlight);
+    --kb-picker-surface-shadow: drop-shadow(0 8px 14px rgb(0 0 0 / 0.45)) drop-shadow(0 2px 4px rgb(0 0 0 / 0.3));
 
     --kb-combo-fold-crease: rgb(0 0 0 / 0.5);
     --kb-combo-fold-crease-strong: rgb(0 0 0 / 0.74);

@@ -43,6 +43,11 @@ import { MatrixTester } from "@/components/MatrixTester";
 
 import { EditorControls } from "./EditorControls";
 import BindingSpotlight, { SpotlightScrim, useBindingSpotlight } from "./BindingSpotlight";
+import PickerTray from "./PickerTray";
+import { PickerTrayProvider, type PickerTrayValue } from "@/contexts/PickerTrayContext";
+import { effectivePickerShape, fittedTrayHeight, isLShape, pickerShapeFromSearch, standardKeysInPlay, TRAY_MOTION_MS, trayHeightFor, trayKeyboardHeight, trayReserve, trayState } from "@/lib/pickerShape";
+import { effectivePickerMode, isBindingEditorOpen } from "@/lib/bindingSpotlight";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { getBackdropLayerFromElements } from "@/utils/layer-drop-target";
 import { svalService } from "@/services/sval.service";
 import {
@@ -1089,7 +1094,7 @@ const EditorLayoutInner = () => {
 
 
     const primarySidebar = useSidebar("primary-nav", { defaultOpen: false });
-    const { isMobile, state, activePanel, itemToEdit } = usePanels();
+    const { isMobile, state, activePanel, itemToEdit, pickerMode: chosenPickerMode = "keyboard" } = usePanels();
     // While a binding editor is open, only the keyboard canvas (with its layer
     // tabs and keys), the editor, the picker and the rail's picker categories
     // stay usable; the rest of this column sits under the spotlight scrim.
@@ -1199,9 +1204,53 @@ const EditorLayoutInner = () => {
 
     const bottomPanelHeight = getDetailPanelHeight(activePanel, dynamicBottomPanelHeight);
 
+    // L-shaped picker (design fork, ?pickerShape=L|Lfull): the Standard Keys
+    // keyboard sits in a tray under the layout, the same surface as the side
+    // panel. Side-panel layout only; the bottom bar keeps its own tray.
+    const requestedPickerShape = React.useMemo(() => pickerShapeFromSearch(window.location.search), []);
+    const pickerShape = effectivePickerShape(requestedPickerShape, layoutMode);
+    const lShape = isLShape(pickerShape) && showDetailsSidebar;
+    const editorOpen = isBindingEditorOpen(activePanel, itemToEdit);
+    const trayInputs = {
+        panelOpen: showDetailsSidebar,
+        editorOpen,
+        activePanel,
+        pickerMode: effectivePickerMode(chosenPickerMode, activePanel),
+    };
+    const trayInPlay = lShape && standardKeysInPlay(trayInputs);
+    // Collapsed (or, over the layers, expanded) by hand; any change of what is picked resets it.
+    const [trayToggled, setTrayToggled] = React.useState(false);
+    const trayContextKey = `${trayInPlay}|${isMultiLayersActive}|${editorOpen ? `${activePanel}:${itemToEdit}:${trayInputs.pickerMode}` : activePanel}`;
+    const [trayKeyFor, setTrayKeyFor] = React.useState(trayContextKey);
+    if (trayKeyFor !== trayContextKey) {
+        setTrayKeyFor(trayContextKey);
+        setTrayToggled(false);
+    }
+    const currentTrayState = trayState({ ...trayInputs, shape: lShape ? pickerShape : "rect", multiLayer: isMultiLayersActive, toggled: trayToggled });
+    const [viewportHeight, setViewportHeight] = React.useState(() => window.innerHeight);
+    React.useEffect(() => {
+        const update = () => setViewportHeight(window.innerHeight);
+        window.addEventListener("resize", update);
+        return () => window.removeEventListener("resize", update);
+    }, []);
+    const fullTrayHeight = trayHeightFor(viewportHeight);
+    // The tray takes what its keyboard needs, up to the budget for this window.
+    const [trayContentHeight, setTrayContentHeight] = React.useState(0);
+    const openTrayHeight = fittedTrayHeight(fullTrayHeight, trayContentHeight);
+    const layoutTrayReserve = lShape ? trayReserve(currentTrayState, openTrayHeight) : 0;
+    const reducedMotion = usePrefersReducedMotion();
+    const [trayHeader, setTrayHeader] = React.useState<HTMLElement | null>(null);
+    const [trayBody, setTrayBody] = React.useState<HTMLElement | null>(null);
+    const trayValue = React.useMemo<PickerTrayValue>(() => lShape
+        ? { header: trayHeader, body: trayBody, keyboardHeight: trayKeyboardHeight(fullTrayHeight) }
+        : { header: null, body: null, keyboardHeight: 0 },
+    [lShape, trayHeader, trayBody, fullTrayHeight]);
+
     // Single-combo editing keeps the whole keyboard visible: the editor sits
     // below it (or floats clear of it) and reserves the height it needs here.
-    const { placement: comboEditorPlacement } = useComboEditorPlacement();
+    const { placement: savedComboEditorPlacement } = useComboEditorPlacement();
+    // The L shape keeps every editor pinned at the top of the side panel.
+    const comboEditorPlacement = isLShape(pickerShape) ? "panel" : savedComboEditorPlacement;
     const [comboEditorReserve, setComboEditorReserve] = React.useState(0);
     const getPrimaryKeyboardElement = React.useCallback(
         () => sceneViewRefs.current.get("primary") ?? layerViewRefs.current.get(selectedLayer) ?? null,
@@ -1209,11 +1258,13 @@ const EditorLayoutInner = () => {
     );
 
     const contentStyle = React.useMemo<React.CSSProperties>(() => {
-        const panelPadding = showBottomPanel ? bottomPanelHeight : 0;
+        // The L tray's reserve includes the 8px gap under it, as the side panel has.
+        const panelPadding = showBottomPanel ? bottomPanelHeight : layoutTrayReserve > 0 ? layoutTrayReserve + 8 : 0;
         const panelCss = typeof panelPadding === "number" ? `${panelPadding}px` : panelPadding;
+        const paddingMotion = lShape ? (reducedMotion ? "0ms" : `${TRAY_MOTION_MS}ms cubic-bezier(0.33, 1, 0.68, 1)`) : "300ms ease-in-out";
         return {
             marginLeft: contentOffset,
-            transition: "margin-left 320ms cubic-bezier(0.22, 1, 0.36, 1), padding-bottom 300ms ease-in-out",
+            transition: `margin-left 320ms cubic-bezier(0.22, 1, 0.36, 1), padding-bottom ${paddingMotion}`,
             willChange: "margin-left, padding-bottom",
             // Above the page scrim, so this column dims once, under its own scrim.
             zIndex: spotlight ? 46 : undefined,
@@ -1221,7 +1272,7 @@ const EditorLayoutInner = () => {
             // combo editor reserves under the keyboard.
             paddingBottom: comboEditorReserve > 0 ? `calc(${panelCss} + ${comboEditorReserve}px)` : panelPadding,
         };
-    }, [contentOffset, showBottomPanel, bottomPanelHeight, comboEditorReserve, spotlight]);
+    }, [contentOffset, showBottomPanel, bottomPanelHeight, comboEditorReserve, spotlight, layoutTrayReserve, lShape, reducedMotion]);
 
     return (
         <div className={cn("flex flex-1 h-dvh w-full min-w-0 overflow-hidden p-0", showDetailsSidebar && "bg-kb-surface")}>
@@ -1233,6 +1284,7 @@ const EditorLayoutInner = () => {
             <BindingSpotlight />
             <div className="contents">
             {/* Keep the panel mounted when its placement changes. */}
+            <PickerTrayProvider value={trayValue}>
             <SecondarySidebar
                 leftOffset={primaryOffset}
                 height={dynamicBottomPanelHeight}
@@ -1241,7 +1293,19 @@ const EditorLayoutInner = () => {
                 canvasRef={viewsScrollRef}
                 getKeyboardElement={getPrimaryKeyboardElement}
                 onComboReserveChange={setComboEditorReserve}
+                pickerShape={lShape ? pickerShape : "rect"}
             />
+            </PickerTrayProvider>
+            {lShape && <PickerTray
+                shape={pickerShape}
+                state={currentTrayState}
+                height={openTrayHeight}
+                panelOpen={showDetailsSidebar}
+                onContentHeight={setTrayContentHeight}
+                onToggle={() => setTrayToggled(t => !t)}
+                headerRef={setTrayHeader}
+                bodyRef={setTrayBody}
+            />}
             <div
                 ref={contentContainerRef}
                 className={cn(
@@ -1492,7 +1556,7 @@ const EditorLayoutInner = () => {
                 {
                     !useBottomLayout && (
                         <>
-                            <div className={cn("absolute bottom-4 right-2 max-w-[calc(100%-4rem)] flex flex-col items-end gap-1 pointer-events-none", spotlight && "z-[42]")} style={comboEditorReserve > 0 ? { bottom: `calc(1rem + ${comboEditorReserve}px)` } : undefined}>
+                            <div className={cn("absolute bottom-4 right-2 max-w-[calc(100%-4rem)] flex flex-col items-end gap-1 pointer-events-none", spotlight && "z-[42]")} style={comboEditorReserve + layoutTrayReserve > 0 ? { bottom: `calc(1rem + ${comboEditorReserve + (layoutTrayReserve > 0 ? layoutTrayReserve + 8 : 0)}px)`, transition: lShape && !reducedMotion ? `bottom ${TRAY_MOTION_MS}ms cubic-bezier(0.33, 1, 0.68, 1)` : undefined } : undefined}>
                                 {/* While editing, the size controls stay in view above the lit canvas but dimmed and out of reach; a click on them nudges the editor. */}
                                 <div className={cn("pointer-events-auto", spotlight && "relative")} data-combo-editor-avoid data-inspector-avoid data-spotlight-dimmed={spotlight ? "" : undefined}>
                                     <div inert={spotlight} className={cn(spotlight && "opacity-40")}>

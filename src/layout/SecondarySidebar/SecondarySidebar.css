@@ -126,3 +126,23 @@
     transform: rotate(45deg);
     pointer-events: none;
 }
+
+/* L-shaped picker (owner review: ?pickerShape=L|Lfull). The panel and the
+   Standard Keys tray are one surface, drawn by PickerTray behind both, so the
+   panel draws no frame of its own. With Lfull the panel sits above the tray. */
+.detail-panel[data-picker-shape] {
+    border-color: transparent;
+    box-shadow: none;
+    background-color: transparent;
+}
+.detail-panel[data-picker-shape="Lfull"] {
+    bottom: calc(8px + var(--picker-tray-h, 0px));
+}
+.picker-surface {
+    filter: var(--kb-picker-surface-shadow);
+}
+.picker-surface path {
+    fill: var(--kb-surface);
+    stroke: var(--border);
+    stroke-width: 1;
+}

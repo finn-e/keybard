@@ -27,6 +27,7 @@ import {
     EDITOR_REST_FRAME, isUsableRect, PANEL_EDITOR_EASE_OUT, PANEL_EDITOR_FADE_MS, PANEL_EDITOR_MOTION_MS,
     PANEL_PICKER_RISE_PX, pickerScrolledUnder, pinCueStyle, rowToEditorFrame, type MotionRect, type PanelEditorMotion,
 } from "@/lib/panelEditorMotion";
+import { isLShape, type PickerShape } from "@/lib/pickerShape";
 import type { CustomUIMenuItem } from "@/types/keyboard.types";
 
 import { getPanelTitle, PanelContent } from "../PanelContent";
@@ -140,8 +141,10 @@ interface SecondarySidebarProps {
     getKeyboardElement?: () => HTMLElement | null;
     /** Height the combo editor takes from the bottom of the canvas. */
     onComboReserveChange?: (px: number) => void;
+    /** The L-shaped picker (?pickerShape=); the panel then draws no frame of its own, the L surface does. */
+    pickerShape?: PickerShape;
 }
-const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlacement, canvasRef, getKeyboardElement, onComboReserveChange }: SecondarySidebarProps) => {
+const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlacement, canvasRef, getKeyboardElement, onComboReserveChange, pickerShape = "rect" }: SecondarySidebarProps) => {
     const primarySidebar = useSidebar("primary-nav", { defaultOpen: false });
     const { activePanel, handleCloseDetails, state, alternativeHeader, itemToEdit, setItemToEdit, pickerMode: chosenPickerMode = "keyboard", setPickerMode } = usePanels();
     const { keyboard } = useKeyboard();
@@ -403,6 +406,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
             data-combo-placement={comboActive ? comboPlacement : undefined}
             data-editor-placement={panelEditor ? "panel" : undefined}
             data-editor-motion={motion ?? undefined}
+            data-picker-shape={!bottom && isLShape(pickerShape) ? pickerShape : undefined}
             className={cn("detail-panel fixed z-[60] flex flex-col bg-kb-surface border shadow-lg min-h-0", bottom ? "bottom-panel bottom-0 right-0" : "top-2 bottom-2 rounded-2xl", state !== "expanded" && "hidden")}
             style={{
                 left: leftOffset ?? primaryOffset,
@@ -445,7 +449,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
             </div>
             <div ref={listScrollRef} onScroll={onListScroll} className="z-10 relative flex-1 min-h-0 overflow-auto overscroll-contain px-4 pb-4" data-panel-scroll-owner>
                 <div hidden={showPicker && motion !== "enter"} inert={motion === "enter"}>
-                    <PanelContent panel={activePanel} horizontal={bottom} />
+                    <PanelContent panel={activePanel} horizontal={bottom} trayPortal={!showPicker} />
                 </div>
                 {bottom && showPicker && comboActive && (
                     <EditorSidePanel horizontal className="pb-2" activeTab={pickerMode} onTabChange={setPickerMode} categories={pickerCategories} />
@@ -504,7 +508,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                     </div>}
                     {/* Keyed by category: a rail switch swaps only this, with a short crossfade. */}
                     <div key={pickerMode} ref={pickerBodyRef} className={panelPlacement ? "panel-picker-swap" : undefined} data-picker-body={pickerMode}>
-                    {pickerMode === "keyboard" && <BasicKeyboards isPicker />}
+                    {pickerMode === "keyboard" && <BasicKeyboards isPicker trayPortal={showPicker} />}
                     {pickerMode === "layers" && <LayersPanel isPicker />}
                     {pickerMode === "macros" && <MacrosPanel isPicker />}
                     {pickerMode === "qmk" && <QmkKeyPanel isPicker />}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 
 import QwertyKeyboard from "@/components/Keyboards/QwertyKeyboard";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,8 @@ import { keyService } from "@/services/key.service";
 import { CODEMAP } from "@/constants/keygen";
 import ModifierSideToggle from "@/components/ModifierSideToggle";
 import { getSelectedKeymapKeycode, useModifierSide } from "@/hooks/useModifierSide";
+import { usePickerTray } from "@/contexts/PickerTrayContext";
+import { trayKeyboardScale } from "@/lib/pickerShape";
 
 import { BUTTON_TO_KEYCODE_MAP, LAYOUTS } from "@/components/Keyboards/layouts";
 
@@ -37,9 +40,14 @@ import {
 
 interface Props {
     isPicker?: boolean;
+    /**
+     * With the L-shaped picker, this copy is the one on screen and puts its
+     * keyboard in the tray under the layout; the small pickers stay here.
+     */
+    trayPortal?: boolean;
 }
 
-const BasicKeyboards = ({ isPicker }: Props) => {
+const BasicKeyboards = ({ isPicker, trayPortal = false }: Props) => {
     const [activeModifiers, setActiveModifiers] = useState<Modifier[]>([]);
     const [modifierSide, setModifierSide] = useModifierSide();
     const { assignKeycode, isBinding, selectedTarget } = useKeyBinding();
@@ -48,6 +56,8 @@ const BasicKeyboards = ({ isPicker }: Props) => {
     const { keyVariant, layoutMode, internationalLayout, setInternationalLayout } = useLayoutSettings();
 
     const isHorizontal = layoutMode === "bottombar";
+    const tray = usePickerTray();
+    const inTray = trayPortal && !isHorizontal && !!tray.body && !!tray.header;
 
 
 
@@ -453,7 +463,28 @@ const BasicKeyboards = ({ isPicker }: Props) => {
                 </div>
             )}
 
-            <div className="flex flex-col gap-2">
+            {inTray ? <>
+                {createPortal(
+                    <select
+                        className="text-sm font-medium text-kb-ink bg-transparent border-none p-0 cursor-pointer outline-none focus:ring-0"
+                        value={internationalLayout}
+                        onChange={(e) => setInternationalLayout(e.target.value)}
+                        aria-label="Keyboard layout"
+                    >
+                        {Object.values(LAYOUTS).map((kb: any) => (
+                            <option key={kb.value} value={kb.value}>
+                                {kb.label}
+                            </option>
+                        ))}
+                    </select>,
+                    tray.header!,
+                )}
+                {createPortal(
+                    <QwertyKeyboard onKeyPress={handleKeyboardInput} activeModifiers={activeModifiers} modifierSide={modifierSide} hideLanguageSelector disableTooltip={true}
+                        fit={{ maxHeight: tray.keyboardHeight, scaleFor: trayKeyboardScale }} />,
+                    tray.body!,
+                )}
+            </> : <div className="flex flex-col gap-2">
                 <div className="flex flex-row items-center justify-start">
                     <select
                         className="font-semibold text-lg text-kb-ink bg-transparent border-none p-0 cursor-pointer outline-none focus:ring-0"
@@ -468,7 +499,7 @@ const BasicKeyboards = ({ isPicker }: Props) => {
                     </select>
                 </div>
                 <QwertyKeyboard onKeyPress={handleKeyboardInput} activeModifiers={activeModifiers} modifierSide={modifierSide} hideLanguageSelector disableTooltip={true} />
-            </div>
+            </div>}
 
             <section className="flex flex-col gap-2">
                 <div className="flex items-center gap-3">

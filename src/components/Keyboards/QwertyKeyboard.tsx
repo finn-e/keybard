@@ -18,9 +18,11 @@ interface IProps {
     modifierSide?: ModifierSide;
     hideLanguageSelector?: boolean;
     disableTooltip?: boolean;
+    /** Scale the keyboard to fit both its width and this height, by scaleFor, centered (the L-shaped picker's tray). */
+    fit?: { maxHeight: number; scaleFor: (availableWidth: number, availableHeight: number, naturalWidth: number, naturalHeight: number) => number };
 }
 
-const QwertyKeyboard: FunctionComponent<IProps> = ({ onKeyPress: onKeyPressCallback, activeModifiers = [], modifierSide = "left", hideLanguageSelector = false, disableTooltip = false }) => {
+const QwertyKeyboard: FunctionComponent<IProps> = ({ onKeyPress: onKeyPressCallback, activeModifiers = [], modifierSide = "left", hideLanguageSelector = false, disableTooltip = false, fit }) => {
     const [layoutName, setLayoutName] = useState<"default" | "shift">("default");
     const { internationalLayout, setInternationalLayout, layoutMode } = useLayoutSettings();
     const { keyboard } = useKeyboard();
@@ -91,8 +93,10 @@ const QwertyKeyboard: FunctionComponent<IProps> = ({ onKeyPress: onKeyPressCallb
         const keys = row.split(" ");
         return keys.reduce((sum, key) => sum + getKeyWidth(key) * 30, 0) + (keys.length - 1) * 4;
     }));
-    const scale = availableWidth > 0 ? Math.min(1, availableWidth / naturalWidth) : 1;
     const naturalHeight = currentLayout.default.length * 30 + (currentLayout.default.length - 1) * 4;
+    const scale = fit
+        ? fit.scaleFor(availableWidth, fit.maxHeight, naturalWidth, naturalHeight)
+        : availableWidth > 0 ? Math.min(1, availableWidth / naturalWidth) : 1;
 
     const renderRow = (defaultRowStr: string, shiftRowStr: string) => {
         const defaultKeys = defaultRowStr.split(" ");
@@ -222,7 +226,7 @@ const QwertyKeyboard: FunctionComponent<IProps> = ({ onKeyPress: onKeyPressCallb
             )}
 
             <div ref={fitRef} className="w-full min-w-0 overflow-hidden" data-fitted-keyboard style={{ height: naturalHeight * scale }}>
-                <div className="flex flex-col gap-1 origin-top-left" style={{ width: naturalWidth, transform: `scale(${scale})` }}>
+                <div className="flex flex-col gap-1 origin-top-left" style={{ width: naturalWidth, transform: `scale(${scale})`, marginLeft: fit ? Math.max(0, (availableWidth - naturalWidth * scale) / 2) : undefined }}>
                     {currentLayout.default.map((row, i) => (
                         <div key={i}>{renderRow(row, currentLayout.shift[i])}</div>
                     ))}
