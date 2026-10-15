@@ -18,7 +18,7 @@ def altrepeat(r):
  r.nav('Close binding editor');r.drag(r.page.get_by_text('Alt-Rep',exact=True).filter(visible=True).first,r.page.locator('[data-keycode="KC_Q"]').first);assert r.page.locator('[data-keycode="QK_ALT_REPEAT_KEY"]').count();return 'Enabled A-to-B alternate-repeat mapping and assigned the Alt-Rep key'
 def overrides(r):
  r.open_editor('Overrides');r.assign(0,'backsp');r.assign(1,'del')
- ed=r.page.locator('[aria-label="Binding editor"]');r.click(ed.get_by_text('SHIFT',exact=True));r.click(ed.get_by_text('Suspended',exact=True));r.click(ed.get_by_text('SHIFT',exact=True))
+ ed=r.page.locator('[aria-label="Binding editor"]');r.click(ed.get_by_text('SHIFT',exact=True));r.click(ed.get_by_text('Suppressed',exact=True));r.click(ed.get_by_text('SHIFT',exact=True))
  assert 'DEL' in r.slots().nth(1).inner_text().upper();return 'Backspace trigger, Delete replacement, Shift trigger and suspended modifier configured'
 def leaders(r):
  r.open_editor('Leaders');r.assign(0,'a');r.assign(1,'b')

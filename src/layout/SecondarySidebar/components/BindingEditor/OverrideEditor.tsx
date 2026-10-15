@@ -9,19 +9,22 @@ import { DragItem } from "@/contexts/DragContext";
 import { cn } from "@/lib/utils";
 
 import OverrideModifierSelector from "./OverrideModifierSelector";
-import { prepareOverrideForEdit, setOverrideTriggerMods } from "@/utils/key-override";
+import { KeyOverrideOptions, prepareOverrideForEdit, setOverrideTriggerMods } from "@/utils/key-override";
 import type { KeyboardInfo, KeyOverrideEntry } from "@/types/keyboard.types";
 
-const TABS = ["Trigger", "Negative", "Suspended"] as const;
+const TABS = ["Trigger", "Negative", "Suppressed"] as const;
 type TabType = typeof TABS[number];
 
+// Bit meanings: QMK ko_option_t (quantum/process_keycode/process_key_override.h).
+// "inverted" options show the opposite of the stored bit, so each label is
+// true when its toggle is on.
 const OPTIONS = [
-    { label: "Active on trigger down", bit: 1 << 0 },
-    { label: "Active on mod down", bit: 1 << 1 },
-    { label: "Active on negative mod down", bit: 1 << 2 },
-    { label: "Active trigger mod activates", bit: 1 << 3 },
-    { label: "Reregister trigger on deactivate", bit: 1 << 4 },
-    { label: "No unregister on other key down", bit: 1 << 5 },
+    { label: "Activate on Trigger Down", bit: KeyOverrideOptions.ACTIVATION_TRIGGER_DOWN, inverted: false },
+    { label: "Activate on Mod Down", bit: KeyOverrideOptions.ACTIVATION_REQUIRED_MOD_DOWN, inverted: false },
+    { label: "Activate on Negative Mod Up", bit: KeyOverrideOptions.ACTIVATION_NEGATIVE_MOD_UP, inverted: false },
+    { label: "Any One Trigger Mod", bit: KeyOverrideOptions.ONE_MOD, inverted: false },
+    { label: "Re-press Trigger Key", bit: KeyOverrideOptions.NO_REREGISTER_TRIGGER, inverted: true },
+    { label: "Stay Active on Other Keys", bit: KeyOverrideOptions.NO_UNREGISTER_ON_OTHER_KEY_DOWN, inverted: false },
 ] as const;
 
 
@@ -60,7 +63,7 @@ const OverrideEditor: FC = () => {
         switch (activeTab) {
             case "Trigger": return override.trigger_mods;
             case "Negative": return override.negative_mod_mask;
-            case "Suspended": return override.suppressed_mods;
+            case "Suppressed": return override.suppressed_mods;
         }
     };
 
@@ -80,7 +83,7 @@ const OverrideEditor: FC = () => {
         switch (activeTab) {
             case "Trigger": setOverrideTriggerMods(ovr, newMask); break;
             case "Negative": ovr.negative_mod_mask = newMask; break;
-            case "Suspended": ovr.suppressed_mods = newMask; break;
+            case "Suppressed": ovr.suppressed_mods = newMask; break;
         }
         setKeyboard(updatedKeyboard);
         await persistBinding(updatedKeyboard, "override", overrideIndex);
@@ -250,8 +253,9 @@ const OverrideEditor: FC = () => {
                             <span className="text-sm font-medium text-slate-700 dark:text-neutral-200">{opt.label}</span>
                         </div>
                         <OnOffToggle
-                            value={(override.options & opt.bit) !== 0}
-                            onToggle={(val) => updateOption(opt.bit, val)}
+                            label={opt.label}
+                            value={((override.options & opt.bit) !== 0) !== opt.inverted}
+                            onToggle={(val) => updateOption(opt.bit, val !== opt.inverted)}
                         />
                     </div>
                 ))}
