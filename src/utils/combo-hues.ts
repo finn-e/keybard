@@ -6,11 +6,16 @@
 // deep tone on light ones (orange, yellow, light gray, white). No red or pink-red, which
 // belongs to "selected".
 //
-// Assignment (greedy, most constrained combo first, computed once per combo list):
+// Assignment (computed once per combo list, deterministic):
 //   1. never a hue already used by a combo that shares a trigger key with this one;
-//   2. avoid hues that clash with a layer color the combo's keys are shown on
-//      (hue within 35 degrees, or luminance contrast under 1.5:1; under 1.3:1 is never used);
-//   3. among what is left, the least used hue so far, so the layout spreads its colors.
+//   2. spread evenly: while a hue is unused, never reuse one, so up to one combo per hue
+//      every combo on the layout gets its own color; past that, hue counts stay within 1;
+//   3. avoid hues that clash with a layer color the combo's keys are shown on
+//      (hue within 35 degrees, or luminance contrast under 1.5:1);
+//   4. when a hue must be reused, prefer one whose other combos are far away (not one key
+//      away through a shared neighbor combo);
+//   5. otherwise the palette's pick order (pickOrder), so the first combos get the hues
+//      that differ most from each other.
 // Hue is the only thing this decides. Where a combo sits in a key's corner is its rank by
 // combo number on that key (see combo-fold.ts), never its color.
 import { getColorByName, isHexColor } from "@/utils/colors";
@@ -118,12 +123,56 @@ export interface KeyboardLike {
     cosmetic?: { layer_colors?: Record<string, string> };
 }
 
+// OKLab, for perceived difference between hues.
+function oklab(h: string): [number, number, number] {
+    const [r, g, b] = rgb(h).map(lin);
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    return [
+        0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+        1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+        0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+    ];
+}
+const dist = (a: string, b: string) => {
+    const x = oklab(a), y = oklab(b);
+    return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+};
+/** Perceived difference of two hue slots, over both tones. */
+export const hueDistance = (a: number, b: number, palette: ComboPalette = "default") => {
+    const p = paletteHues(palette);
+    return Math.min(dist(p[a].light, p[b].light), dist(p[a].deep, p[b].deep));
+};
+
+const orders: Partial<Record<ComboPalette, number[]>> = {};
+/**
+ * Hue slots in pick order: slot 0 first, then each next pick the slot farthest (by its
+ * nearest already-picked slot) from those already picked.
+ */
+export function pickOrder(palette: ComboPalette = "default"): number[] {
+    const hit = orders[palette];
+    if (hit) return hit;
+    const order = [0];
+    const rest = new Set(HUES.map((_, i) => i).slice(1));
+    while (rest.size) {
+        let best = -1, bestD = -1;
+        for (const h of rest) {
+            const d = Math.min(...order.map(o => hueDistance(o, h, palette)));
+            if (d > bestD + 1e-9) { best = h; bestD = d; }
+        }
+        order.push(best);
+        rest.delete(best);
+    }
+    return (orders[palette] = order);
+}
+
 type CacheEntry = { keymap: unknown; colorsKey: string; hues: Map<number, number> };
 const caches: Record<ComboPalette, WeakMap<object, CacheEntry>> = { default: new WeakMap(), colorblind: new WeakMap() };
 
 /**
- * Combo slot -> hue index for the whole keyboard (DSatur-style greedy coloring). Clashes with
- * layer colors are judged against the palette on screen.
+ * Combo slot -> hue index for the whole keyboard. Clashes with layer colors are judged
+ * against the palette on screen.
  */
 export function assignComboHues(kb: KeyboardLike | null | undefined, palette: ComboPalette = "default"): Map<number, number> {
     const out = new Map<number, number>();
@@ -146,22 +195,47 @@ export function assignComboHues(kb: KeyboardLike | null | undefined, palette: Co
         n.slot,
         nodes.filter(m => m !== n && [...m.codes].some(c => n.codes.has(c))).map(m => m.slot),
     ]));
+    // Two steps away: combos that share a key with a combo this one shares a key with.
+    const near = new Map<number, Set<number>>(nodes.map(n => {
+        const s = new Set<number>();
+        for (const m of nbrs.get(n.slot)!) for (const k of nbrs.get(m)!) if (k !== n.slot) s.add(k);
+        return [n.slot, s];
+    }));
+    const order = pickOrder(palette);
+    const rank = new Map(order.map((h, i) => [h, i]));
     const uses = HUES.map(() => 0);
+    const clashOf = (slot: number, h: number) => {
+        let worst = 0;
+        shownOn.get(slot)!.forEach(hex => { worst = Math.max(worst, clash(h, hex, palette)); });
+        return worst;
+    };
+    const taken = (slot: number) => new Set(nbrs.get(slot)!.filter(m => out.has(m)).map(m => out.get(m)!));
     const left = new Set(nodes.map(n => n.slot));
     while (left.size) {
         // Most constrained first: most distinct hues among colored neighbors, then most neighbors, then lowest slot.
-        const sat = (slot: number) => new Set(nbrs.get(slot)!.filter(m => out.has(m)).map(m => out.get(m))).size;
+        const sat = (slot: number) => taken(slot).size;
         const slot = [...left].sort((a, b) => sat(b) - sat(a) || nbrs.get(b)!.length - nbrs.get(a)!.length || a - b)[0];
-        const taken = new Set(nbrs.get(slot)!.filter(m => out.has(m)).map(m => out.get(m)!));
-        const score = (h: number) => {
-            let worst = 0;
-            shownOn.get(slot)!.forEach(hex => { worst = Math.max(worst, clash(h, hex, palette)); });
-            return (taken.has(h) ? 100 : 0) + worst * 10 + uses[h] / 100;
-        };
-        const hue = HUES.map((_, h) => h).sort((a, b) => score(a) - score(b) || a - b)[0];
+        const tk = taken(slot);
+        const minUse = Math.min(...uses);
+        const nearHue = (h: number) => [...near.get(slot)!].filter(m => out.get(m) === h).length;
+        const score = (h: number) =>
+            (tk.has(h) ? 1e6 : 0) + (uses[h] - minUse) * 1e4 + clashOf(slot, h) * 100 + nearHue(h) * 10 + rank.get(h)!;
+        const hue = order.slice().sort((a, b) => score(a) - score(b))[0];
         out.set(slot, hue);
         uses[hue]++;
         left.delete(slot);
+    }
+    // Repair: if a key-sharing constraint forced a hue past even spread, move combos off the
+    // most used hue onto the least used one where no neighbor holds it.
+    for (let guard = 0; guard < nodes.length * HUES.length; guard++) {
+        const max = Math.max(...uses), min = Math.min(...uses);
+        if (max - min <= 1) break;
+        const lo = uses.indexOf(min);
+        const movable = nodes.map(n => n.slot).find(s => uses[out.get(s)!] === max && !taken(s).has(lo));
+        if (movable == null) break;
+        uses[out.get(movable)!]--;
+        out.set(movable, lo);
+        uses[lo]++;
     }
     cache.set(kb.combos, { keymap: kb.keymap, colorsKey, hues: out });
     return out;
