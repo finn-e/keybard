@@ -92,7 +92,7 @@ describe('Settings page', () => {
         expect(state.stored['settings-developer-opened']).toBe(true);
         fireEvent.click(screen.getByRole('button', { name: 'Scan Lab' }));
         expect(state.navigate).toHaveBeenCalledWith('scanlab');
-        fireEvent.click(screen.getByRole('button', { name: 'Key Proof Sheet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Key proof sheet' }));
         expect(state.navigateTo).toHaveBeenCalledWith('proof-sheet');
         view.unmount();
         render(<SettingsPanel />);

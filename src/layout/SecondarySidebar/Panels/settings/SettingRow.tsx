@@ -1,4 +1,4 @@
-import React from "react";
+import React, { type ReactNode } from "react";
 import OnOffToggle from "@/components/ui/OnOffToggle";
 import { cn } from "@/lib/utils";
 import type { SettingDefinition } from "@/types/settings.types";
@@ -16,18 +16,22 @@ interface Props {
     value: string | number | boolean;
     onChange: (value: string | number | boolean) => void;
     onAction: (action: string) => void;
+    /** Marks search matches in the label and description. */
+    highlight?: (text: string) => ReactNode;
 }
 
-export function RowText({ label, description, id }: { label: string; description?: string; id?: string }) {
+const plain = (text: string): ReactNode => text;
+
+export function RowText({ label, description, id, highlight = plain }: { label: string; description?: string; id?: string; highlight?: (text: string) => ReactNode }) {
     return (
-        <div className="flex flex-col gap-1 min-w-0">
-            <span id={id} className="text-sm text-kb-ink">{label}</span>
-            {description && <span className="text-xs text-muted-foreground">{description}</span>}
+        <div className="flex flex-col gap-0.5 min-w-0">
+            <span id={id} className="text-sm text-kb-ink">{highlight(label)}</span>
+            {description && <span className="text-xs text-muted-foreground">{highlight(description)}</span>}
         </div>
     );
 }
 
-const SettingRow: React.FC<Props> = ({ definition, label, description, value, onChange, onAction }) => {
+const SettingRow: React.FC<Props> = ({ definition, label, description, value, onChange, onAction, highlight }) => {
     if (definition.type === "action") {
         return (
             <button
@@ -37,7 +41,7 @@ const SettingRow: React.FC<Props> = ({ definition, label, description, value, on
                 onClick={() => definition.action && onAction(definition.action)}
                 className="flex w-full flex-row items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left hover:bg-muted"
             >
-                <RowText label={label} description={description} />
+                <RowText label={label} description={description} highlight={highlight} />
                 <span aria-hidden="true" className="text-sm text-muted-foreground">&rsaquo;</span>
             </button>
         );
@@ -45,7 +49,7 @@ const SettingRow: React.FC<Props> = ({ definition, label, description, value, on
 
     return (
         <div className={cn(ROW_GRID, "px-3 py-2.5")}>
-            <RowText label={label} description={description} />
+            <RowText label={label} description={description} highlight={highlight} />
             <div className="flex justify-end min-w-0">
                 {definition.type === "boolean" && (
                     <OnOffToggle label={label} description={description} value={value === true} onToggle={(v) => onChange(v)} />

@@ -49,8 +49,9 @@ const backups = (over: Record<string, unknown> = {}) => ({
     ...over,
 });
 
-// Backups is a section of the one Settings page; its chip jumps there.
-const openBackups = () => { render(<SettingsPanel />); fireEvent.click(screen.getByRole('button', { name: 'Backups' })); };
+// Backups is a section of the one Settings page; its list starts collapsed.
+const disclosure = () => screen.getByRole('button', { name: /^Backups, / });
+const openBackups = () => { render(<SettingsPanel />); fireEvent.click(disclosure()); };
 const boardRegions = () => screen.getAllByRole('region').filter((r) => /^Backups of /.test(r.getAttribute('aria-label') ?? ''));
 
 beforeEach(() => {
@@ -144,6 +145,43 @@ describe('Settings > Backups', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Back up now' }));
         await waitFor(() => expect(backUpNow).toHaveBeenCalled());
         expect(await screen.findByText(/^Saved Today/)).toBeVisible();
+    });
+
+    it('starts collapsed, with the count and newest backup in its header and Back up now in reach', () => {
+        render(<SettingsPanel />);
+        expect(disclosure()).toHaveAttribute('aria-expanded', 'false');
+        expect(disclosure()).toHaveAccessibleName(/^Backups, 3 backups, latest Today /);
+        expect(screen.queryAllByTestId('backup-row')).toHaveLength(0);
+        expect(screen.queryByRole('button', { name: 'Choose backup folder' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Back up now' })).toBeVisible();
+        fireEvent.click(disclosure());
+        expect(disclosure()).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getAllByTestId('backup-row')).toHaveLength(3);
+    });
+
+    it('starts collapsed again the next time Settings opens', () => {
+        const view = render(<SettingsPanel />);
+        fireEvent.click(disclosure());
+        view.unmount();
+        render(<SettingsPanel />);
+        expect(disclosure()).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('says when there are no backups yet', () => {
+        mocks.backups = backups({ snapshots: [] });
+        render(<SettingsPanel />);
+        expect(disclosure()).toHaveAccessibleName('Backups, No backups yet');
+    });
+
+    it('opens for a search that finds it, and collapses when the search clears', () => {
+        render(<SettingsPanel />);
+        const search = screen.getByRole('textbox', { name: 'Search settings' });
+        fireEvent.change(search, { target: { value: 'restore' } });
+        expect(disclosure()).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getAllByTestId('backup-row')).toHaveLength(3);
+        fireEvent.keyDown(search, { key: 'Escape' });
+        expect(search).toHaveValue('');
+        expect(disclosure()).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('offers Back up now only with a board connected', () => {
