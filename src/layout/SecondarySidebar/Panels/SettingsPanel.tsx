@@ -251,7 +251,7 @@ const SettingsPanel = () => {
                                 key={section.id}
                                 id={sectionDomId(section.id)}
                                 aria-labelledby={`${sectionDomId(section.id)}-title`}
-                                className="scroll-mt-24 flex flex-col"
+                                className="scroll-mt-32 flex flex-col"
                             >
                                 {section.collapsible ? (
                                     <h4 id={`${sectionDomId(section.id)}-title`} className="text-sm font-semibold text-kb-ink">
