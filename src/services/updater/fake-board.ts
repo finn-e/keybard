@@ -663,11 +663,13 @@ export class FakeSvalboard implements UpdaterTransport {
             s.chordAt = s.armedAt;
             this.held = null; // used once
         } else if (noChord) {
+            if (hand === this.usbHand) this.held = null; // any ARM for this half uses the approval up
             flags |= ARM_PRE_APPROVED | ARM_NO_CHORD;
             s.preApproved = true;
             s.chordAt = s.armedAt;
             if (mode === ARM_MODE_PAIR) this.held = { manifest: s.pair!.slice(), client, nonce: s.nonce, doneAt: null };
         } else {
+            if (hand === this.usbHand) this.held = null; // any ARM for this half uses the approval up
             this.chordRequests++;
         }
         const mh = (await sha512(s.manifest)).subarray(0, 4);
@@ -781,7 +783,8 @@ export class FakeSvalboard implements UpdaterTransport {
         const scope = a[4];
         if (scope !== 0 && scope !== 1) return makeRsp(Status.INVALID);
         if (this.session || this.latched || this.held) return makeRsp(Status.BUSY);
-        if (scope === 1 && !this.other().alive) return makeRsp(Status.UNAVAILABLE);
+        // The other half must answer and know the split op (protocol 4).
+        if (scope === 1 && (!this.other().alive || this.other().cfg.protocol < 4)) return makeRsp(Status.UNAVAILABLE);
         this.usb().forceReset = true;
         if (scope === 1) this.other().forceReset = true;
         this.pendingReset = { at: this.clock.now() + this.timing.resetDelayMs, scope };

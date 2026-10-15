@@ -76,7 +76,7 @@ describe("updater protocol 4 against the mock board", () => {
         expect(i).toMatchObject({ protocol: 4, chunkMax: 50, manifestMax: 52, reportBytes: 64, hand: R });
     });
 
-    it("P4-02 INFO flags bit7 marks a no-chord developer build", async () => {
+    it("P4-23 INFO flags bit7 marks a no-chord developer build", async () => {
         expect((await setup({ noChord: true }).c.info()).noChord).toBe(true);
         expect((await setup().c.info()).noChord).toBe(false);
     });
@@ -88,7 +88,7 @@ describe("updater protocol 4 against the mock board", () => {
         expect(board.state).toBe(State.IDLE);
     });
 
-    it("P4-04 PAIR_MANIFEST from another client is OTHER_CLIENT", async () => {
+    it("P4-03 PAIR_MANIFEST from another client is OTHER_CLIENT", async () => {
         const { c, board } = setup();
         await c.loadManifest(L, x4.files[L].manifestBytes);
         await board.renewClient();
@@ -96,14 +96,14 @@ describe("updater protocol 4 against the mock board", () => {
         expect(r.status).toBe(Status.OTHER_CLIENT);
     });
 
-    it("P4-05 PAIR_MANIFEST after the session is armed is BUSY", async () => {
+    it("P4-03 PAIR_MANIFEST after the session is armed is BUSY", async () => {
         const { c } = setup();
         await pairArm(c);
         const r = await c.op(Op.PAIR_MANIFEST, R, manifestArgs(0, x4.files[R].manifestBytes.subarray(0, 52)));
         expect(r.status).toBe(Status.BUSY);
     });
 
-    it("P4-06 MANIFEST x3 then PAIR_MANIFEST x3 fill 52, 104, 108", async () => {
+    it("P4-03 MANIFEST x3 then PAIR_MANIFEST x3 fill 52, 104, 108", async () => {
         const { c } = setup();
         const fills: number[] = [];
         for (const [op, hand, m] of [[Op.MANIFEST, L, x4.files[L].manifestBytes], [Op.PAIR_MANIFEST, R, x4.files[R].manifestBytes]] as const) {
@@ -112,20 +112,20 @@ describe("updater protocol 4 against the mock board", () => {
         expect(fills).toEqual([52, 104, 108, 52, 104, 108]);
     });
 
-    it("P4-07 a pair ARM without all 108 pair bytes is INVALID", async () => {
+    it("P4-04 a pair ARM without all 108 pair bytes is INVALID", async () => {
         const { c } = setup();
         await c.loadManifest(L, x4.files[L].manifestBytes);
         await c.op(Op.PAIR_MANIFEST, R, manifestArgs(0, x4.files[R].manifestBytes.subarray(0, 52)));
         expect((await c.op(Op.ARM, L, [ARM_MODE_PAIR])).status).toBe(Status.INVALID);
     });
 
-    it("P4-08 a pair ARM for this half's own hand is INVALID", async () => {
+    it("P4-04 a pair ARM for this half's own hand is INVALID", async () => {
         const { c } = setup();
         await c.loadManifest(R, x4.files[R].manifestBytes);
         expect((await c.op(Op.ARM, R, [ARM_MODE_PAIR])).status).toBe(Status.INVALID);
     });
 
-    it("P4-09 a pair manifest this half would refuse latches ERROR at the pair ARM", async () => {
+    it("P4-05 a pair manifest this half would refuse latches ERROR at the pair ARM", async () => {
         const { c, board } = setup({ half: { securityEpoch: 2 } });
         const low = await loadSvup(await buildSvup({ hand: R, fwVersion: 4000, tag: "x4", securityEpoch: 1 }));
         const ok = await loadSvup(await buildSvup({ hand: L, fwVersion: 4000, tag: "x4", securityEpoch: 2 }));
@@ -135,7 +135,7 @@ describe("updater protocol 4 against the mock board", () => {
         expect(board.state).toBe(State.ERROR);
     });
 
-    it("P4-10 a pair ARM on a chord build reports both hashes and only the PAIR flag", async () => {
+    it("P4-07 a pair ARM on a chord build reports both hashes and only the PAIR flag", async () => {
         const { c, board } = setup();
         const arm = await pairArm(c);
         expect(arm.pair).toBe(true);
@@ -145,7 +145,7 @@ describe("updater protocol 4 against the mock board", () => {
         expect(board.chordRequests).toBe(1);
     });
 
-    it("P4-11 a pair ARM on a no-chord build is pre-approved; BEGIN at once", async () => {
+    it("P4-23 a pair ARM on a no-chord build is pre-approved; BEGIN at once", async () => {
         const { c, board } = setup({ noChord: true });
         const arm = await pairArm(c);
         expect(arm).toMatchObject({ preApproved: true, noChord: true, pair: true, byPair: false });
@@ -153,7 +153,7 @@ describe("updater protocol 4 against the mock board", () => {
         expect(board.chordRequests).toBe(0);
     });
 
-    it("P4-12 the chord in a pair session holds an approval (STATUS rsp[23] bit0)", async () => {
+    it("P4-07 the chord in a pair session holds an approval (STATUS rsp[23] bit0)", async () => {
         const { c } = setup();
         await pairArm(c);
         expect((await c.status(L)).approvalHeld).toBe(false);
@@ -163,7 +163,7 @@ describe("updater protocol 4 against the mock board", () => {
         expect(s.approvalHeld).toBe(true);
     });
 
-    it("P4-13 the held approval pre-approves this half's own ARM, once", async () => {
+    it("P4-08 the held approval pre-approves this half's own ARM, once", async () => {
         const { c, board } = setup();
         await otherHalf(c, board);
         expect((await c.status(R)).approvalHeld).toBe(true);
@@ -176,7 +176,7 @@ describe("updater protocol 4 against the mock board", () => {
         expect(board.chordRequests).toBe(1);
     });
 
-    it("P4-14 a different manifest isn't pre-approved", async () => {
+    it("P4-09 a different manifest isn't pre-approved", async () => {
         const { c, board } = setup();
         await otherHalf(c, board);
         const other = await loadSvup(await buildSvup({ hand: R, fwVersion: 4001, tag: "x4.1" }));
@@ -184,9 +184,10 @@ describe("updater protocol 4 against the mock board", () => {
         const arm = await c.arm(R);
         expect(arm.preApproved).toBe(false);
         expect(board.chordRequests).toBe(2);
+        expect(board.approvalHeld).toBe(false); // any ARM for this half uses the approval up
     });
 
-    it("P4-15 REBIND in IDLE moves the held approval to a renewed client", async () => {
+    it("P4-11 REBIND in IDLE moves the held approval to a renewed client", async () => {
         const { c, board } = setup();
         await otherHalf(c, board);
         await board.renewClient(); // Keybard renews its ID every 50 s
@@ -195,7 +196,7 @@ describe("updater protocol 4 against the mock board", () => {
         expect((await c.arm(R)).byPair).toBe(true);
     });
 
-    it("P4-16 a renewed client without REBIND gets no pre-approval", async () => {
+    it("P4-11 a renewed client without REBIND gets no pre-approval", async () => {
         const { c, board } = setup();
         await otherHalf(c, board);
         c.untrack();
@@ -204,14 +205,14 @@ describe("updater protocol 4 against the mock board", () => {
         expect((await c.arm(R)).preApproved).toBe(false);
     });
 
-    it("P4-17 ABORT clears the held approval", async () => {
+    it("P4-12 ABORT clears the held approval", async () => {
         const { c, board } = setup();
         await otherHalf(c, board);
         await c.abort(R, 0);
         expect(board.approvalHeld).toBe(false);
     });
 
-    it("P4-18 a MANIFEST from another client clears the held approval", async () => {
+    it("P4-10 a MANIFEST from another client clears the held approval", async () => {
         const { c, board } = setup();
         await otherHalf(c, board);
         c.untrack();
@@ -220,7 +221,7 @@ describe("updater protocol 4 against the mock board", () => {
         expect(board.approvalHeld).toBe(false);
     });
 
-    it("P4-19 the held approval lapses after its window", async () => {
+    it("P4-14 the held approval lapses after its window", async () => {
         const { c, board } = setup();
         await otherHalf(c, board);
         await clock.sleep(board.timing.heldWindowMs + 1000);
@@ -228,42 +229,41 @@ describe("updater protocol 4 against the mock board", () => {
         expect(board.timing.heldWindowMs).toBeGreaterThanOrEqual(90_000);
     });
 
-    it("P4-20 the held approval is still there 60 s after relay DONE", async () => {
+    it("P4-14 the held approval is still there 60 s after relay DONE", async () => {
         const { c, board } = setup();
         await otherHalf(c, board);
         await clock.sleep(60_000);
         expect(board.approvalHeld).toBe(true);
     });
 
-    it("P4-21 a restart of the half with USB drops the approval", async () => {
+    it("P4-15 a reset of the half with USB clears the approval (RAM only)", async () => {
         const { c, board } = setup();
         await otherHalf(c, board);
-        const r = await c.settingsReset(R, 1);
-        expect(r.status).toBe(Status.BUSY); // not while an approval is held
-        await c.abort(R);
+        expect(board.approvalHeld).toBe(true);
+        board.replug(); // power cycle: both halves restart
         expect(board.approvalHeld).toBe(false);
     });
 
-    it("P4-22 SETTINGS_RESET with a bad magic or scope is INVALID", async () => {
+    it("P4-20 SETTINGS_RESET with a bad magic or scope is INVALID", async () => {
         const { c } = setup();
         expect((await c.op(Op.SETTINGS_RESET, R, [0x52, 0x53, 0x45, 0x00, 1])).status).toBe(Status.INVALID);
         expect((await c.op(Op.SETTINGS_RESET, R, [...settingsResetArgs(1).slice(0, 4), 7])).status).toBe(Status.INVALID);
     });
 
-    it("P4-23 SETTINGS_RESET during a session is BUSY", async () => {
+    it("P4-18 SETTINGS_RESET during a session is BUSY", async () => {
         const { c } = setup();
         await c.loadManifest(R, x4.files[R].manifestBytes);
         expect((await c.settingsReset(R, 1)).status).toBe(Status.BUSY);
     });
 
-    it("P4-24 SETTINGS_RESET of both halves with the other half silent is UNAVAILABLE", async () => {
+    it("P4-19 SETTINGS_RESET of both halves with the other half silent is UNAVAILABLE", async () => {
         const { c, board } = setup({ faults: [{ kind: "other-silent" }] });
         expect((await c.settingsReset(R, 1)).status).toBe(Status.UNAVAILABLE);
         expect(board.connected()).toBe(true);
         expect(board.settings[R]).toBe("user");
     });
 
-    it("P4-25 SETTINGS_RESET resets both halves within 500 ms; bit 2 until 0x2A", async () => {
+    it("P4-17 SETTINGS_RESET resets both halves within 500 ms; bit 2 until 0x2A", async () => {
         const { c, board } = setup();
         const r = await c.settingsReset(R, 1);
         expect(r).toEqual({ status: Status.OK, done: 3 });
@@ -287,7 +287,7 @@ describe("updater protocol 4 against the mock board", () => {
         b.board.connected();
     }
 
-    it("P4-26 reinstalling the identical image keeps settings (D39)", async () => {
+    it("K-01 reinstalling the identical image keeps settings (D39)", async () => {
         const b = setup();
         await installUsbHalf(v3.files[R], b);
         expect(b.board.connected()).toBe(true);
@@ -295,14 +295,14 @@ describe("updater protocol 4 against the mock board", () => {
         expect(b.board.storageFlags & 4).toBe(0);
     });
 
-    it("P4-27 a different image resets settings and sets bit 2 (D39)", async () => {
+    it("K-02 a different image resets settings and sets bit 2 (D39)", async () => {
         const b = setup();
         await installUsbHalf(x4.files[R], b);
         expect(b.board.settings[R]).toBe("defaults");
         expect(b.board.storageFlags & 4).toBe(4);
     });
 
-    it("P4-30 a chord not made in 30 s latches NOT_CONFIRMED", async () => {
+    it("P4-13 a chord not made in 30 s latches NOT_CONFIRMED", async () => {
         const { c, board } = setup({ chordAfterMs: "never" });
         const arm = await pairArm(c);
         await clock.sleep(31_000);
@@ -313,14 +313,14 @@ describe("updater protocol 4 against the mock board", () => {
         expect(board.halves[L].cfg.fwVersion).toBe(3000);
     });
 
-    it("P4-32 anyone may ABORT a latched error", async () => {
+    it("K-03 anyone may ABORT a latched error", async () => {
         const { c, board } = setup({ faults: [{ kind: "latched-error" }] });
         expect((await c.info()).state).toBe(State.ERROR);
         await c.abort(R);
         expect(board.state).toBe(State.IDLE);
     });
 
-    it("P4-33 a client renewal mid-transfer REBINDs before the next op", async () => {
+    it("K-04 a client renewal mid-transfer REBINDs before the next op", async () => {
         const { c, board } = setup({ faults: [{ kind: "renew-every", ms: 3000 }] });
         const arm = await pairArm(c);
         await until(async () => !(!(await c.status(L)).chordMade), 250);
@@ -337,7 +337,7 @@ describe("updater protocol 4 against the mock board", () => {
         void board;
     });
 
-    it("P4-33b a wrapper rejection takes a new ID and REBINDs, then retries once", async () => {
+    it("K-05 a wrapper rejection takes a new ID and REBINDs, then retries once", async () => {
         const { c } = setup({ faults: [{ kind: "expire-client", afterOps: 12 }] });
         const arm = await pairArm(c);
         for (let i = 0; i < 6; i++) await c.status(L);
@@ -345,7 +345,7 @@ describe("updater protocol 4 against the mock board", () => {
         expect(arm.nonce).toBeGreaterThan(0);
     });
 
-    it("P4-34 CHUNK out of order answers with the board's next offset", async () => {
+    it("K-06 CHUNK out of order answers with the board's next offset", async () => {
         const { c, board } = setup({ noChord: true });
         const arm = await pairArm(c);
         await c.begin(L, arm.nonce);
@@ -357,10 +357,75 @@ describe("updater protocol 4 against the mock board", () => {
         void board;
     });
 
-    it("presence reads VERSION while the halves differ and MATCH once both run one release", async () => {
+    it("K-07 presence reads VERSION while the halves differ and MATCH once both run one release", async () => {
         const { c, board } = setup({ otherRunning: { tag: "x4", fwVersion: 4000 } });
         expect((await c.status(R)).presence).toBe(Presence.VERSION);
         expect((await c.info()).otherDiffers).toBe(true);
         void board;
+    });
+
+    it("P4-02 a single ARM is protocol 3's: flags 0, the chord asked for; mode 2 is INVALID", async () => {
+        const { c, board } = setup();
+        await c.loadManifest(R, x4.files[R].manifestBytes);
+        expect((await c.op(Op.ARM, R, [2])).status).toBe(Status.INVALID);
+        const arm = await c.arm(R, ARM_MODE_SINGLE);
+        expect(arm.flags).toBe(0);
+        expect(Array.from(arm.pairHash)).toEqual([0, 0, 0, 0]);
+        expect(board.chordRequests).toBe(1);
+        expect((await c.op(Op.BEGIN, R, [...new Uint8Array(new Uint32Array([arm.nonce]).buffer)])).status).toBe(Status.NOT_CONFIRMED);
+    });
+
+    it("P4-06 a pair ARM refused for the other half's manifest latches ERROR", async () => {
+        const { c, board } = setup({ half: { securityEpoch: 2 } });
+        const low = await loadSvup(await buildSvup({ hand: L, fwVersion: 4000, tag: "x4", securityEpoch: 1 }));
+        const ok = await loadSvup(await buildSvup({ hand: R, fwVersion: 4000, tag: "x4", securityEpoch: 2 }));
+        await c.loadManifest(L, low.manifestBytes);
+        await c.loadManifest(R, ok.manifestBytes, true);
+        await expect(c.arm(L, ARM_MODE_PAIR)).rejects.toMatchObject({ status: Status.EPOCH });
+        expect(board.state).toBe(State.ERROR);
+        expect(board.approvalHeld).toBe(false);
+    });
+
+    it("P4-13 an error clears the approval: the session failing after the chord", async () => {
+        const { c, board } = setup({ faults: [{ kind: "bad-hash", hand: L }] });
+        const arm = await pairArm(c);
+        await until(async () => (await c.status(L)).chordMade);
+        expect(board.approvalHeld).toBe(true);
+        await c.begin(L, arm.nonce);
+        await until(async () => (await c.status(L)).state === State.RECEIVING, 100);
+        for (let off = 0; off < x4.files[L].image.length;) off = (await c.chunk(L, off, x4.files[L].image.subarray(off, off + 50))).next;
+        await c.end(L, arm.nonce);
+        await until(async () => (await c.status(L)).state === State.ERROR, 100);
+        expect(board.approvalHeld).toBe(false);
+    });
+
+    it("P4-16 REBIND while the other half commits keeps the session and the approval", async () => {
+        const { c, board } = setup();
+        const arm = await pairArm(c);
+        await until(async () => (await c.status(L)).chordMade);
+        await send(c, board, L, arm.nonce, x4.files[L]);
+        await c.commit(L, arm.nonce, x4.files[L].crcBody & 0xffff);
+        await until(async () => (await c.relay(L)).state === State.RELAYED);
+        await c.commit(L, arm.nonce, x4.files[L].crcBody & 0xffff);
+        expect(board.state).toBe(State.SUBSIDE_COMMITTING);
+        await board.renewClient();
+        expect((await c.op(Op.REBIND, L, [...new Uint8Array(new Uint32Array([arm.nonce]).buffer)])).status).toBe(Status.OK);
+        await until(async () => (await c.status(R)).state === State.IDLE);
+        expect(board.approvalHeld).toBe(true);
+    });
+
+    it("P4-21 SETTINGS_RESET scope 0 resets this half only (done 0x01)", async () => {
+        const { c, board } = setup();
+        expect(await c.settingsReset(R, 0)).toEqual({ status: Status.OK, done: 1 });
+        await clock.sleep(6000);
+        board.connected();
+        expect(board.settings).toEqual({ 0: "user", 1: "defaults" });
+    });
+
+    it("P4-22 SETTINGS_RESET with the other half on protocol 3 is UNAVAILABLE", async () => {
+        const { c, board } = setup({ otherRunning: { tag: "vNext1", fwVersion: 2301 } });
+        board.halves[L].cfg.protocol = 3;
+        expect((await c.settingsReset(R, 1)).status).toBe(Status.UNAVAILABLE);
+        expect(board.connected()).toBe(true);
     });
 });

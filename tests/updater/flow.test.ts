@@ -62,7 +62,7 @@ function expectOneChordAtMost(s: FlowState) {
 }
 
 describe("the install flow", () => {
-    it("P4-28 a pair update asks for the chord exactly once and ends on the new release", async () => {
+    it("P4-08 / P4-25 a pair update asks for the chord exactly once and ends on the new release", async () => {
         const { board, host, state } = await run();
         expect(state.phase).toBe("result");
         expect(state.approvalsAsked).toBe(1);
@@ -79,7 +79,7 @@ describe("the install flow", () => {
         expect(arms.map((a) => a.hand)).toEqual([L, R]);
     });
 
-    it("P4-29 a no-chord developer build never asks for the chord", async () => {
+    it("P4-23 a no-chord developer build never asks for the chord", async () => {
         const { board, state } = await run({ setup: { noChord: true }, release: dev });
         expect(state.phase).toBe("result");
         expect(state.noChord).toBe(true);
@@ -87,7 +87,7 @@ describe("the install flow", () => {
         expect(board.chordRequests).toBe(0);
     });
 
-    it("P4-31 a lapsed held approval stops on F9 and never asks for a second chord", async () => {
+    it("P4-14 / P4-25 a lapsed held approval stops on F9 and never asks for a second chord", async () => {
         const { board, state } = await run({ setup: { faults: [{ kind: "held-lapse" }] } });
         expect(state.phase).toBe("failed");
         expect(state.failure).toMatchObject({ id: "F9", tags: { 0: "x4", 1: "v3" } });
