@@ -4,6 +4,7 @@
 // overlays the space under the layout, so showing it never moves a key, and it stops short
 // of any editor or control below (the "lane"). Sections render only when they have content.
 import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { COMBO_EDITOR_MOVED_EVENT as EDITOR_MOVED_EVENT } from "@/lib/comboEditorPlacement";
 import { cn } from "@/lib/utils";
 import type { ComboEntry, KeyboardInfo } from "@/types/keyboard.types";
 import { useComboPreview } from "@/contexts/ComboPreviewContext";
@@ -31,6 +32,7 @@ const LEAVE_FADE_MS = 90;
 const OBSTACLES = ".binding-workspace, aside.detail-panel[data-placement='bottom'], [data-inspector-avoid]";
 /** Small controls level with the card's top edge (the add-view button): the card starts to their right. */
 const BESIDE = "[data-inspector-beside]";
+
 
 function membershipOf(combos: ComboEntry[], index: number): ComboMembership | null {
     const c = combos[index];
@@ -134,8 +136,9 @@ const Sections = ({ list, kb }: { list: Section[]; kb: KeyboardInfo }) => (
  * the layout's width, but never past the visible canvas (a narrow canvas, with the picker and
  * an editor open, would otherwise push the card off screen).
  */
-function useLane(anchor: React.RefObject<HTMLDivElement | null>, deps: unknown[]): { lane: number; width: number; inset: number } {
+function useLane(anchor: React.RefObject<HTMLDivElement | null>, deps: unknown[]): { lane: number; width: number; inset: number; drop: number } {
     const [lane, setLane] = useState(MAX_CARD_HEIGHT);
+    const [drop, setDrop] = useState(0);
     const [width, setWidth] = useState(MAX_CARD_WIDTH);
     const [inset, setInset] = useState(0);
     useLayoutEffect(() => {
@@ -143,15 +146,6 @@ function useLane(anchor: React.RefObject<HTMLDivElement | null>, deps: unknown[]
         if (!el) return;
         const measure = () => {
             const a = el.getBoundingClientRect();
-            let bottom = window.innerHeight - VIEWPORT_GUTTER;
-            document.querySelectorAll<HTMLElement>(OBSTACLES).forEach(o => {
-                const r = o.getBoundingClientRect();
-                if (!r.width || !r.height) return;
-                if (r.top < a.top - 1) return; // beside or above the layout, never under the card
-                if (r.right <= a.left || r.left >= a.left + Math.max(a.width, 1)) return;
-                bottom = Math.min(bottom, r.top - GAP);
-            });
-            setLane(Math.max(0, Math.round(bottom - a.top)));
             const canvas = el.closest(".keyboard-canvas-scroll");
             let right = window.innerWidth - VIEWPORT_GUTTER;
             if (canvas) right = Math.min(right, canvas.getBoundingClientRect().left + canvas.clientWidth - GAP);
@@ -162,6 +156,27 @@ function useLane(anchor: React.RefObject<HTMLDivElement | null>, deps: unknown[]
                 if (r.right <= a.left || r.left >= a.left + MAX_CARD_WIDTH) return;
                 left = Math.max(left, Math.ceil(r.right - a.left + 8));
             });
+            // Obstacles at the top of the lane (the card Under a Half, an editor
+            // beside the layout): sit beside one when that side has room,
+            // otherwise drop below it. Obstacles further down end the lane.
+            const blockers: DOMRect[] = [];
+            const below: DOMRect[] = [];
+            document.querySelectorAll<HTMLElement>(OBSTACLES).forEach(o => {
+                const r = o.getBoundingClientRect();
+                if (!r.width || !r.height) return;
+                if (r.bottom <= a.top + 1) return; // wholly above the lane
+                if (r.right <= a.left + left || r.left >= a.left + Math.max(a.width, 1)) return;
+                // Only an editor card steps aside; panels and controls end the lane as before.
+                if (r.top >= a.top + FULL_MIN_LANE || !o.matches(".binding-workspace")) { below.push(r); return; }
+                if (r.left - GAP - (a.left + left) >= MIN_CARD_WIDTH) { right = Math.min(right, r.left - GAP); return; }
+                if (right - (r.right + GAP) >= MIN_CARD_WIDTH) { left = Math.max(left, Math.ceil(r.right + GAP - a.left)); return; }
+                blockers.push(r);
+            });
+            const drop = blockers.length ? Math.max(0, ...blockers.map(r => Math.ceil(r.bottom + GAP - a.top))) : 0;
+            let bottom = window.innerHeight - VIEWPORT_GUTTER;
+            for (const r of below) if (r.bottom > a.top + drop) bottom = Math.min(bottom, r.top - GAP);
+            setDrop(drop);
+            setLane(Math.max(0, Math.round(bottom - a.top - drop)));
             setInset(left);
             const room = Math.floor(right - a.left - left);
             setWidth(Math.max(0, Math.min(MAX_CARD_WIDTH, Math.max(MIN_CARD_WIDTH, Math.round(a.width) - left), room)));
@@ -172,10 +187,12 @@ function useLane(anchor: React.RefObject<HTMLDivElement | null>, deps: unknown[]
         if (el.parentElement) ro?.observe(el.parentElement);
         document.querySelectorAll<HTMLElement>(OBSTACLES).forEach(o => ro?.observe(o));
         window.addEventListener("resize", measure);
-        return () => { ro?.disconnect(); window.removeEventListener("resize", measure); };
+        // A fixed editor card can move without resizing anything observed.
+        window.addEventListener(EDITOR_MOVED_EVENT, measure);
+        return () => { ro?.disconnect(); window.removeEventListener("resize", measure); window.removeEventListener(EDITOR_MOVED_EVENT, measure); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, deps);
-    return { lane, width, inset };
+    return { lane, width, inset, drop };
 }
 
 export function KeyInspector({ keyboard, hues, className }: {
@@ -202,7 +219,7 @@ export function KeyInspector({ keyboard, hues, className }: {
     const wasShown = useRef(false);
 
     const anchor = useRef<HTMLDivElement>(null);
-    const { lane, width, inset } = useLane(anchor, [active?.id, keyboard]);
+    const { lane, width, inset, drop } = useLane(anchor, [active?.id, keyboard]);
     const bodyRef = useRef<HTMLDivElement>(null);
     const [hiddenRows, setHiddenRows] = useState(0);
 
@@ -328,7 +345,7 @@ export function KeyInspector({ keyboard, hues, className }: {
 
     return (
         <div ref={anchor} className={cn("w-full", className)}>
-            <div style={{ width, marginLeft: inset || undefined }}>
+            <div style={{ width, marginLeft: inset || undefined, marginTop: drop || undefined }}>
                 {body
                     ? <div className="kb-inspector-in" key={shows.current} data-inspector-live="">{body}</div>
                     : leaving && <div className="kb-inspector-out pointer-events-none" aria-hidden="true">{leaving}</div>}

@@ -7,6 +7,8 @@ export type ComboEditorPlacement = "half" | "dock" | "anchored" | "float";
 
 export const COMBO_EDITOR_PLACEMENT_SETTING = "combo-editor-placement";
 export const COMBO_EDITOR_PLACEMENT_PARAM = "comboEditor";
+/** Fired when the fixed combo editor card moves, so the key inspector can re-measure its lane. */
+export const COMBO_EDITOR_MOVED_EVENT = "keybard:combo-editor-moved";
 export const DEFAULT_COMBO_EDITOR_PLACEMENT: ComboEditorPlacement = "half";
 export const COMBO_EDITOR_PLACEMENTS: readonly ComboEditorPlacement[] = ["half", "dock", "anchored", "float"];
 

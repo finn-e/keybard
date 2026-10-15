@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import type { ComboEditorPlacement } from "@/lib/comboEditorPlacement";
+import { COMBO_EDITOR_MOVED_EVENT, type ComboEditorPlacement } from "@/lib/comboEditorPlacement";
 
 /** Gap between the editor and the keyboard, panel or viewport edge. */
 export const COMBO_EDITOR_GAP = 8;
@@ -338,6 +338,12 @@ export function useComboEditorGeometry({
             cancelAnimationFrame(frameRef.current);
         };
     }, [placement, measure, schedule, canvasRef, workspaceRef, panelRef, getKeyboardElement, onReserveChange]);
+
+    // Tell the key inspector the card moved, so it can sit beside it.
+    React.useEffect(() => {
+        const frame = requestAnimationFrame(() => window.dispatchEvent(new Event(COMBO_EDITOR_MOVED_EVENT)));
+        return () => cancelAnimationFrame(frame);
+    }, [geometry]);
 
     // Release the reserved space when the editor unmounts.
     React.useEffect(() => () => { if (reserveRef.current !== 0) onReserveChange?.(0); }, [onReserveChange]);
