@@ -394,6 +394,25 @@ describe("readout", () => {
         expect(text).toContain("off");
         expect(screen.getByLabelText("Combo 7: W plus E gives =")).toBeTruthy();
     });
+
+    it("shows a named combo's name in place of its number, and in its description", () => {
+        const named = { ...kb, cosmetic: { ...kb.cosmetic, combos: { "7": "Equals" } } };
+        render(
+            <ComboPreviewProvider>
+                <Keyboard keyboard={named as any} selectedLayer={0} setSelectedLayer={vi.fn()} instanceId="main" showKeyInspector />
+            </ComboPreviewProvider>,
+        );
+        fireEvent.mouseEnter(keyEl("KC_E"));
+        tick(HOVER_DELAY_MS);
+        const line = readout()!.querySelector('[data-readout-combo="7"]')!;
+        expect(line.querySelector("[data-readout-combo-name]")!.textContent).toBe("Equals");
+        expect(line.textContent).not.toContain("Combo 7");
+        expect(readout()!.querySelector('[data-readout-combo="6"]')!.textContent).toContain("Combo 6");
+        expect(screen.getByLabelText("Equals (Combo 7): W plus E gives =")).toBeTruthy();
+        // The key's own description names it too; the fold on the key does not change.
+        expect(keyEl("KC_E").closest("[aria-label]")!.getAttribute("aria-label")).toContain("Equals (Combo 7)");
+        expect(foldOf("KC_E")!.querySelector("title")!.textContent).not.toContain("Equals");
+    });
 });
 
 describe("key inspector", () => {

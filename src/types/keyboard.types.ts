@@ -58,6 +58,8 @@ export interface KeyboardInfo {
         layer_colors?: Record<string, string>;
         macros?: Record<string, string>;
         tapdances?: Record<string, string>;
+        /** Combo names, keyed by combo index. Kept in Keybard (files and backups), never on the board. */
+        combos?: Record<string, string>;
     };
     keylayout?: Record<string, any>; // Using any for now to match KLE output structure
 

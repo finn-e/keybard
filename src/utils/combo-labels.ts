@@ -25,12 +25,13 @@ export function shortKeyName(s: string | undefined): string {
     return NAMES[b] || (b.length === 1 ? b : b.charAt(0) + b.slice(1).toLowerCase());
 }
 
-/** "Combo 3, off: J plus K gives Esc" */
-export function comboSentence(c: ComboMembership): string {
-    return `Combo ${c.index}${c.enabled ? "" : ", off"}: ${c.inputs.map(shortKeyName).join(" plus ")} gives ${shortKeyName(c.output)}`;
+/** "Combo 3, off: J plus K gives Esc"; with a name, "Dictation (Combo 3): J plus K gives Esc". */
+export function comboSentence(c: ComboMembership, name?: string): string {
+    const who = name?.trim() ? `${name.trim()} (Combo ${c.index})` : `Combo ${c.index}`;
+    return `${who}${c.enabled ? "" : ", off"}: ${c.inputs.map(shortKeyName).join(" plus ")} gives ${shortKeyName(c.output)}`;
 }
 
-/** Accessible label for a key in one or more combos. */
-export function keyComboAriaLabel(keyName: string, ms: ComboMembership[]): string {
-    return `${keyName}: in ${ms.length} combo${ms.length > 1 ? "s" : ""}. ${ms.map(comboSentence).join(". ")}`;
+/** Accessible label for a key in one or more combos. `names` is keyboard.cosmetic.combos. */
+export function keyComboAriaLabel(keyName: string, ms: ComboMembership[], names?: Record<string, string>): string {
+    return `${keyName}: in ${ms.length} combo${ms.length > 1 ? "s" : ""}. ${ms.map(c => comboSentence(c, names?.[String(c.index)])).join(". ")}`;
 }

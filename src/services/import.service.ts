@@ -181,6 +181,8 @@ export class ImportService {
             }
         }
 
+        // Board labels only. Combo names (cosmetic.combos) stay in Keybard: the
+        // preflight already put them in newKb, and nothing is written for them.
         const labels = services.labelService ?? new LabelService(usbInstance);
         if ((currentKb.svil_proto ?? 0) >= 2) {
             for (const [field, kind, count] of [["layer", "layer", currentKb.layers], ["macros", "macro", currentKb.macro_count], ["tapdances", "tapdance", currentKb.tapdance_count]] as const) {

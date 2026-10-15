@@ -32,6 +32,8 @@ describe("?demo", () => {
         expect(JSON.stringify(kb.tapdances?.[0])).not.toBe(JSON.stringify(plain.tapdances?.[0]));
         expect(kb.macros?.[1]?.actions?.length).toBeGreaterThan(0);
         expect(plain.macros?.[1]?.actions?.length ?? 0).toBe(0);
+        expect(kb.cosmetic?.combos).toEqual({ "0": "Quick escape", "2": "Next field" });
+        expect(kb.cosmetic?.layer).toEqual(plain.cosmetic?.layer);
     });
 
     it("starts once per page load", () => {

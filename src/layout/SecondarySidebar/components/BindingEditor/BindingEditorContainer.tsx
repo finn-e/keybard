@@ -145,6 +145,9 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compac
         if (bindingTypeToEdit === "tapdances") {
             return { cosmeticKey: "tapdances" as const, defaultLabel: `Tap Dance Key ${itemToEdit}` };
         }
+        if (bindingTypeToEdit === "combos") {
+            return { cosmeticKey: "combos" as const, defaultLabel: `Combo ${itemToEdit}` };
+        }
         return null;
     };
 
@@ -153,7 +156,8 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compac
         const editConfig = getEditableTitleDefaults();
         if (!editConfig) return;
         const { cosmeticKey, defaultLabel } = editConfig;
-        const currentName = keyboard.cosmetic?.[cosmeticKey]?.[itemToEdit.toString()] || defaultLabel;
+        // A combo with no name starts empty, its number shown as the placeholder.
+        const currentName = keyboard.cosmetic?.[cosmeticKey]?.[itemToEdit.toString()] || (cosmeticKey === "combos" ? "" : defaultLabel);
         setEditTitleValue(currentName);
         setIsEditingTitle(true);
     };
@@ -162,7 +166,7 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compac
         if (itemToEdit === null) return;
         const config = getEditableTitleDefaults();
         if (!config) return;
-        const kind = config.cosmeticKey === "macros" ? "macro" : "tapdance";
+        const kind = config.cosmeticKey === "macros" ? "macro" : config.cosmeticKey === "tapdances" ? "tapdance" : "combo";
         const value = editTitleValue.trim() === config.defaultLabel ? "" : editTitleValue;
         if (await renameBinding(kind, itemToEdit, value)) setIsEditingTitle(false);
     };
@@ -560,10 +564,36 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compac
                         <GripVertical className="h-4 w-4" />
                     </span>
                 )}
-                <h3 className="text-base font-semibold leading-none whitespace-nowrap text-kb-ink">{getEditorTitle()}</h3>
+                <h3 className="text-base font-semibold leading-none whitespace-nowrap text-kb-ink">
+                    {isEditingTitle ? (
+                        <Input
+                            ref={inputRef}
+                            aria-label="Combo name"
+                            placeholder={`Combo ${itemToEdit}`}
+                            value={editTitleValue}
+                            onChange={(e) => setEditTitleValue(e.target.value)}
+                            onBlur={handleSaveTitle}
+                            onKeyDown={handleTitleKeyDown}
+                            className="h-7 py-0 px-1.5 text-base font-semibold w-[11rem] select-text"
+                            autoFocus
+                        />
+                    ) : (
+                        <button
+                            type="button"
+                            aria-label={`Rename ${getEditorTitle()}`}
+                            title="Click to rename"
+                            className="cursor-pointer rounded-md -mx-1 px-1 py-0.5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+                            onClick={handleStartEditingTitle}
+                            data-combo-editor-title=""
+                        >
+                            {getEditorTitle()}
+                        </button>
+                    )}
+                </h3>
                 {renderComboToggle()}
             </div>
         );
+        const nameAlert = nameError ? <p role="alert" className="text-sm text-red-700 dark:text-red-400">{nameError}</p> : null;
         const actions = (
             <div className="flex flex-row items-center gap-1 shrink-0 ml-auto">
                 {hasContent && (
@@ -592,17 +622,22 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compac
         );
         // Compact single-combo editor. Placement is owned by the sidebar; this
         // only lays out title, enabled, keys, clear and close.
+        // One row: the error sits under the row, outside the flex line.
         return stacked ? (
             <div className="combo-compact-editor flex flex-col gap-1 w-full min-w-0 px-3 py-2">
                 <div className="flex flex-row items-center gap-3">{title}{actions}</div>
+                {nameAlert}
                 <ComboEditor strip />
                 {confirmDialog}
             </div>
         ) : (
-            <div className="combo-compact-editor flex flex-row items-center gap-x-4 w-full min-w-0 px-3 py-2">
-                {title}
-                <div className="min-w-0"><ComboEditor strip /></div>
-                {actions}
+            <div className="flex flex-col w-full min-w-0">
+                <div className="combo-compact-editor flex flex-row items-center gap-x-4 w-full min-w-0 px-3 py-2">
+                    {title}
+                    <div className="min-w-0"><ComboEditor strip /></div>
+                    {actions}
+                </div>
+                {nameAlert && <div className="px-3 pb-2">{nameAlert}</div>}
                 {confirmDialog}
             </div>
         );
@@ -632,7 +667,7 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compac
                             {renderHeaderIcon()}
                             <div className={cn("flex items-center", inline ? "h-10 pl-3" : "h-14 pl-[20px]")}>
                                 <div className={cn("font-normal", inline ? "text-lg" : "text-xl")}>
-                                    {bindingTypeToEdit === "macros" || bindingTypeToEdit === "tapdances" ? (
+                                    {bindingTypeToEdit === "macros" || bindingTypeToEdit === "tapdances" || bindingTypeToEdit === "combos" ? (
                                         isEditingTitle ? (
                                             <div className="flex items-center gap-2 bg-kb-surface rounded-md px-1 py-0.5 border border-kb-ink shadow-sm">
                                                 <Input

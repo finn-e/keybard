@@ -12,6 +12,7 @@ import { useLayoutSettings } from "@/contexts/LayoutSettingsContext";
 import { comboInputs, type ComboMembership } from "@/utils/combo-membership";
 import { comboSentence, shortKeyName } from "@/utils/combo-labels";
 import { hiddenOnKey } from "@/utils/combo-fold";
+import { comboName } from "@/utils/combo-names";
 import { layerHexFor } from "@/utils/combo-hues";
 import { buildKeyIndex, inspectKey, type KeyInspection, type Part, type Row, type Section } from "@/utils/key-inspect";
 import { ComboOptions } from "@/types/keyboard.types";
@@ -56,13 +57,16 @@ function Chip({ children, out = false, label, edge }: { children: React.ReactNod
 
 const Off = () => <span className="text-[11px] text-muted-foreground border border-kb-combo-chip-border rounded-full px-1.5">off</span>;
 
-export function ComboLine({ c, hue, notShown = false, showHue = true }: { c: ComboMembership; hue: number; notShown?: boolean; showHue?: boolean }) {
+export function ComboLine({ c, hue, name, notShown = false, showHue = true }: { c: ComboMembership; hue: number; name?: string; notShown?: boolean; showHue?: boolean }) {
     return (
         <li className="grid grid-cols-[18px_86px_1fr] items-center gap-x-2 min-h-6 text-[13px]" data-readout-combo={c.index} data-inspector-row="">
             <span className="inline-flex w-[18px] h-4 items-center justify-center">{showHue && <FoldGlyph hue={hue} disabled={!c.enabled} />}</span>
-            <span className="text-muted-foreground tabular-nums text-[12.5px]">Combo {c.index}</span>
+            {/* A named combo shows its name in place of its number. */}
+            {name
+                ? <span className="text-muted-foreground text-[12.5px] truncate" title={`Combo ${c.index}`} data-readout-combo-name="">{name}</span>
+                : <span className="text-muted-foreground tabular-nums text-[12.5px]">Combo {c.index}</span>}
             <span className="inline-flex items-center gap-[3px] flex-wrap min-w-0">
-                <span className="inline-flex items-center gap-[3px] flex-wrap" aria-label={comboSentence(c)}>
+                <span className="inline-flex items-center gap-[3px] flex-wrap" aria-label={comboSentence(c, name)}>
                     {c.inputs.map((x, i) => (
                         <React.Fragment key={i}>
                             {i > 0 && <span className="text-muted-foreground text-[11px]" aria-hidden="true">+</span>}
@@ -253,7 +257,7 @@ export function KeyInspector({ keyboard, hues, className }: {
         const capped = !pinned && list.length > HOVER_COMBO_CAP;
         const shownCombos = capped ? list.slice(0, HOVER_COMBO_CAP) : list;
         const comboLines = shownCombos.map(c => (
-            <ComboLine key={c.index} c={c} hue={hues.get(c.index) ?? 0} notShown={hidden.has(c.index)} showHue={indicators} />
+            <ComboLine key={c.index} c={c} hue={hues.get(c.index) ?? 0} name={comboName(keyboard.cosmetic, c.index)} notShown={hidden.has(c.index)} showHue={indicators} />
         ));
 
         const header = (

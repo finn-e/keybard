@@ -23,6 +23,22 @@ describe('binding name draft persistence',()=>{
         await act(async()=>{expect(await result.current.renameBinding('tapdance',0,'Tap')).toBe(false)});
         expect(result.current.nameError).toContain('firmware');expect(state.queue).not.toHaveBeenCalled();expect(state.keyboard?.cosmetic).toBeUndefined();
     });
+    it('names a combo in Keybard only: no queued write and no USB traffic, even when connected',async()=>{
+        const {result}=renderHook(()=>useBindingNames());
+        await act(async()=>{expect(await result.current.renameBinding('combo',3,'  Dictation ')).toBe(true)});
+        expect(state.keyboard?.cosmetic?.combos).toEqual({'3':'Dictation'});
+        await act(async()=>{await result.current.renameBinding('combo',3,'')});
+        expect(state.keyboard?.cosmetic?.combos).toEqual({});
+        expect(state.queue).not.toHaveBeenCalled();expect(state.sendSvil).not.toHaveBeenCalled();
+    });
+    it('checks combo names with the label rules on any firmware',async()=>{
+        state.keyboard!.svil_proto=1;const {result}=renderHook(()=>useBindingNames());
+        await act(async()=>{expect(await result.current.renameBinding('combo',0,'Zoom')).toBe(true)});
+        expect(state.keyboard?.cosmetic?.combos?.['0']).toBe('Zoom');
+        await act(async()=>{expect(await result.current.renameBinding('combo',0,'x'.repeat(17))).toBe(false)});
+        expect(result.current.nameError).toMatch(/16 UTF-8 bytes/);expect(state.keyboard?.cosmetic?.combos?.['0']).toBe('Zoom');
+        expect(state.queue).not.toHaveBeenCalled();
+    });
     it('keeps offline names exportable without queuing device writes',async()=>{
         state.isConnected=false;const {result}=renderHook(()=>useBindingNames());
         await act(async()=>{await result.current.renameBinding('tapdance',0,'Tap')});
