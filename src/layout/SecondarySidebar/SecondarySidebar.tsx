@@ -46,16 +46,26 @@ export const getDetailPanelHeight = (panel: string | null | undefined, height: n
 interface AlternativeHeaderProps {
     onBack?: () => void;
     menus?: CustomUIMenuItem[];
+    /** Keep showing the editor's title after it closes (the picker overlay, while it leaves). */
+    holdEditorTitle?: boolean;
 }
 
-const AlternativeHeader = ({ onBack, menus }: AlternativeHeaderProps) => {
+const AlternativeHeader = ({ onBack, menus, holdEditorTitle = false }: AlternativeHeaderProps) => {
     const { activePanel, handleCloseEditor, itemToEdit } = usePanels();
     const { keyboard } = useKeyboard();
     const editing = isBindingEditorOpen(activePanel, itemToEdit);
     // The item's custom name, if it has one; the header itself stays numbers-only.
     const subtitle = editing ? bindingEditorSubtitle(activePanel, itemToEdit, keyboard?.cosmetic) : null;
 
-    const title = editing ? bindingEditorHeading(activePanel, itemToEdit) : `Add Keys to ${getPanelTitle(activePanel, menus)}`;
+    const current = {
+        title: editing ? bindingEditorHeading(activePanel, itemToEdit) : `Add Keys to ${getPanelTitle(activePanel, menus)}`,
+        subtitle,
+    };
+    // The overlay leaving with the editor keeps the editor's title, so the old
+    // "Add Keys to ..." title never shows on its way out.
+    const lastEditing = React.useRef<typeof current | null>(null);
+    if (editing) lastEditing.current = current;
+    const { title, subtitle: shownSubtitle } = !editing && holdEditorTitle && lastEditing.current ? lastEditing.current : current;
     const back = () => onBack ? onBack() : handleCloseEditor();
 
     return (
@@ -74,7 +84,7 @@ const AlternativeHeader = ({ onBack, menus }: AlternativeHeaderProps) => {
                 <h2 className="text-[22px] font-semibold leading-none text-kb-ink">
                     {title}
                 </h2>
-                {subtitle && <p className="mt-1.5 text-sm leading-tight text-muted-foreground truncate max-w-[18rem]" data-binding-editor-subtitle>{subtitle}</p>}
+                {shownSubtitle && <p className="mt-1.5 text-sm leading-tight text-muted-foreground truncate max-w-[18rem]" data-binding-editor-subtitle>{shownSubtitle}</p>}
             </div>
         </div>
     );
@@ -508,7 +518,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                 style={panelPlacement ? undefined : { clipPath: "inset(-50px -300px -50px 0px)" }}
             >
                 <div ref={overlayHeaderRef} className={cn("px-4 py-6 shrink-0", panelPlacement ? motion === "exit" && "invisible" : "bg-kb-surface")}>
-                    <AlternativeHeader onBack={() => setIsClosingEditor(true)} menus={keyboard?.menus} />
+                    <AlternativeHeader onBack={() => setIsClosingEditor(true)} menus={keyboard?.menus} holdEditorTitle />
                 </div>
 
                 <div ref={railRef} data-picker-rail="" className="absolute top-24 right-0 bottom-0 overflow-y-auto z-30">

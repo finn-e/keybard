@@ -61,6 +61,18 @@ describe('picker header while a binding editor is open', () => {
         }
     });
 
+    it('keeps the editor title on the picker as it leaves, never the old "Add Keys to" title', () => {
+        state.activePanel = 'combos';
+        state.itemToEdit = 2;
+        const view = render(<TooltipProvider><SecondarySidebar comboPlacement="half" /></TooltipProvider>);
+        const overlayTitle = () => document.querySelector('[data-picker-overlay] h2')?.textContent;
+        expect(overlayTitle()).toBe('Editing Combo 2');
+        state.itemToEdit = null;
+        view.rerender(<TooltipProvider><SecondarySidebar comboPlacement="half" /></TooltipProvider>);
+        expect(overlayTitle()).toBe('Editing Combo 2');
+        expect(visibleHeadings()).toEqual(['Combos']);
+    });
+
     it('keeps the panel title when no editor is open', () => {
         state.activePanel = 'tapdances';
         state.itemToEdit = null;
