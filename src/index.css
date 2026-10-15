@@ -95,6 +95,11 @@
     --kb-back-highlight-soft: rgb(9 158 124 / 0.22);
     --kb-back-highlight-halo: rgb(9 158 124 / 0.55);
     --kb-back-highlight-ring: rgb(9 158 124 / 0.85);
+    /* Pinned side-panel editor cues (new; beside the brand tokens, owner review: ?pinCue=). */
+    --kb-pin-shadow: 0 10px 14px -10px rgb(0 0 0 / 0.28);
+    --kb-pin-divider: #d6d7d8;
+    --kb-pin-zone: #f4f4f3;
+    --kb-pin-notch: var(--kb-back-highlight);
 
     /* Combo folded corner. Each combo hue has a light tone (on mid and dark layer colors) and
        a deep tone (on orange, yellow, light gray and white keys), the way legends switch
@@ -178,6 +183,10 @@
     --kb-back-highlight-soft: rgb(11 180 141 / 0.22);
     --kb-back-highlight-halo: rgb(11 180 141 / 0.55);
     --kb-back-highlight-ring: rgb(11 180 141 / 0.85);
+    --kb-pin-shadow: 0 10px 14px -10px rgb(0 0 0 / 0.7);
+    --kb-pin-divider: #3a3d42;
+    --kb-pin-zone: #232528;
+    --kb-pin-notch: var(--kb-back-highlight);
 
     --kb-combo-fold-crease: rgb(0 0 0 / 0.5);
     --kb-combo-fold-crease-strong: rgb(0 0 0 / 0.74);

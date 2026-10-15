@@ -82,3 +82,47 @@
     width: auto;
     max-height: none;
 }
+
+/* A rail switch while editing swaps only the picker, with a short crossfade. */
+@keyframes panelPickerSwap {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.panel-picker-swap {
+    animation: panelPickerSwap 120ms ease-out both;
+}
+
+/* Pinned cue: the editor stays put while the picker scrolls beneath it
+   (owner review: ?pinCue=shadow|divider|notch). */
+.detail-panel [data-pin-cue] {
+    transition: box-shadow 160ms ease-out;
+}
+/* shadow: a soft shadow under the editor, only once the picker has scrolled under it. */
+.detail-panel [data-pin-cue="shadow"][data-pinned-under="true"] {
+    box-shadow: var(--kb-pin-shadow);
+}
+/* divider: a hairline rule and a slightly different tint for the editor zone, always on. */
+.detail-panel [data-pin-cue="divider"] {
+    border-color: transparent;
+    border-bottom-color: var(--kb-pin-divider);
+    border-radius: 0;
+    box-shadow: none;
+    background-color: var(--kb-pin-zone);
+}
+.detail-panel [data-pin-cue="divider"] .bg-kb-gray-medium {
+    background-color: var(--kb-pin-zone);
+}
+/* notch: a small pin glyph and a thin highlight-colored rail on the editor's left edge. */
+.detail-panel [data-pin-cue="notch"] {
+    box-shadow: inset 3px 0 0 var(--kb-pin-notch);
+}
+.detail-panel [data-pin-cue="notch"] .pin-cue-glyph {
+    position: absolute;
+    top: 6px;
+    left: 8px;
+    width: 12px;
+    height: 12px;
+    color: var(--kb-pin-notch);
+    transform: rotate(45deg);
+    pointer-events: none;
+}
