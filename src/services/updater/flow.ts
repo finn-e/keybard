@@ -69,7 +69,7 @@ export interface FlowResult {
 export interface FlowState {
     version: 1;
     id: string;
-    phase: "running" | "result" | "failed";
+    phase: "running" | "result" | "failed" | "cancelled";
     target: Target;
     usbHand: Hand;
     title: string;
@@ -167,6 +167,12 @@ export function sessionFlowStore(storage: Storage | null = typeof sessionStorage
     };
 }
 
+/** Whether this tab has an update in flight (the flow owns any reset notice then). */
+export function updateInFlight(store: FlowStore = sessionFlowStore()): boolean {
+    const saved = store.load();
+    return !!saved && saved.state.phase === "running";
+}
+
 export function memoryFlowStore(): FlowStore & { snapshot: string | null } {
     let state: string | null = null;
     let files: Partial<Record<Hand, Uint8Array>> = {};
@@ -179,6 +185,9 @@ export function memoryFlowStore(): FlowStore & { snapshot: string | null } {
         clear() { state = null; files = {}; backup = null; },
     };
 }
+
+/** The user cancelled before the first install. */
+class Cancelled extends Error {}
 
 /** Stops the flow with a failure screen. */
 class Stop extends Error {
@@ -205,6 +214,21 @@ export class UpdateFlow {
     private listeners = new Set<(s: FlowState) => void>();
     private client: UpdaterClient | null = null;
     private running = false;
+    private cancelRequested = false;
+
+    /** Whether Cancel is still offered: until the first install starts. */
+    get cancellable(): boolean {
+        return this.state.phase === "running" && this.state.committed.length === 0 && !this.cancelRequested;
+    }
+
+    /** Stop before the first install; the board is told to ABORT. */
+    cancel(): void {
+        if (this.cancellable) this.cancelRequested = true;
+    }
+
+    private checkCancel() {
+        if (this.cancelRequested && this.state.committed.length === 0) throw new Cancelled();
+    }
 
     private constructor(private host: FlowHost, private store: FlowStore, state: FlowState) {
         this.state = state;
@@ -288,6 +312,7 @@ export class UpdateFlow {
     }
 
     private step(step: Step) {
+        this.checkCancel();
         this.update({ step, stepAt: this.host.clock.now() });
     }
 
@@ -327,6 +352,12 @@ export class UpdateFlow {
             else await this.resume();
             await this.after();
         } catch (error) {
+            if (error instanceof Cancelled) {
+                await this.abortQuietly();
+                this.update({ phase: "cancelled", step: "failed", finishedAt: this.now() });
+                this.store.clear();
+                return this.state;
+            }
             const failure = error instanceof Stop ? error.failure : this.unexpected(error);
             await this.abortQuietly();
             this.update({ phase: "failed", step: "failed", failure, finishedAt: this.now(), rows: this.state.rows.map((r) => (r.stage === "done" ? r : { ...r, stage: "stopped", progress: null })) });
@@ -385,6 +416,7 @@ export class UpdateFlow {
             onTick?.(s);
             if (s.state === State.ERROR) throw new UpdaterStatusError("STATUS", s.lastError, s.state);
             if (until(s)) return s;
+            this.checkCancel();
             if (this.now() >= deadline) throw new UpdaterStatusError("STATUS", Status.TIMEOUT, s.state);
             await this.host.clock.sleep(POLL_MS);
         }
@@ -423,6 +455,7 @@ export class UpdateFlow {
             if (status === Status.OK) off = next;
             else if (status === Status.OUT_OF_ORDER && next <= image.length) off = next;
             else throw new UpdaterStatusError("CHUNK", status);
+            this.checkCancel();
             const pct = Math.floor((off / image.length) * 100);
             if (pct !== lastShown) { lastShown = pct; this.row(hand, { progress: off / image.length }); }
         }

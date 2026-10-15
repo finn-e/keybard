@@ -252,6 +252,9 @@ export class KeyboardService {
         // shows the change but loses it on restart; only a restart clears this.
         kbinfo.storage_reset = !!(svilInfo[17] & 1);
         kbinfo.storage_write_failed = !!(svilInfo[17] & 2);
+        // Bit 2: the first boot of a different firmware build reset every setting (D39),
+        // until the host clears it (CMD_SVIL_STORAGE_RESET_CLEAR) after acting on it.
+        kbinfo.storage_build_reset = !!(svilInfo[17] & 4);
         // Nothing past here is safe on a board that isn't speaking Sval protocol 3+
         assertSupportedSvilProto(kbinfo.svil_proto);
 

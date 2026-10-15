@@ -5,9 +5,10 @@ import { fingerprintSvil, gunzipText, gzipText } from "./codec";
 import { summarizeSvilChange } from "./diff-summary";
 import { emptyManifest, FolderBackupWriter, FolderGoneError, isPermissionError, type FolderDirectoryHandle, type FolderManifest } from "./folder";
 import { snapshotsToPrune } from "./retention";
-import { IndexedDbBackupStore, type BackupStore, type SnapshotKind, type SnapshotMeta } from "./store";
+import { IndexedDbBackupStore, PINNED_SNAPSHOT_KINDS, type BackupStore, type SnapshotKind, type SnapshotMeta } from "./store";
 
 export type { SnapshotMeta, SnapshotKind } from "./store";
+export { PINNED_SNAPSHOT_KINDS } from "./store";
 
 const HANDLE_KEY = "folderHandle";
 const MANIFEST_KEY = "folderManifest";
@@ -30,6 +31,9 @@ export interface SnapshotInput {
     svil: string;
     kind: SnapshotKind;
     pendingCount: number;
+    /** pre-update snapshots: the release installed before, and the one being installed. */
+    fromTag?: string;
+    toTag?: string;
 }
 
 export interface BackupServiceOptions {
@@ -130,7 +134,9 @@ export class BackupService {
             const board = all.filter((s) => s.boardKey === input.boardKey).sort((a, b) => b.savedAt - a.savedAt);
             const latest = board[0];
             const includesPending = input.pendingCount > 0;
-            if (latest && latest.fingerprint === fingerprint) {
+            const pinned = PINNED_SNAPSHOT_KINDS.includes(input.kind);
+            // A pinned snapshot is always its own entry, even when the content matches the latest.
+            if (!pinned && latest && latest.fingerprint === fingerprint) {
                 // Same content. Track whether it now matches the board (changes applied).
                 if (latest.includesPending !== includesPending || latest.pendingCount !== input.pendingCount) {
                     await this.store.updateSnapshot({ ...latest, includesPending, pendingCount: input.pendingCount });
@@ -151,9 +157,12 @@ export class BackupService {
                 pendingCount: input.pendingCount,
                 summary: summarizeSvilChange(previous, input.svil),
                 size: new TextEncoder().encode(input.svil).length,
+                ...(input.fromTag !== undefined ? { fromTag: input.fromTag } : {}),
+                ...(input.toTag !== undefined ? { toTag: input.toTag } : {}),
             };
             await this.store.putSnapshot(meta, await gzipText(input.svil));
-            const prune = snapshotsToPrune([...board, meta], this.now());
+            const retained = [...board, meta].filter((s) => !PINNED_SNAPSHOT_KINDS.includes(s.kind));
+            const prune = snapshotsToPrune(retained, this.now());
             await this.store.deleteSnapshots(prune);
             this.emit();
             if (this.folder.state === "active") await this.syncFolder(input.boardKey);
