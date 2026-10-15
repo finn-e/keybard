@@ -151,6 +151,24 @@ describe('combo editor under a half', () => {
         expect(g.spot).toBe('below-right');
     });
 
+    it('tucks under one half, beside the thumbs, when there is no room under the whole keyboard', () => {
+        // Bottom bar at 1440x900: finger halves end at y=317, the thumb rows run to y=408.
+        const fingersLeft = [box(450, 180, 30, 30), box(480, 287, 30, 30), box(600, 250, 30, 30)];
+        const thumbs = [box(683, 348, 60, 30), box(683, 378, 60, 30), box(830, 348, 60, 30), box(905, 378, 60, 30)];
+        const fingersRight = [box(860, 180, 30, 30), box(1100, 287, 30, 30), box(1170, 250, 30, 30)];
+        const ks = [...fingersLeft, ...thumbs, ...fingersRight];
+        const g = computeComboEditorGeometry(half({
+            bottom: true, viewport: { width: 1440, height: 900 }, canvas: box(224, 74, 1200, 426), panel: box(208, 500, 1232, 400),
+            editor: { width: 395, height: 107 }, keys: ks, triggers: [fingersLeft[2], thumbs[2]],
+        }));
+        expect(g.reserve).toBe(0);
+        expect(g.spot).toBe('below-left');
+        expect(g.top + 107).toBeLessThanOrEqual(500 - GAP);
+        expect(ks.some(k => overlaps(placed(g, 107, 395), k))).toBe(false);
+        // Every offered spot keeps the whole keyboard in view and covers no key.
+        for (const spot of g.spots!) expect(ks.some(k => overlaps(box(spot.left, spot.top, 395, 107), k))).toBe(false);
+    });
+
     it('prefers a spot clear of the canvas controls', () => {
         const controls = box(1250, 400 + GAP + 20, 180, 40);
         const g = computeComboEditorGeometry(half({ triggers: [left[0]], obstacles: [controls] }));

@@ -185,23 +185,53 @@ function halfGeometry(input: ComboEditorGeometryInput, r: Region): ComboEditorGe
     // Decide on the keyboard's unscrolled position so scrolling never toggles
     // the reserve; once reserving, let go only with clear extra room.
     const slack = currentReserve > 0 ? ANCHOR_HYSTERESIS : 0;
-    const fits = keyboardBox.bottom + canvasScrollTop + gap + height + slack <= regionBottom;
-    const rowTop = fits ? clamp(keyboardBox.bottom + gap, regionTop, maxTop) : maxTop;
-    const reserve = fits ? 0 : reserveAbove(rowTop);
-
     const naturalKeys = keys.map(k => ({ ...k, top: k.top + canvasScrollTop, bottom: k.bottom + canvasScrollTop }));
+    const fitsUnderAll = keyboardBox.bottom + canvasScrollTop + gap + height + slack <= regionBottom;
+    // With no room under the whole keyboard, the card can still sit under one
+    // half, clear of every key above it (beside the other half's thumbs), so
+    // the whole keyboard stays in view. Each spot then has its own top.
+    const tuckTop = (left: number): number | null => {
+        const above = naturalKeys.filter(k => k.right > left && k.left < left + width);
+        const top = above.length ? Math.max(...above.map(k => k.bottom)) + gap : regionTop + canvasScrollTop;
+        // No hysteresis here: the keys do not move when the reserve changes.
+        return top + height <= regionBottom ? clamp(top - canvasScrollTop, regionTop, maxTop) : null;
+    };
+    // A tucked card slides outward from under its half until it clears the keys beside it.
+    const tuck = (from: number, to: number): { left: number; top: number } | null => {
+        const dir = to < from ? -1 : 1;
+        for (let x = from; dir < 0 ? x > to : x < to; x += dir * 8) {
+            const top = tuckTop(x);
+            if (top !== null) return { left: x, top };
+        }
+        const top = tuckTop(to);
+        return top === null ? null : { left: to, top };
+    };
+    const tucked = fitsUnderAll ? null : {
+        left: tuck(clampLeft(leftHalf.left), regionLeft),
+        right: tuck(clampLeft(rightHalf.right - width), maxLeft),
+    };
+    const belowLeft = tucked?.left?.left ?? clampLeft(leftHalf.left);
+    const belowRight = tucked?.right?.left ?? clampLeft(rightHalf.right - width);
+    const fits = fitsUnderAll || !!tucked?.left || !!tucked?.right;
+    const rowTop = fitsUnderAll ? clamp(keyboardBox.bottom + gap, regionTop, maxTop) : maxTop;
+    const reserve = fits ? 0 : reserveAbove(rowTop);
     // Corners are tested against the keys' unscrolled positions, as the float
     // does, so scrolling the canvas never adds or removes a spot.
     const boxAt = (left: number, top: number): Box => ({ left, top, right: left + width, bottom: top + height });
     const clearOfKeys = (left: number, top: number) => naturalKeys.every(k => !intersects(boxAt(left, top), k));
     const clearOfControls = (left: number, top: number) => obstacles.every(o => !intersects(boxAt(left, top), o));
 
-    const raw: ComboEditorSpot[] = [
-        { id: "below-left", label: "Below Left Half", left: clampLeft(leftHalf.left), top: rowTop },
-        { id: "below-right", label: "Below Right Half", left: clampLeft(rightHalf.right - width), top: rowTop },
-        { id: "below-center", label: "Below the Keyboard", left: clampLeft(centerX(keyboardBox) - width / 2), top: rowTop },
-    ];
-    if (fits) {
+    const raw: ComboEditorSpot[] = tucked && fits
+        ? [
+            ...(tucked.left ? [{ id: "below-left", label: "Below Left Half", left: tucked.left.left, top: tucked.left.top }] : []),
+            ...(tucked.right ? [{ id: "below-right", label: "Below Right Half", left: tucked.right.left, top: tucked.right.top }] : []),
+        ]
+        : [
+            { id: "below-left", label: "Below Left Half", left: belowLeft, top: rowTop },
+            { id: "below-right", label: "Below Right Half", left: belowRight, top: rowTop },
+            { id: "below-center", label: "Below the Keyboard", left: clampLeft(centerX(keyboardBox) - width / 2), top: rowTop },
+        ];
+    if (fitsUnderAll) {
         // Corners of the column, where they are clear of every key.
         for (const c of [
             { id: "bottom-left", label: "Bottom Left", left: regionLeft, top: maxTop },
