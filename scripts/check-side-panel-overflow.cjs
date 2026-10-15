@@ -6,7 +6,10 @@
  * Needs a running dev server and playwright-core with a Chromium build:
  *   npm run dev -- --port 5247
  *   node scripts/check-side-panel-overflow.cjs 5247
- * Options: [check|shots] [shapes=panel,L] [widths=1440,1280] [themes=light,dark]
+ * Options: [check|shots] [shapes=panel,L] [widths=1440,1280,2560] [themes=light,dark]
+ *          [sizes=auto,default] (key size: auto, or fixed default (Normal), medium, small)
+ * The 2560 width with a fixed Normal size is the numpad's hard case: the canvas
+ * keys are 60px there, wider than the side panel's column allows.
  * Set PLAYWRIGHT_CORE to playwright-core's path if it is not installed here,
  * CHROME_PATH to a Chrome binary, and SHOTS_DIR to save bar screenshots.
  * Exits 1 when any element overflows or an editor fails to open.
@@ -26,8 +29,9 @@ function chromePath() {
 const port = process.argv[2] || "5247";
 const mode = process.argv[3] || "check";
 const shapes = (process.argv[4] || "panel,L").split(",");
-const widths = (process.argv[5] || "1440,1280").split(",").map(Number);
+const widths = (process.argv[5] || "1440,1280,2560").split(",").map(Number);
 const themes = (process.argv[6] || "light,dark").split(",");
+const sizes = (process.argv[7] || "auto,default").split(",");
 const shotDir = process.env.SHOTS_DIR || path.resolve(__dirname, "../.side-panel-shots");
 if (mode === "shots") fs.mkdirSync(shotDir, { recursive: true });
 
@@ -80,7 +84,7 @@ const overflowScan = () => {
 (async () => {
   const b = await chromium.launch({ headless: true, executablePath: chromePath() });
   const results = [];
-  for (const shape of shapes) for (const width of widths) for (const theme of themes) {
+  for (const shape of shapes) for (const width of widths) for (const theme of themes) for (const size of sizes) {
     const ctx = await b.newContext({ viewport: { width, height: 900 }, colorScheme: theme, reducedMotion: "reduce" });
     // Alt-Repeat is off by default; the theme is the app's own setting, not the system's.
     await ctx.addInitScript(t => { try { localStorage.setItem("keyboard-settings", JSON.stringify({ "show-alt-repeat": true, theme: t })); } catch {} }, theme);
@@ -91,9 +95,14 @@ const overflowScan = () => {
     await p.waitForTimeout(800);
     await p.getByText("QWERTY Example").click();
     await p.waitForTimeout(2000);
+    // A fixed key size, as the size buttons set it (auto leaves the app's own choice).
+    if (size !== "auto") {
+      await p.locator(`button[title="Set key size to ${size}"]`).first().click();
+      await p.waitForTimeout(500);
+    }
     const list = mode === "shots" ? [...KINDS, ...EXTRAS] : [...KINDS, ...EXTRAS];
     for (const k of list) {
-      const rec = { shape, width, theme, kind: k.kind };
+      const rec = { shape, width, theme, size, kind: k.kind };
       try {
         // Clicking the open panel's nav entry would close it.
         const title = await p.locator("aside.detail-panel h2").first().textContent().catch(() => "");
@@ -110,10 +119,10 @@ const overflowScan = () => {
         rec.barHeight = box ? Math.round(box.height) : null;
         rec.hasX = await bar.locator("button[aria-label='Close binding editor']").count();
         rec.rows = await p.evaluate(() => { const r = document.querySelector("[data-editor-bar-row]"); if (!r) return null; const tops = new Set([...r.children].map(c => Math.round(c.getBoundingClientRect().top))); return tops.size; });
-        if (mode === "shots" && (width === 1440 && shape === "panel")) {
+        if (mode === "shots" && width === 1440 && shape === "panel" && size === "auto") {
           await bar.screenshot({ path: path.join(shotDir, `${k.kind}-${theme}.png`) });
         }
-        if (mode === "shots" && width === 1440 && theme === "light" && k.kind === "combo") {
+        if (mode === "shots" && width === 1440 && theme === "light" && size === "auto" && k.kind === "combo") {
           await p.screenshot({ path: path.join(shotDir, `full-${shape}.png`) });
         }
         // Each picker category.
@@ -141,11 +150,11 @@ const overflowScan = () => {
       try {
         await p.getByRole("button", { name: nav }).first().click(); await p.waitForTimeout(500);
         const bad = await p.evaluate(overflowScan);
-        const rec = { shape, width, theme, kind: "panel:" + nav.source, overflow: bad.length ? { list: bad } : {} };
+        const rec = { shape, width, theme, size, kind: "panel:" + nav.source, overflow: bad.length ? { list: bad } : {} };
         results.push(rec); console.log(JSON.stringify(rec));
-      } catch (e) { console.log(JSON.stringify({ shape, width, theme, kind: "panel:" + nav.source, error: String(e.message).split("\n")[0] })); }
+      } catch (e) { console.log(JSON.stringify({ shape, width, theme, size, kind: "panel:" + nav.source, error: String(e.message).split("\n")[0] })); }
     }
-    if (errs.length) console.log("PAGEERRORS", shape, width, theme, errs.join(" | "));
+    if (errs.length) console.log("PAGEERRORS", shape, width, theme, size, errs.join(" | "));
     await ctx.close();
   }
   const fails = results.filter(r => r.error || (r.overflow && Object.keys(r.overflow).length));

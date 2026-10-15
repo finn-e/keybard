@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import QwertyKeyboard from "@/components/Keyboards/QwertyKeyboard";
@@ -18,6 +18,7 @@ import ModifierSideToggle from "@/components/ModifierSideToggle";
 import { getSelectedKeymapKeycode, useModifierSide } from "@/hooks/useModifierSide";
 import { usePickerTray } from "@/contexts/PickerTrayContext";
 import { trayKeyboardScale } from "@/lib/pickerShape";
+import { NUMPAD_COLUMNS, NUMPAD_GAP_PX, NUMPAD_VARIANT_PX, numpadCellSize, numpadVariantFor } from "@/lib/numpadFit";
 
 import { BUTTON_TO_KEYCODE_MAP, LAYOUTS } from "@/components/Keyboards/layouts";
 
@@ -157,24 +158,41 @@ const BasicKeyboards = ({ isPicker, trayPortal = false }: Props) => {
         label: `F${i + 1}`
     }));
 
-    // Grid column sizing based on keyVariant (in pixels)
-    const numpadKeySize = keyVariant === 'small' ? 30 : keyVariant === 'medium' ? 45 : 60;
+    // The numpad takes the canvas key size when its column has room and
+    // shrinks to the column otherwise, so it never scrolls sideways.
+    const numpadKeySize = NUMPAD_VARIANT_PX[keyVariant];
+    // A callback ref: the numpad's column can mount after this panel does.
+    const [numpadBox, numpadBoxRef] = useState<HTMLDivElement | null>(null);
+    const [numpadWidth, setNumpadWidth] = useState<number | null>(null);
+    useLayoutEffect(() => {
+        if (!numpadBox) return;
+        const measure = () => setNumpadWidth(numpadBox.clientWidth);
+        measure();
+        if (typeof ResizeObserver === "undefined") return;
+        const observer = new ResizeObserver(measure);
+        observer.observe(numpadBox);
+        return () => observer.disconnect();
+    }, [numpadBox]);
+    const numpadCell = numpadCellSize(numpadWidth, numpadKeySize);
+    const numpadVariant = numpadVariantFor(numpadCell, keyVariant);
 
     const renderKeyGrid = (keys: { keycode: string, label: string, useServiceLabel?: boolean }[], gridColSize?: number, variantOverride?: "small" | "medium" | "default") => {
         const effectiveVariant = variantOverride || keyVariant;
-        const keySizeClass = effectiveVariant === 'small' ? 'h-[30px] w-[30px]' : effectiveVariant === 'medium' ? 'h-[45px] w-[45px]' : 'h-[60px] w-[60px]';
+        // A sized grid sets each cell from its column size; otherwise the variant's own size.
+        const keySizeClass = gridColSize ? "" : effectiveVariant === 'small' ? 'h-[30px] w-[30px]' : effectiveVariant === 'medium' ? 'h-[45px] w-[45px]' : 'h-[60px] w-[60px]';
+        const cellStyle = gridColSize ? { width: gridColSize, height: gridColSize } : undefined;
 
         const gridStyle = gridColSize ? {
             display: 'grid',
-            gridTemplateColumns: `repeat(7, ${gridColSize}px)`,
-            gap: '4px'
+            gridTemplateColumns: `repeat(${NUMPAD_COLUMNS}, ${gridColSize}px)`,
+            gap: `${NUMPAD_GAP_PX}px`
         } : undefined;
 
         return (
             <div className={cn(!gridColSize && "flex flex-wrap gap-1")} style={gridStyle}>
                 {keys.map((k, i) => {
                     if (k.keycode === "BLANK") {
-                        return <div key={`blank-${i}`} className={keySizeClass} />;
+                        return <div key={`blank-${i}`} className={keySizeClass} style={cellStyle} />;
                     }
 
                     const finalKeycode = (k.keycode === "BLANK" || k.keycode === "KC_NO" || k.keycode === "KC_TRNS")
@@ -204,6 +222,7 @@ const BasicKeyboards = ({ isPicker, trayPortal = false }: Props) => {
                                 keySizeClass,
                                 isDoubleHeight ? "row-span-2" : ""
                             )}
+                            style={cellStyle}
                             hoverBorderColor={hoverBorderColor}
                             hoverBackgroundColor={hoverBackgroundColor}
                             hoverLayerColor={layerColorName}
@@ -607,7 +626,7 @@ const BasicKeyboards = ({ isPicker, trayPortal = false }: Props) => {
                 </div>
                 <div className="flex flex-col gap-2">
                     <span className="font-semibold text-lg text-kb-ink">Numpad</span>
-                    <div className="max-w-full overflow-x-auto">{renderKeyGrid(numpadKeys, numpadKeySize)}</div>
+                    <div ref={numpadBoxRef} className="w-full min-w-0" data-numpad-box="">{renderKeyGrid(numpadKeys, numpadCell, numpadVariant)}</div>
                 </div>
                 <div className="flex flex-col gap-2">
                     <span className="font-semibold text-lg text-kb-ink">Function Keys</span>
