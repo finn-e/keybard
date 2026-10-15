@@ -353,8 +353,8 @@ const AppSidebar = () => {
             <Sidebar rounded name="primary-nav" defaultOpen={false} collapsible="icon" hideGap className={sidebarClasses}
                 data-spotlight-rail-frame={editing ? "" : undefined}>
                 {/* The rail is its own fixed layer above the page scrim, so it carries the
-                    same scrim over its own surface, rim included. */}
-                {editing && <SpotlightScrim className="absolute -inset-px z-[5]" />}
+                    same scrim over its own surface, the same shape as it. */}
+                {editing && <SpotlightScrim className="absolute inset-0 z-[5]" />}
                 <SidebarContent className={cn("py-4 overflow-y-auto overflow-x-hidden flex flex-col", isCollapsed && "scrollbar-none")}>
                     {/* Header section - Logo, Connect, Import/Export */}
                     <SidebarMenu>
