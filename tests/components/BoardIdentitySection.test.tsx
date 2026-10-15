@@ -100,3 +100,29 @@ describe('BoardIdentitySection', () => {
     });
 
 });
+
+describe('BoardIdentitySection board actions', () => {
+    beforeEach(() => {
+        vi.spyOn(window, "confirm").mockReturnValue(true);
+        svc.getInfo.mockReset();
+        svc.restart.mockReset();
+    });
+
+    it('offers Restart keyboard without a rename first', async () => {
+        svc.getInfo.mockResolvedValue(info());
+        svc.restart.mockResolvedValue(undefined);
+        render(<BoardIdentitySection />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Restart keyboard' }));
+        await waitFor(() => expect(svc.restart).toHaveBeenCalled());
+    });
+
+    it('copies the serial', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+        svc.getInfo.mockResolvedValue(info());
+        render(<BoardIdentitySection />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Copy serial' }));
+        await waitFor(() => expect(writeText).toHaveBeenCalledWith('sval:E46498769F365934'));
+        expect(await screen.findByText('Copied')).toBeTruthy();
+    });
+});

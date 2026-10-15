@@ -27,6 +27,7 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
 import { PARANOID } from "@/lib/paranoid";
+import { requestSettingsSection } from "@/layout/SecondarySidebar/Panels/settings/anchor";
 
 // --- Constants ---
 const MENU_ITEM_GAP_PX = 42; // Matches Gap-4 (16px) + Button Height (26px)
@@ -185,7 +186,17 @@ const AppSidebar = () => {
 
 
     const handleItemSelect = useCallback(
-        (item: SidebarItem) => {
+        (selected: SidebarItem) => {
+            let item = selected;
+            // About is a section of Settings: open Settings there.
+            if (item.url === "about") {
+                requestSettingsSection("about");
+                if (activePanel === "settings" && open) {
+                    if (window.innerWidth < 900) setNavigationOpen(false);
+                    return;
+                }
+                item = { ...item, url: "settings" };
+            }
             // Labels can be expanded to choose a destination; return the narrow
             // viewport to its icon rail so the chosen panel remains usable.
             if (window.innerWidth < 900) setNavigationOpen(false);

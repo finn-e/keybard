@@ -23,15 +23,13 @@ vi.mock('@/contexts/LayoutSettingsContext', () => ({ useLayoutSettings: () => ({
 vi.mock('@/contexts/PanelsContext', () => ({ usePanels: () => ({ setActivePanel: vi.fn() }) }));
 vi.mock('@/App', () => ({ useNavigation: () => ({ navigateTo: vi.fn() }) }));
 vi.mock('@/contexts/SettingsContext', () => ({ useSettings: () => ({
-    getSetting: vi.fn(), updateSetting: vi.fn(), settingsDefinitions: [],
-    settingsCategories: [{ name: 'general', label: 'General', settings: [] }, { name: 'backups', label: 'Backups', settings: [] }],
+    getSetting: vi.fn(), updateSetting: vi.fn(), getSettingDefinition: () => undefined,
 }) }));
 vi.mock('@/services/file.service', () => ({ fileService: { uploadFile: mocks.upload, downloadSvil: vi.fn(), downloadSvilText: mocks.download } }));
 vi.mock('@/services/import.service', () => ({ importService: { syncWithKeyboard: mocks.sync } }));
 vi.mock('@/services/keyboard.service', () => ({ keyboardService: {} }));
 vi.mock('../../src/layout/SecondarySidebar/Panels/BoardIdentitySection', () => ({ default: () => null }));
-vi.mock('../../src/layout/SecondarySidebar/Panels/FragmentsPanel', () => ({ default: () => null }));
-vi.mock('../../src/layout/SecondarySidebar/Panels/DynamicMenuPanel', () => ({ default: () => null }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/settings/FirmwareRow', () => ({ default: () => null }));
 
 const backups = (over: Record<string, unknown> = {}) => ({
     available: true,
@@ -51,7 +49,9 @@ const backups = (over: Record<string, unknown> = {}) => ({
     ...over,
 });
 
+// Backups is a section of the one Settings page; its chip jumps there.
 const openBackups = () => { render(<SettingsPanel />); fireEvent.click(screen.getByRole('button', { name: 'Backups' })); };
+const boardRegions = () => screen.getAllByRole('region').filter((r) => /^Backups of /.test(r.getAttribute('aria-label') ?? ''));
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -64,7 +64,7 @@ describe('Settings > Backups', () => {
     it.each(['sidebar', 'bottombar'])('lists snapshots by board, connected board first (%s)', (mode) => {
         mocks.mode = mode;
         openBackups();
-        const groups = screen.getAllByRole('region');
+        const groups = boardRegions();
         expect(groups[0]).toHaveAccessibleName('Backups of Travel');
         expect(groups[1]).toHaveAccessibleName('Backups of Desk');
         const rows = within(groups[0]).getAllByTestId('backup-row');
@@ -76,7 +76,7 @@ describe('Settings > Backups', () => {
 
     it('restores through the import review, staging changes for Apply', async () => {
         openBackups();
-        const travel = screen.getAllByRole('region')[0];
+        const travel = boardRegions()[0];
         fireEvent.click(within(travel).getAllByRole('button', { name: /Restore backup/ })[0]);
         expect(await screen.findByRole('dialog')).toBeVisible();
         expect(mocks.upload).toHaveBeenCalledTimes(1);
