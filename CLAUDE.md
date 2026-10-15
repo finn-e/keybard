@@ -23,13 +23,25 @@ This applies to all work, no matter how small. Changes only reach `main` through
 
 | Site | What it serves | How it updates |
 |------|----------------|----------------|
-| https://keybard.svalboard.com (stable) | A launch tag on `main` that was promoted | Manually: `gh workflow run svalboard-deploy.yml -R svalboard/keybard -f ref=<launch tag>` (`.github/workflows/svalboard-deploy.yml`). It deploys only a `vLaunch` tag that is on `main`. |
-| https://next.keybard.svalboard.com (bleeding edge) | The tip of `main`, with a "Bleeding edge" banner and its own storage (`.env.next`) | Automatically on every merge to `main` (`.github/workflows/next-deploy.yml`, pushing to the `gh-pages` branch of `svalboard/keybard-next` with a deploy key; a `next.keybard` CNAME on svalboard.com points at `svalboard.github.io`) |
+| https://keybard.svalboard.com (stable) | The newest full release: a `v` tag on `main` (`v3`, `v3.1`) | On push of a `v` tag (`.github/workflows/svalboard-deploy.yml`). To deploy an existing `v` tag again, e.g. to roll back: `gh workflow run svalboard-deploy.yml -R svalboard/keybard -f tag=<v tag>` |
+| https://next.keybard.svalboard.com (bleeding edge) | The newest prerelease: an `x` tag on `main` (`x3`, `x3.1`), with a "Bleeding edge" banner and its own storage (`.env.next`) | On push of an `x` tag (`.github/workflows/next-deploy.yml`, pushing to the `gh-pages` branch of `svalboard/keybard-next` with a deploy key; a `next.keybard` CNAME on svalboard.com points at `svalboard.github.io`). Again: `gh workflow run next-deploy.yml -R svalboard/keybard -f tag=<x tag>` |
 | https://morganvenable.github.io/keybard-test/ | Any branch, for testing before it merges | `gh workflow run deploy.yml -R morganvenable/keybard-test -f repo=morganvenable/keybard -f ref=<branch>` |
 
-**Merging to `main` no longer changes the stable site.** Promote to stable only after checking the build on the bleeding-edge site.
+**Merging to `main` deploys nothing.** Both sites move only on a release tag. Tag a prerelease and check it on the bleeding-edge site before tagging the full release.
 
-**Launch tags:** `vLaunch<N>` (e.g. `vLaunch2`) is shared by the firmware (`svalboard/qmk`), Keybard Host (`keybard-host-release.yml`) and the stable site, so one name means the same release everywhere. `vLaunch<N>.<M>` (e.g. `vLaunch2.3`) is a Keybard and Keybard Host release only; never tag it on `svalboard/qmk`. Bleeding-edge firmware uses `vNext<N>` prereleases. Tag the Keybard commit on `main` after `HOST_RELEASE_TAG` (`src/features/trainer/HostInstall.tsx`) names the same tag, then promote it with `-f ref=<that tag>`.
+**Release tags** (`.github/scripts/release-tag.sh` is the rule every workflow uses):
+
+| Tag | Kind | Keybard site | Keybard Host (`keybard-host-release.yml`) |
+|-----|------|--------------|--------------------------------------------|
+| `v<N>`, `v<N>.<M>` (`v3`, `v3.1`) | Full release | keybard.svalboard.com | A draft release; a person tests the Windows ZIP and publishes it |
+| `x<N>`, `x<N>.<M>` (`x3`, `x3.1`) | Prerelease | next.keybard.svalboard.com | A published GitHub prerelease |
+
+- Anything else (`vLaunch2`, `v3-rc1`, `x`, `3`) releases nothing.
+- Both kinds must point at a commit already on `main`; the workflows refuse any other.
+- One name means the same release in every repo: `svalboard/qmk` (firmware), Keybard and Keybard Host. A repo tags only the releases it ships, so a Keybard-only `v3.1` has no firmware tag.
+- Before tagging a full release, set `HOST_RELEASE_TAG` (`src/features/trainer/HostInstall.tsx`) to the same tag; the Host release refuses a `v` tag it doesn't name.
+- Release builds show their tag as Keybard's version (About panel and the corner badge); other builds show their commit.
+- Releases up to `vLaunch2.3` used the older `vLaunch<N>` and `vNext<N>` tags. Those tags stay as they are; new releases use `v` and `x`.
 
 Keybard Host accepts calls only from exact origins: https://keybard.svalboard.com and https://next.keybard.svalboard.com (`REMOTE_ORIGINS` in `companion/overlay-host/keybard_host/server.py`). Installed Hosts learn a new origin only from a Host update. Never allow a `*.github.io` origin: every Pages site of that account shares it. To try Host features on another site, start the Host with `--allow-origin <origin>`.
 

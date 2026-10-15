@@ -27,7 +27,7 @@ class LocalServer(ThreadingHTTPServer):
 # svalboard.github.io, where every Pages site would share the origin.
 REMOTE_ORIGINS = frozenset({
     'https://keybard.svalboard.com',       # stable
-    'https://next.keybard.svalboard.com',  # bleeding edge, built from every merge to main
+    'https://next.keybard.svalboard.com',  # bleeding edge: prerelease (x) tags
 })
 
 

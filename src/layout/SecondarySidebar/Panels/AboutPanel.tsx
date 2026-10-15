@@ -3,6 +3,7 @@ import DescriptionBlock from "@/layout/SecondarySidebar/components/DescriptionBl
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { identifyFirmwareRelease, firmwareReleaseLabel, LATEST_FIRMWARE_RELEASE } from "@/constants/firmware";
 import { FirmwareLink } from "@/components/FirmwareUpdate";
+import { keybardVersion } from "@/utils/build-info";
 
 /** What the connected board says about its firmware. */
 const FirmwareDetails: React.FC = () => {
@@ -44,7 +45,7 @@ const AboutPanel: React.FC = () => {
             <div className="flex flex-col">
                 <DescriptionBlock wrapText={false}>
                     <p className="mb-4 text-sm text-slate-500 dark:text-neutral-400 leading-relaxed">
-                        <b>Keybard</b> version 1.0.0
+                        <b>Keybard</b> <span className="font-mono">{keybardVersion()}</span>
                         <br/><br/>
                         Developed for the <b>Svalboard</b> community.
                     </p>

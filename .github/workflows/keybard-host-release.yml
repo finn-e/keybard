@@ -1,10 +1,26 @@
-name: Package Keybard Host preview
+name: Package Keybard Host release
+
+# Every release tag packages Keybard Host (the CMD/ZIP package, keybard-paranoid.html
+# and checksums) into a GitHub release named after the tag:
+#
+#   x tags (x3, x3.1): a published GitHub prerelease, for the bleeding edge.
+#   v tags (v3, v3.1): a draft full release. A person tests the Windows ZIP and
+#     publishes it; HOST_RELEASE_TAG in src/features/trainer/HostInstall.tsx
+#     must already name the tag.
+#
+# Both must be on main. Tag rules: .github/scripts/release-tag.sh. To package an
+# existing tag again (delete its release first):
+#
+#   gh workflow run keybard-host-release.yml -R svalboard/keybard -f tag=<tag>
 
 on:
+  push:
+    # Glob prefilters; release-tag.sh applies the exact rule.
+    tags: ['v[0-9]*', 'x[0-9]*']
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag to package (keybard-host-v* or a v* launch tag such as vLaunch2)
+        description: Existing release tag to package, e.g. v3 (release) or x3 (prerelease)
         required: true
         type: string
 
@@ -13,28 +29,26 @@ permissions:
 
 jobs:
   package:
+    if: github.repository == 'svalboard/keybard'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
     steps:
-      - name: Validate release tag
-        env:
-          RELEASE_TAG: ${{ inputs.tag }}
-        run: '[[ "$RELEASE_TAG" =~ ^(keybard-host-v[0-9]+\.[0-9]+\.[0-9]+(-preview\.[0-9]+)?|v[A-Za-z0-9]+(\.[0-9]+)*)$ ]]'
       - uses: actions/checkout@v5
         with:
-          ref: refs/tags/${{ inputs.tag }}
+          ref: refs/tags/${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
           fetch-depth: 0
-      - name: The tag is on main, and Keybard offers this same Host release
-        env:
-          RELEASE_TAG: ${{ inputs.tag }}
+      - name: Only a release (v) or prerelease (x) tag
+        run: echo "RELEASE_KIND=$(bash .github/scripts/release-tag.sh "$RELEASE_TAG")" >> "$GITHUB_ENV"
+      - name: The tag is on main
+        run: bash .github/scripts/on-main.sh "$RELEASE_TAG"
+      - name: A full release is the Host release Keybard offers
+        if: env.RELEASE_KIND == 'release'
         run: |
-          git fetch --no-tags origin main
-          git merge-base --is-ancestor HEAD origin/main || { echo "::error::$RELEASE_TAG is not on main"; exit 1; }
-          if [[ "$RELEASE_TAG" == v* ]]; then
-            offered=$(sed -n "s/^export const HOST_RELEASE_TAG = '\([^']*\)'.*/\1/p" src/features/trainer/HostInstall.tsx)
-            [ "$offered" = "$RELEASE_TAG" ] || { echo "::error::HOST_RELEASE_TAG is '$offered', not $RELEASE_TAG (src/features/trainer/HostInstall.tsx)"; exit 1; }
-          fi
+          offered=$(sed -n "s/^export const HOST_RELEASE_TAG = '\([^']*\)'.*/\1/p" src/features/trainer/HostInstall.tsx)
+          [ "$offered" = "$RELEASE_TAG" ] || { echo "::error::HOST_RELEASE_TAG is '$offered', not $RELEASE_TAG (src/features/trainer/HostInstall.tsx)"; exit 1; }
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
@@ -49,7 +63,7 @@ jobs:
       - run: npm run build:paranoid
       - name: Package, stamped with the release and the Keybard commit it bundles
         env:
-          KEYBARD_HOST_VERSION: ${{ inputs.tag }}
+          KEYBARD_HOST_VERSION: ${{ env.RELEASE_TAG }}
         run: |
           echo "KEYBARD_COMMIT=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
           KEYBARD_COMMIT=$(git rev-parse --short=7 HEAD) python companion/overlay-host/scripts/package.py
@@ -66,13 +80,19 @@ jobs:
       - name: Checksum
         working-directory: dist
         run: sha256sum KeybardHost-Windows.zip > SHA256SUMS.txt
-      - name: Create draft preview release for Windows validation
+      - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag }}
-        run: >-
-          cp dist-paranoid/keybard-paranoid.html dist/ &&
-          (cd dist && sha256sum keybard-paranoid.html >> SHA256SUMS.txt) &&
-          gh release create "$RELEASE_TAG" dist/KeybardHost-Windows.zip dist/keybard-paranoid.html dist/SHA256SUMS.txt
-          --verify-tag --draft --prerelease --title "Keybard Host $RELEASE_TAG"
-          --notes-file dist/RELEASE-NOTES.md
+        run: |
+          cp dist-paranoid/keybard-paranoid.html dist/
+          (cd dist && sha256sum keybard-paranoid.html >> SHA256SUMS.txt)
+          if [ "$RELEASE_KIND" = release ]; then
+            # A person tests the Windows ZIP, then publishes the draft.
+            kind=(--draft)
+          else
+            kind=(--prerelease)
+          fi
+          gh release create "$RELEASE_TAG" \
+            dist/KeybardHost-Windows.zip dist/keybard-paranoid.html dist/SHA256SUMS.txt \
+            --verify-tag "${kind[@]}" --title "Keybard Host $RELEASE_TAG" \
+            --notes-file dist/RELEASE-NOTES.md

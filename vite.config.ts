@@ -28,6 +28,12 @@ function getGitSha(): string {
     }
 }
 
+// The release tag a release build is built from (v3, x3.1): set by the deploy
+// and Keybard Host workflows. Empty for every other build.
+function getReleaseTag(): string {
+    return process.env.RELEASE_TAG?.trim() ?? "";
+}
+
 function getGitSubject(): string {
     if (process.env.GIT_SUBJECT) return process.env.GIT_SUBJECT.split("\n")[0];
     try {
@@ -52,6 +58,7 @@ function getPortForBranch(branch: string): number {
 const gitBranch = getGitBranch();
 const gitSha = getGitSha();
 const gitSubject = getGitSubject();
+const releaseTag = getReleaseTag();
 const devPort = getPortForBranch(gitBranch);
 
 // https://vite.dev/config/
@@ -99,6 +106,7 @@ export default defineConfig(({ mode }) => {
         __GIT_BRANCH__: JSON.stringify(gitBranch),
         __GIT_SHA__: JSON.stringify(gitSha),
         __GIT_SUBJECT__: JSON.stringify(gitSubject),
+        __RELEASE_TAG__: JSON.stringify(releaseTag),
     },
     server: {
         port: devPort,

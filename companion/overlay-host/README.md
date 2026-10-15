@@ -131,13 +131,16 @@ PYTHONPATH=companion/overlay-host python3 -m unittest discover -s companion/over
 
 These don't cover moving the window, focus, click-through, fullscreen, or live layer and held-key changes on real hardware. Check those by hand.
 
-### Publish a Windows preview
+### Publish a release
+
+Keybard Host is released with Keybard, under the same tag (see the release tags in the repository's `CLAUDE.md`): `x3`, `x3.1` are prereleases and `v3`, `v3.1` are full releases.
 
 1. Update `RELEASE-NOTES.md`.
 2. Run the tests above and a Windows smoke test.
-3. Build with `npm run build:svalboard`, then run `python3 companion/overlay-host/scripts/package.py`.
-4. In `dist`, run `sha256sum KeybardHost-Windows.zip > SHA256SUMS.txt`.
-5. Tag the commit (`keybard-host-vX.Y.Z-preview.N`, or a launch tag shared with the firmware such as `vLaunch2`) and publish a GitHub prerelease with the ZIP and the checksum. Set `KEYBARD_HOST_VERSION` to the tag when packaging, so the host reports it.
-6. Set `HOST_RELEASE_TAG` in `src/features/trainer/HostInstall.tsx` to the new tag, so the Overlay dialog's download link finds it. Link the tag itself, not GitHub's `latest` redirect, which skips prereleases.
+3. For a full release, set `HOST_RELEASE_TAG` in `src/features/trainer/HostInstall.tsx` to the new `v` tag, so the Overlay dialog's download link finds it, and merge that to `main`. Link the tag itself, not GitHub's `latest` redirect.
+4. Tag the commit on `main` and push the tag. The **Package Keybard Host release** workflow (`.github/workflows/keybard-host-release.yml`) runs on the push: it builds the ZIP, `keybard-paranoid.html` and `SHA256SUMS.txt`, and stamps the tag and the bundled Keybard commit into the host and the release notes.
+   - An `x` tag becomes a published GitHub prerelease.
+   - A `v` tag becomes a draft release. Test the ZIP on Windows, then publish it.
+5. To package an existing tag again, delete its GitHub release, then run `gh workflow run keybard-host-release.yml -R svalboard/keybard -f tag=<tag>`.
 
-Instead of steps 3–5, you can run the **Package Keybard Host preview** workflow with an existing tag. It builds a draft prerelease with both files, stamps the release and the bundled Keybard commit into the host and the release notes; test the ZIP before you publish it.
+To package by hand instead: build with `npm run build:svalboard`, run `python3 companion/overlay-host/scripts/package.py` with `KEYBARD_HOST_VERSION` set to the tag (so the host reports it), then run `sha256sum KeybardHost-Windows.zip > SHA256SUMS.txt` in `dist`.

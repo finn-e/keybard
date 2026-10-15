@@ -1,18 +1,30 @@
 name: Deploy Keybard bleeding edge (next.keybard.svalboard.com)
 
-# Every merge to main is built with --mode next (.env.next: its own storage and
-# a "Bleeding edge" banner) and published to the gh-pages branch of
+# Prerelease tags deploy the bleeding-edge site: pushing an x tag (x3, x3.1)
+# that is on main builds it with --mode next (.env.next: its own storage and a
+# "Bleeding edge" banner) and publishes it to the gh-pages branch of
 # svalboard/keybard-next, which GitHub Pages serves at the custom domain
 # https://next.keybard.svalboard.com (a next.keybard CNAME on svalboard.com points
-# at svalboard.github.io). Production is promoted separately (svalboard-deploy.yml).
+# at svalboard.github.io). Merges to main do not deploy. Full releases (v tags)
+# go to production (svalboard-deploy.yml). Tag rules: .github/scripts/release-tag.sh.
+#
+# To deploy an existing x tag again:
+#
+#   gh workflow run next-deploy.yml -R svalboard/keybard -f tag=<x tag>
 #
 # Pushes with a deploy key that can write only to svalboard/keybard-next: its
 # private half is this repository's KEYBARD_NEXT_DEPLOY_KEY secret.
 
 on:
   push:
-    branches: [main]
+    # A glob prefilter; release-tag.sh applies the exact rule.
+    tags: ['x[0-9]*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Prerelease tag on main to deploy, e.g. x3 or x3.1"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -25,8 +37,17 @@ jobs:
   deploy:
     if: github.repository == 'svalboard/keybard'
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: refs/tags/${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+          fetch-depth: 0
+      - name: Only a prerelease (x) tag
+        run: bash .github/scripts/release-tag.sh "$RELEASE_TAG" prerelease
+      - name: Only deploy what is already on main
+        run: bash .github/scripts/on-main.sh "$RELEASE_TAG"
       - id: meta
         run: |
           echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
@@ -40,7 +61,7 @@ jobs:
       - run: npm run build:next
         env:
           GIT_BRANCH: main
-          GIT_SHA: ${{ github.sha }}
+          GIT_SHA: ${{ steps.meta.outputs.sha }}
           GIT_SUBJECT: ${{ steps.meta.outputs.subject }}
       - name: Publish to svalboard/keybard-next
         env:
@@ -59,7 +80,7 @@ jobs:
           git init -q -b gh-pages
           git add -A
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit -q -m "Keybard main ${{ steps.meta.outputs.sha }}: $SUBJECT"
+            commit -q -m "Keybard $RELEASE_TAG (${{ steps.meta.outputs.sha }}): $SUBJECT"
           # One commit per deploy: the branch holds only the current build.
           GIT_SSH_COMMAND='ssh -i ~/.ssh/keybard_next -o IdentitiesOnly=yes' \
             git push -q -f git@github.com:svalboard/keybard-next.git gh-pages

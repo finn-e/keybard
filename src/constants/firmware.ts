@@ -19,12 +19,12 @@ const SVIL_FLAG_DEFAULT_LAYER_STATE = 0x40;
 const SVIL_FLAG2_DEFAULT_LAYER_SET = 0x01;
 
 /**
- * Newest stable Svalboard QMK release this Keybard knows. Firmware releases are
- * vLaunch<N> tags (vLaunch, vLaunch2, ...), shared with Keybard Host and Keybard;
- * vLaunch<N>.<M> tags (vLaunch2.3) are Keybard and Keybard Host releases only, and
- * vNext<N> tags are bleeding-edge firmware prereleases, which identify here as
- * "vLaunch2 or later". Bump this, and teach identifyFirmwareRelease how to tell
- * the new release apart, when a new vLaunch<N> firmware ships. Baked into the
+ * Newest stable Svalboard QMK release this Keybard knows. Release tags are shared
+ * by the firmware, Keybard and Keybard Host: v<N> (v3) is a full release and
+ * x<N> (x3) a prerelease, which identifies here as the release before it "or
+ * later". Releases through vLaunch2 used vLaunch<N> tags (vNext<N> for
+ * prereleases). Bump this, and teach identifyFirmwareRelease how to tell the
+ * new release apart, when a new full firmware release ships. Baked into the
  * build: no network lookup.
  */
 export const LATEST_FIRMWARE_RELEASE = "vLaunch2";

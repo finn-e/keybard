@@ -5,19 +5,26 @@ name: Deploy Keybard (keybard.svalboard.com)
 # points at svalboard.github.io). Built for the domain's root with --mode
 # svalboard (.env.svalboard).
 #
-# Production is promoted, not deployed on every merge: merges to main go to the
-# bleeding-edge site (next-deploy.yml). Promote with the launch tag shared with
-# Keybard Host release (e.g. vLaunch2.3). Only a vLaunch tag on main deploys;
-# vLaunch<N>.<M> tags are Keybard and Keybard Host releases, not firmware:
+# Full releases deploy production: pushing a v tag (v3, v3.1) that is on main
+# builds and deploys it. Merges to main do not deploy anything; prerelease
+# x tags go to the bleeding-edge site (next-deploy.yml). The same tag names the
+# Keybard Host release (keybard-host-release.yml) and, for v<N>, the firmware
+# release on svalboard/qmk. Tag rules: .github/scripts/release-tag.sh.
 #
-#   gh workflow run svalboard-deploy.yml -R svalboard/keybard -f ref=<launch tag>
+# To deploy an existing v tag again (for example, to roll back), run this from main:
+#
+#   gh workflow run svalboard-deploy.yml -R svalboard/keybard -f tag=<v tag>
 
 on:
+  push:
+    # A glob prefilter; release-tag.sh applies the exact rule.
+    tags: ['v[0-9]*']
   workflow_dispatch:
     inputs:
-      ref:
-        description: "Launch tag on main to deploy, e.g. vLaunch2.3"
+      tag:
+        description: "Release tag on main to deploy, e.g. v3 or v3.1"
         required: true
+        type: string
 
 permissions:
   contents: read
@@ -30,22 +37,17 @@ jobs:
   build:
     if: github.repository == 'svalboard/keybard'
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
     steps:
-      - name: Only a launch tag
-        env:
-          REF: ${{ inputs.ref }}
-        run: '[[ "$REF" =~ ^vLaunch[0-9]+(\.[0-9]+)*$ ]] || { echo "::error::$REF is not a launch tag (vLaunch<N> or vLaunch<N>.<M>)"; exit 1; }'
       - uses: actions/checkout@v5
         with:
-          ref: refs/tags/${{ inputs.ref }}
+          ref: refs/tags/${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
           fetch-depth: 0
+      - name: Only a release (v) tag
+        run: bash .github/scripts/release-tag.sh "$RELEASE_TAG" release
       - name: Only deploy what is already on main
-        env:
-          REF: ${{ inputs.ref }}
-        run: |
-          git fetch -q origin main
-          git merge-base --is-ancestor HEAD origin/main || { echo "::error::$REF is not on main"; exit 1; }
-          echo "Deploying $(git log -1 --format='%h %s')"
+        run: bash .github/scripts/on-main.sh "$RELEASE_TAG"
       - id: meta
         run: |
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -66,8 +68,11 @@ jobs:
           path: dist
 
   deploy:
-    # Pages replaces the whole site: deploy only from a run of this repository's main.
-    if: github.repository == 'svalboard/keybard' && github.ref == 'refs/heads/main'
+    # Pages replaces the whole site: deploy only from a v tag push (checked in
+    # build) or from a manual run on this repository's main.
+    if: >-
+      github.repository == 'svalboard/keybard' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     needs: build
     runs-on: ubuntu-latest
     permissions:
