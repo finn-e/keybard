@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useChanges } from "@/contexts/ChangesContext";
@@ -275,24 +275,38 @@ const FragmentsPanel: React.FC = () => {
             );
         });
 
+    // The preset the current selections already match, if any (locked positions don't count).
+    const selectable = fragmentService.getSelectableInstances(keyboard).filter(({ idx, instance }) => {
+        const hwFragmentId = safeMapGet(keyboard.fragmentState?.hwDetection, idx);
+        return !(hwFragmentId !== undefined && hwFragmentId !== 0xff && instance.allow_override === false);
+    });
+    const activePreset = selectable.length === 0 ? undefined : PRESETS.find(({ preset }) => selectable.every(({ idx, instance }) => {
+        const target = resolvePresetFragmentName(instance, preset);
+        return !target || fragmentService.resolveFragment(keyboard, idx, instance) === target;
+    }))?.preset;
+
     return (
         <div className="flex flex-col">
             <div className="flex flex-col px-4 gap-3 py-2">
-                <div className="flex flex-wrap gap-2">
+                <div role="group" aria-label="Cluster presets" className="inline-flex w-fit max-w-full rounded-full border border-kb-gray-border bg-muted/60 p-0.5">
                     {PRESETS.map(({ preset, label, description }) => (
-                        <Button
+                        <button
                             key={preset}
                             type="button"
-                            variant="default"
-                            size="sm"
-                            className="rounded-full px-4 bg-kb-active text-kb-active-fg hover:bg-gray-800 dark:hover:bg-neutral-300"
+                            className={cn(
+                                "rounded-full px-4 py-1 text-sm font-medium transition-colors disabled:opacity-50",
+                                activePreset === preset
+                                    ? "bg-kb-active text-kb-active-fg"
+                                    : "text-muted-foreground hover:bg-muted hover:text-kb-ink",
+                            )}
                             aria-label={description}
+                            aria-pressed={activePreset === preset}
                             title={description}
                             onClick={() => handleApplyPreset(preset)}
                             disabled={updating !== null}
                         >
                             {label}
-                        </Button>
+                        </button>
                     ))}
                 </div>
                 {leftInstances.length > 0 && (

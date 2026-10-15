@@ -19,7 +19,6 @@ vi.mock('../../src/layout/SecondarySidebar/Panels/AltRepeatPanel', () => ({defau
 vi.mock('../../src/layout/SecondarySidebar/Panels/BasicKeyboards', () => ({default: () => <p>BasicKeyboards</p>}));
 vi.mock('../../src/layout/SecondarySidebar/Panels/CombosPanel', () => ({default: () => <p>CombosPanel</p>}));
 vi.mock('../../src/layout/SecondarySidebar/Panels/DynamicMenuPanel', () => ({default: () => <p>DynamicMenuPanel</p>}));
-vi.mock('../../src/layout/SecondarySidebar/Panels/FragmentsPanel', () => ({default: () => <p>FragmentsPanel</p>}));
 vi.mock('../../src/layout/SecondarySidebar/Panels/LayoutsPanel', () => ({default: () => <p>LayoutsPanel</p>}));
 vi.mock('../../src/layout/SecondarySidebar/Panels/LeadersPanel', () => ({default: () => <p>LeadersPanel</p>}));
 vi.mock('../../src/layout/SecondarySidebar/Panels/LayersPanel', () => ({default: () => <p>LayersPanel</p>}));
@@ -29,7 +28,8 @@ vi.mock('../../src/layout/SecondarySidebar/Panels/PointingPanel', () => ({defaul
 vi.mock('../../src/layout/SecondarySidebar/Panels/OneShotComposerPanel', () => ({default: () => <p>OneShotComposerPanel</p>}));
 vi.mock('../../src/layout/SecondarySidebar/Panels/QmkKeysPanel', () => ({default: () => <p>QmkKeysPanel</p>}));
 vi.mock('../../src/layout/SecondarySidebar/Panels/MousePanel', () => ({default: () => <p>MousePanel</p>}));
-vi.mock('../../src/layout/SecondarySidebar/Panels/QMKSettingsPanel', () => ({default: () => <p>QMKSettingsPanel</p>}));
+vi.mock('../../src/layout/SecondarySidebar/Panels/TypingBehaviorPanel', () => ({default: () => <p>TypingBehaviorPanel</p>}));
+vi.mock('../../src/layout/SecondarySidebar/Panels/ClustersPanel', () => ({default: () => <p>ClustersPanel</p>}));
 vi.mock('../../src/layout/SecondarySidebar/Panels/ScanLabPanel', () => ({default: () => <p>ScanLabPanel</p>}));
 vi.mock('../../src/layout/SecondarySidebar/Panels/TapdancePanel', () => ({default: () => <p>TapdancePanel</p>}));
 vi.mock('../../src/layout/SecondarySidebar/Panels/AboutPanel', () => ({default: () => <p>AboutPanel</p>}));
@@ -56,10 +56,10 @@ describe('shared panel placement', () => {
   view.rerender(<SecondarySidebar />);
   expect(screen.getByLabelText('Board name draft')).toHaveValue('My board');
  });
- it.each(['quickstart', 'about', 'fragments', 'scanlab'])('provides real %s content in either placement', panel => {
+ it.each(['quickstart', 'about', 'clusters', 'typing', 'scanlab'])('provides real %s content in either placement', panel => {
   state.activePanel = panel;
   const view = render(<SecondarySidebar />);
-  const expected = {quickstart: 'QuickStartPanel', about: 'AboutPanel', fragments: 'FragmentsPanel', scanlab: 'ScanLabPanel'}[panel];
+  const expected = {quickstart: 'QuickStartPanel', about: 'AboutPanel', clusters: 'ClustersPanel', typing: 'TypingBehaviorPanel', scanlab: 'ScanLabPanel'}[panel];
   expect(screen.getByText(expected!)).toBeVisible();
   view.rerender(<SecondarySidebar bottom />);
   expect(screen.getByText(expected!)).toBeVisible();

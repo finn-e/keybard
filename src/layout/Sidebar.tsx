@@ -1,4 +1,4 @@
-import { BookOpen, HelpCircle, Keyboard, ListOrdered, LucideIcon, Mouse, Piano, Rocket, Settings } from "lucide-react";
+import { BookOpen, HelpCircle, Keyboard, LayoutGrid, ListOrdered, LucideIcon, Mouse, Piano, Rocket, Settings, Timer } from "lucide-react";
 import KeybardLogo from "@/components/icons/KeybardLogo";
 import PointingDeviceBall01Icon from "@/components/icons/PointingDeviceBall01Icon";
 import LayoutLayersIcon from "@/components/icons/LayoutLayersIcon";
@@ -81,10 +81,12 @@ const featureSidebarItems: SidebarItem[] = [
     ...(SHOW_LEADERS ? [{ title: "Leaders", url: "leaders", icon: ListOrdered }] : []),
     { title: "Combos", url: "combos", icon: ComboIcon },
     { title: "Overrides", url: "overrides", icon: OverridesIcon },
+    { title: "Typing Behavior", url: "typing", icon: Timer },
 ];
 
 const layoutSidebarItems: SidebarItem[] = [
     { title: "Layouts", url: "layouts", icon: LayoutLayersIcon },
+    { title: "Clusters", url: "clusters", icon: LayoutGrid },
     { title: "Overlay", url: "trainer", icon: GraduationCapIcon },
 ];
 

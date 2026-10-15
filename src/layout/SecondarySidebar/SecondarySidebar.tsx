@@ -25,7 +25,7 @@ import { getPanelTitle, PanelContent } from "../PanelContent";
 
 export const DETAIL_SIDEBAR_WIDTH = "32rem";
 export const getDetailPanelHeight = (panel: string | null | undefined, height: number): string | number =>
-    ["settings", "qmksettings", "scanlab", "quickstart", "about", "fragments", "layouts"].includes(panel ?? "")
+    ["settings", "typing", "scanlab", "quickstart", "about", "clusters", "layouts"].includes(panel ?? "")
         ? "min(60dvh, 36rem)" : height;
 
 /**
