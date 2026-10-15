@@ -28,9 +28,14 @@ export interface ComboEditorGeometryInput {
     canvasScrollTop: number;
     /** Canvas space reserved now (the result of the previous pass). */
     currentReserve: number;
-    /** Where the user moved the floating editor, if they did. */
+    /** Where the user moved the floating editor, if they did (or, for "half", where a drag is now). */
     manual: { x: number; y: number } | null;
+    /** "half": the spot a drag snapped to, kept until the editor closes. */
+    manualSpot?: string | null;
 }
+
+/** A place the "half" card can snap to. */
+export interface ComboEditorSpot { id: string; label: string; left: number; top: number }
 
 export interface ComboEditorGeometry {
     left: number;
@@ -40,6 +45,9 @@ export interface ComboEditorGeometry {
     maxWidth: number;
     /** Height to take from the bottom of the canvas so the editor never covers it. */
     reserve: number;
+    /** "half": every spot the card may snap to, and the one it is in (unset while dragging). */
+    spots?: ComboEditorSpot[];
+    spot?: string;
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max));
@@ -84,6 +92,8 @@ export function computeComboEditorGeometry(input: ComboEditorGeometryInput): Com
 
     const keyboardBox = unionBox(keys);
     const triggerBox = unionBox(triggers);
+
+    if (placement === "half") return halfGeometry(input, { regionLeft, regionRight, regionTop, regionBottom, regionWidth, width, height, reserveAbove, keyboardBox });
 
     if (placement === "anchored") {
         const anchor = triggerBox ?? keyboardBox;
@@ -143,6 +153,96 @@ export function computeComboEditorGeometry(input: ComboEditorGeometryInput): Com
     return { left: corners[0].left, top: corners[0].top, maxWidth: regionWidth, reserve: reserveAbove(corners[0].top) };
 }
 
+interface Region {
+    regionLeft: number; regionRight: number; regionTop: number; regionBottom: number; regionWidth: number;
+    width: number; height: number; reserveAbove: (top: number) => number; keyboardBox: Box | null;
+}
+
+const centerX = (b: Box) => (b.left + b.right) / 2;
+
+/**
+ * "Under a Half": the compact card sits below the keyboard half that holds
+ * fewer of the combo's keys (a tie goes left), so it never covers a key. When
+ * there is no room under the keyboard it sits at the bottom of the column and
+ * takes its height from the canvas, as the dock does. A drag snaps to the
+ * nearest spot, which holds until the editor closes.
+ */
+function halfGeometry(input: ComboEditorGeometryInput, r: Region): ComboEditorGeometry {
+    const { keys, triggers, canvasScrollTop, currentReserve, manual, manualSpot, obstacles = [] } = input;
+    const { regionLeft, regionRight, regionTop, regionBottom, regionWidth, width, height, reserveAbove, keyboardBox } = r;
+    const gap = COMBO_EDITOR_GAP;
+    const maxLeft = regionRight - width;
+    const maxTop = regionBottom - height;
+    const clampLeft = (x: number) => clamp(x, regionLeft, maxLeft);
+
+    if (!keyboardBox) {
+        return { left: regionLeft, top: maxTop, maxWidth: regionWidth, reserve: reserveAbove(maxTop) };
+    }
+    const mid = centerX(keyboardBox);
+    const leftHalf = unionBox(keys.filter(k => centerX(k) < mid)) ?? keyboardBox;
+    const rightHalf = unionBox(keys.filter(k => centerX(k) >= mid)) ?? keyboardBox;
+
+    // Decide on the keyboard's unscrolled position so scrolling never toggles
+    // the reserve; once reserving, let go only with clear extra room.
+    const slack = currentReserve > 0 ? ANCHOR_HYSTERESIS : 0;
+    const fits = keyboardBox.bottom + canvasScrollTop + gap + height + slack <= regionBottom;
+    const rowTop = fits ? clamp(keyboardBox.bottom + gap, regionTop, maxTop) : maxTop;
+    const reserve = fits ? 0 : reserveAbove(rowTop);
+
+    const naturalKeys = keys.map(k => ({ ...k, top: k.top + canvasScrollTop, bottom: k.bottom + canvasScrollTop }));
+    // Corners are tested against the keys' unscrolled positions, as the float
+    // does, so scrolling the canvas never adds or removes a spot.
+    const boxAt = (left: number, top: number): Box => ({ left, top, right: left + width, bottom: top + height });
+    const clearOfKeys = (left: number, top: number) => naturalKeys.every(k => !intersects(boxAt(left, top), k));
+    const clearOfControls = (left: number, top: number) => obstacles.every(o => !intersects(boxAt(left, top), o));
+
+    const raw: ComboEditorSpot[] = [
+        { id: "below-left", label: "Below Left Half", left: clampLeft(leftHalf.left), top: rowTop },
+        { id: "below-right", label: "Below Right Half", left: clampLeft(rightHalf.right - width), top: rowTop },
+        { id: "below-center", label: "Below the Keyboard", left: clampLeft(centerX(keyboardBox) - width / 2), top: rowTop },
+    ];
+    if (fits) {
+        // Corners of the column, where they are clear of every key.
+        for (const c of [
+            { id: "bottom-left", label: "Bottom Left", left: regionLeft, top: maxTop },
+            { id: "bottom-right", label: "Bottom Right", left: maxLeft, top: maxTop },
+            { id: "top-left", label: "Top Left", left: regionLeft, top: regionTop },
+            { id: "top-right", label: "Top Right", left: maxLeft, top: regionTop },
+        ]) if (c.top >= regionTop && clearOfKeys(c.left, c.top)) raw.push({ ...c, left: Math.max(regionLeft, c.left) });
+    }
+    // Drop spots that sit almost on top of an earlier one (a narrow keyboard).
+    const spots: ComboEditorSpot[] = [];
+    for (const s of raw) {
+        if (!spots.some(o => Math.abs(o.left - s.left) < width * 0.45 && Math.abs(o.top - s.top) < height * 0.6)) spots.push(s);
+    }
+
+    if (manual) {
+        return { left: clampLeft(manual.x), top: clamp(manual.y, regionTop, maxTop), maxWidth: regionWidth, reserve, spots };
+    }
+
+    let chosen = manualSpot ? spots.find(s => s.id === manualSpot) : undefined;
+    if (!chosen) {
+        const leftCount = triggers.filter(t => centerX(t) < mid).length;
+        const rightCount = triggers.length - leftCount;
+        const first = rightCount < leftCount ? "below-right" : "below-left";
+        const order = [first, first === "below-left" ? "below-right" : "below-left", "below-center"];
+        const below = order.map(id => spots.find(s => s.id === id)).filter((s): s is ComboEditorSpot => !!s);
+        chosen = below.find(s => clearOfControls(s.left, s.top)) ?? below[0] ?? spots[0];
+    }
+    return { left: chosen.left, top: chosen.top, maxWidth: regionWidth, reserve, spots, spot: chosen.id };
+}
+
+/** The spot nearest to where a dragged card was let go (the cards share one size). */
+export function nearestSpot(spots: ComboEditorSpot[], at: { left: number; top: number }): ComboEditorSpot | null {
+    let best: ComboEditorSpot | null = null;
+    let bestDistance = Infinity;
+    for (const s of spots) {
+        const d = Math.hypot(s.left - at.left, s.top - at.top);
+        if (d < bestDistance) { best = s; bestDistance = d; }
+    }
+    return best;
+}
+
 const toBox = (r: DOMRect): Box => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
 
 interface UseComboEditorGeometryOptions {
@@ -167,6 +267,8 @@ export function useComboEditorGeometry({
     const [geometry, setGeometry] = React.useState<ComboEditorGeometry | null>(null);
     const reserveRef = React.useRef(0);
     const manualRef = React.useRef<{ x: number; y: number } | null>(null);
+    const manualSpotRef = React.useRef<string | null>(null);
+    const geometryRef = React.useRef<ComboEditorGeometry | null>(null);
     const frameRef = React.useRef(0);
     const triggerKey = triggerKeycodes.join(",");
 
@@ -190,10 +292,12 @@ export function useComboEditorGeometry({
                 .map(el => toBox(el.getBoundingClientRect())).filter(b => b.right > b.left),
             canvasScrollTop: canvas.scrollTop,
             currentReserve: reserveRef.current,
-            manual: placement === "float" ? manualRef.current : null,
+            manual: placement === "float" || placement === "half" ? manualRef.current : null,
+            manualSpot: placement === "half" ? manualSpotRef.current : null,
         });
+        geometryRef.current = next;
         setGeometry(prev => prev && prev.left === next.left && prev.top === next.top && prev.width === next.width
-            && prev.maxWidth === next.maxWidth && prev.reserve === next.reserve ? prev : next);
+            && prev.maxWidth === next.maxWidth && prev.reserve === next.reserve && prev.spot === next.spot ? prev : next);
         if (next.reserve !== reserveRef.current) {
             reserveRef.current = next.reserve;
             onReserveChange?.(next.reserve);
@@ -208,7 +312,10 @@ export function useComboEditorGeometry({
     React.useLayoutEffect(() => {
         if (!placement) {
             setGeometry(null);
+            // Closing the editor forgets any drag: it opens at its default next time.
             manualRef.current = null;
+            manualSpotRef.current = null;
+            geometryRef.current = null;
             if (reserveRef.current !== 0) {
                 reserveRef.current = 0;
                 onReserveChange?.(0);
@@ -235,9 +342,12 @@ export function useComboEditorGeometry({
     // Release the reserved space when the editor unmounts.
     React.useEffect(() => () => { if (reserveRef.current !== 0) onReserveChange?.(0); }, [onReserveChange]);
 
-    /** Pointer drag for the floating editor, started from [data-float-drag-handle]. */
+    /**
+     * Pointer drag, started from [data-float-drag-handle]. The float stays
+     * where it is let go; "half" snaps to the nearest spot.
+     */
     const onPointerDown = React.useCallback((event: React.PointerEvent<HTMLElement>) => {
-        if (placement !== "float" || event.button !== 0) return;
+        if ((placement !== "float" && placement !== "half") || event.button !== 0) return;
         if (!(event.target instanceof Element) || !event.target.closest("[data-float-drag-handle]")) return;
         const workspace = workspaceRef.current;
         if (!workspace) return;
@@ -252,6 +362,11 @@ export function useComboEditorGeometry({
         const up = () => {
             window.removeEventListener("pointermove", move);
             window.removeEventListener("pointerup", up);
+            if (placement !== "half" || !manualRef.current) return;
+            const spot = nearestSpot(geometryRef.current?.spots ?? [], { left: manualRef.current.x, top: manualRef.current.y });
+            manualRef.current = null;
+            if (spot) manualSpotRef.current = spot.id;
+            schedule();
         };
         window.addEventListener("pointermove", move);
         window.addEventListener("pointerup", up);
@@ -264,5 +379,5 @@ export function useComboEditorGeometry({
         maxWidth: geometry.maxWidth,
     } : undefined;
 
-    return { style, onPointerDown, regionWidth: geometry?.maxWidth ?? null };
+    return { style, onPointerDown, regionWidth: geometry?.maxWidth ?? null, spot: geometry?.spot ?? null };
 }

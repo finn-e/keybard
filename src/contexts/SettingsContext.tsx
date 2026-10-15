@@ -59,6 +59,7 @@ export const SETTINGS: SettingDefinition[] = [
         description: "Where the combo editor sits while you pick keys on the keyboard.",
         type: "select",
         items: [
+            { label: "Under a half", value: "half" },
             { label: "Below the keyboard", value: "dock" },
             { label: "Under the combo's keys", value: "anchored" },
             { label: "Floating", value: "float" },

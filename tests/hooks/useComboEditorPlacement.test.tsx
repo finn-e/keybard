@@ -12,9 +12,12 @@ const setSearch = (search: string) => window.history.replaceState(null, '', `/${
 describe('combo editor placement', () => {
  afterEach(() => setSearch(''));
 
- it('defaults to the dock below the keyboard', () => {
-  expect(resolveComboEditorPlacement('', undefined)).toEqual({ placement: 'dock', fromUrl: false });
-  expect(SETTINGS.find(s => s.name === COMBO_EDITOR_PLACEMENT_SETTING)?.defaultValue).toBe('dock');
+ it('defaults to the card under a half, with the others still selectable', () => {
+  expect(resolveComboEditorPlacement('', undefined)).toEqual({ placement: 'half', fromUrl: false });
+  const setting = SETTINGS.find(s => s.name === COMBO_EDITOR_PLACEMENT_SETTING);
+  expect(setting?.defaultValue).toBe('half');
+  expect(setting?.items?.map(i => i.value)).toEqual(['half', 'dock', 'anchored', 'float']);
+  expect(resolveComboEditorPlacement('?comboEditor=half', 'dock')).toEqual({ placement: 'half', fromUrl: true });
   expect(SETTINGS_CATEGORIES.find(c => c.name === 'general')?.settings).toContain(COMBO_EDITOR_PLACEMENT_SETTING);
  });
 
@@ -24,12 +27,12 @@ describe('combo editor placement', () => {
 
  it('ignores an invalid URL value and an unknown setting', () => {
   expect(resolveComboEditorPlacement('?comboEditor=sideways', 'anchored')).toEqual({ placement: 'anchored', fromUrl: false });
-  expect(resolveComboEditorPlacement('?comboEditor=sideways', 'beside')).toEqual({ placement: 'dock', fromUrl: false });
+  expect(resolveComboEditorPlacement('?comboEditor=sideways', 'beside')).toEqual({ placement: 'half', fromUrl: false });
  });
 
  it('follows the setting, and the URL override never writes to it', () => {
   const { result } = renderHook(() => ({ p: useComboEditorPlacement(), s: useSettings() }), { wrapper });
-  expect(result.current.p.placement).toBe('dock');
+  expect(result.current.p.placement).toBe('half');
   act(() => result.current.s.updateSetting(COMBO_EDITOR_PLACEMENT_SETTING, 'anchored'));
   expect(result.current.p.placement).toBe('anchored');
   setSearch('?comboEditor=float');

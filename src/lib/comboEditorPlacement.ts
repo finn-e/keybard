@@ -1,10 +1,14 @@
-/** Where the single-combo editor sits while keys are picked on the keyboard. */
-export type ComboEditorPlacement = "dock" | "anchored" | "float";
+/**
+ * Where the single-combo editor sits while keys are picked on the keyboard.
+ * "half" is the compact card under the keyboard half that holds fewer of the
+ * combo's keys; the others stay selectable for comparison.
+ */
+export type ComboEditorPlacement = "half" | "dock" | "anchored" | "float";
 
 export const COMBO_EDITOR_PLACEMENT_SETTING = "combo-editor-placement";
 export const COMBO_EDITOR_PLACEMENT_PARAM = "comboEditor";
-export const DEFAULT_COMBO_EDITOR_PLACEMENT: ComboEditorPlacement = "dock";
-export const COMBO_EDITOR_PLACEMENTS: readonly ComboEditorPlacement[] = ["dock", "anchored", "float"];
+export const DEFAULT_COMBO_EDITOR_PLACEMENT: ComboEditorPlacement = "half";
+export const COMBO_EDITOR_PLACEMENTS: readonly ComboEditorPlacement[] = ["half", "dock", "anchored", "float"];
 
 export const isComboEditorPlacement = (value: unknown): value is ComboEditorPlacement =>
     typeof value === "string" && (COMBO_EDITOR_PLACEMENTS as readonly string[]).includes(value);

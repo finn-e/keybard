@@ -245,6 +245,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                 className="binding-workspace z-30 bg-kb-gray-medium shadow-lg flex min-h-0"
                 aria-label="Binding editor"
                 data-combo-placement={comboActive ? comboPlacement : undefined}
+                data-combo-spot={comboActive && comboGeometry.spot ? comboGeometry.spot : undefined}
                 // Until it is measured the editor is transparent, not hidden:
                 // a visibility-hidden element cannot take the opening focus.
                 style={comboActive ? (comboGeometry.style ?? { opacity: 0, pointerEvents: "none" }) : undefined}
@@ -261,7 +262,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                         shouldClose={isClosingEditor}
                         inline
                         compact={comboActive}
-                        movable={comboActive && comboPlacement === "float"}
+                        movable={comboActive && (comboPlacement === "float" || comboPlacement === "half")}
                         stacked={comboActive && (comboPlacement !== "dock" || (comboGeometry.regionWidth ?? Infinity) < COMBO_DOCK_ONE_ROW_MIN)}
                         onRequestClose={comboActive ? () => setIsClosingEditor(true) : undefined}
                     />

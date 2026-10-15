@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeComboEditorGeometry, COMBO_EDITOR_GAP as GAP, type Box, type ComboEditorGeometryInput } from '@/layout/SecondarySidebar/comboEditorGeometry';
+import { computeComboEditorGeometry, nearestSpot, COMBO_EDITOR_GAP as GAP, type Box, type ComboEditorGeometryInput } from '@/layout/SecondarySidebar/comboEditorGeometry';
 
 const box = (left: number, top: number, w: number, h: number): Box => ({ left, top, right: left + w, bottom: top + h });
 const overlaps = (a: Box, b: Box) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
@@ -99,5 +99,85 @@ describe('combo editor geometry', () => {
         const g = computeComboEditorGeometry(base({ placement: 'float', manual: { x: 5000, y: -50 } }));
         expect(g.left).toBe(1440 - GAP - 430);
         expect(g.top).toBe(74 + GAP);
+    });
+});
+
+describe('combo editor under a half', () => {
+    // A split keyboard: left half 760..1000, right half 1180..1420, keys between y=180 and y=400.
+    const left = [box(760, 180, 40, 40), box(860, 250, 40, 40), box(960, 360, 40, 40)];
+    const right = [box(1180, 360, 40, 40), box(1280, 250, 40, 40), box(1380, 180, 40, 40)];
+    const split = [...left, ...right];
+    const half = (over: Partial<ComboEditorGeometryInput>) => base({ placement: 'half', keys: split, ...over });
+
+    it('opens under the left half on a tie and never covers a key', () => {
+        const g = computeComboEditorGeometry(half({ triggers: [left[0], right[0]] }));
+        expect(g.spot).toBe('below-left');
+        expect(g.left).toBe(760);
+        expect(g.top).toBe(400 + GAP);
+        expect(g.reserve).toBe(0);
+        expect(split.some(k => overlaps(placed(g), k))).toBe(false);
+    });
+
+    it('opens under the half with fewer of the combo keys', () => {
+        const g = computeComboEditorGeometry(half({ triggers: [left[0], left[1], right[0]] }));
+        expect(g.spot).toBe('below-right');
+        expect(g.left + 430).toBe(1420);
+        expect(split.some(k => overlaps(placed(g), k))).toBe(false);
+        expect(computeComboEditorGeometry(half({ triggers: [right[0], right[1], left[2]] })).spot).toBe('below-left');
+        expect(computeComboEditorGeometry(half({ triggers: [] })).spot).toBe('below-left');
+    });
+
+    it('never covers a key at any default, in either layout, at 1280 and 1440 wide', () => {
+        for (const width of [1280, 1440]) {
+            for (const bottom of [false, true]) {
+                const canvas = bottom ? box(64, 74, width - 64, 600) : box(742, 74, width - 742, 926);
+                const panel = bottom ? box(56, 700, width - 56, 300) : box(64, 8, 512, 984);
+                const shift = bottom ? -600 : 0;
+                const ks = split.map(k => ({ ...k, left: k.left + shift + (width - 1440) / 2, right: k.right + shift + (width - 1440) / 2 }));
+                for (const triggers of [[], [ks[0]], [ks[3]], [ks[0], ks[1], ks[4]]]) {
+                    for (const height of [600, 1000]) {
+                        const g = computeComboEditorGeometry(half({ viewport: { width, height }, canvas, panel, bottom, keys: ks, triggers }));
+                        expect(ks.some(k => overlaps(placed(g), k))).toBe(false);
+                    }
+                }
+            }
+        }
+    });
+
+    it('sits at the bottom and reserves its height when there is no room under the keyboard', () => {
+        const g = computeComboEditorGeometry(half({ viewport: { width: 1440, height: 480 }, triggers: [left[0]] }));
+        expect(g.top).toBe(480 - GAP - 100);
+        expect(g.reserve).toBe(100 + 2 * GAP);
+        expect(g.spot).toBe('below-right');
+    });
+
+    it('prefers a spot clear of the canvas controls', () => {
+        const controls = box(1250, 400 + GAP + 20, 180, 40);
+        const g = computeComboEditorGeometry(half({ triggers: [left[0]], obstacles: [controls] }));
+        expect(overlaps(placed(g), controls)).toBe(false);
+        expect(g.spot).toBe('below-left');
+    });
+
+    it('follows a drag, then keeps the spot it snapped to', () => {
+        const dragging = computeComboEditorGeometry(half({ manual: { x: 1000, y: 700 } }));
+        expect(dragging.left).toBe(1000);
+        expect(dragging.top).toBe(700);
+        expect(dragging.spot).toBeUndefined();
+        const snapped = nearestSpot(dragging.spots!, { left: 1000, top: 700 })!;
+        expect(snapped.id).toBe('bottom-right');
+        const g = computeComboEditorGeometry(half({ manualSpot: snapped.id }));
+        expect(g.spot).toBe('bottom-right');
+        expect(split.some(k => overlaps(placed(g), k))).toBe(false);
+    });
+
+    it('only offers spots that are clear of every key', () => {
+        const g = computeComboEditorGeometry(half({ keys: [...split, box(742, 90, 698, 30)] }));
+        for (const s of g.spots!) expect([...split, box(742, 90, 698, 30)].some(k => overlaps(box(s.left, s.top, 430, 100), k))).toBe(false);
+        expect(g.spots!.some(s => s.id.startsWith('top-'))).toBe(false);
+    });
+
+    it('falls back to the default when the snapped spot is gone', () => {
+        const g = computeComboEditorGeometry(half({ viewport: { width: 1440, height: 480 }, manualSpot: 'top-right' }));
+        expect(g.spot).toBe('below-left');
     });
 });
