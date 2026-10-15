@@ -90,6 +90,11 @@
     /* Back arrow highlight when a click lands under the spotlight (new; the brand green, beside the brand tokens). */
     --kb-back-highlight: #099e7c;
     --kb-back-highlight-fg: #ffffff;
+    /* Translucent tones of the highlight, as plain values: color-mix() inside
+       @keyframes falls back to the solid color after the CSS build. */
+    --kb-back-highlight-soft: rgb(9 158 124 / 0.22);
+    --kb-back-highlight-halo: rgb(9 158 124 / 0.55);
+    --kb-back-highlight-ring: rgb(9 158 124 / 0.85);
 
     /* Combo folded corner. Each combo hue has a light tone (on mid and dark layer colors) and
        a deep tone (on orange, yellow, light gray and white keys), the way legends switch
@@ -170,6 +175,9 @@
     --kb-scrim: rgb(0 0 0 / 0.58);
     --kb-back-highlight: #0bb48d;
     --kb-back-highlight-fg: #ffffff;
+    --kb-back-highlight-soft: rgb(11 180 141 / 0.22);
+    --kb-back-highlight-halo: rgb(11 180 141 / 0.55);
+    --kb-back-highlight-ring: rgb(11 180 141 / 0.85);
 
     --kb-combo-fold-crease: rgb(0 0 0 / 0.5);
     --kb-combo-fold-crease-strong: rgb(0 0 0 / 0.74);
@@ -366,7 +374,7 @@ html.dark {
 }
 /* ring: an expanding ring around the arrow button, twice. */
 @keyframes bindingBackRing {
-    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--kb-back-highlight) 85%, transparent), 0 0 0 2px var(--kb-back-highlight); }
+    0% { box-shadow: 0 0 0 0 var(--kb-back-highlight-ring), 0 0 0 2px var(--kb-back-highlight); }
     100% { box-shadow: 0 0 0 16px transparent, 0 0 0 2px var(--kb-back-highlight); }
 }
 .binding-back-pulse[data-back-pulse="ring"] {
@@ -374,7 +382,7 @@ html.dark {
 }
 /* glow: the button fills with the highlight color and fades back. */
 @keyframes bindingBackGlow {
-    0%, 35% { background-color: var(--kb-back-highlight); box-shadow: 0 0 18px 4px color-mix(in srgb, var(--kb-back-highlight) 55%, transparent); }
+    0%, 35% { background-color: var(--kb-back-highlight); box-shadow: 0 0 18px 4px var(--kb-back-highlight-halo); }
     100% { background-color: transparent; box-shadow: 0 0 0 0 transparent; }
 }
 @keyframes bindingBackGlowIcon {
@@ -393,7 +401,7 @@ html.dark {
     60% { transform: translateX(0); }
 }
 @keyframes bindingBackNudgeBg {
-    0%, 75% { background-color: color-mix(in srgb, var(--kb-back-highlight) 22%, transparent); box-shadow: 0 0 0 2px var(--kb-back-highlight); }
+    0%, 75% { background-color: var(--kb-back-highlight-soft); box-shadow: 0 0 0 2px var(--kb-back-highlight); }
     100% { background-color: transparent; box-shadow: 0 0 0 0 transparent; }
 }
 .binding-back-pulse[data-back-pulse="nudge"] {
@@ -430,7 +438,7 @@ html.dark {
     .binding-back-pulse[data-back-pulse] svg,
     .binding-back-callout { animation: none; }
     .binding-back-pulse[data-back-pulse] {
-        background-color: color-mix(in srgb, var(--kb-back-highlight) 22%, transparent);
+        background-color: var(--kb-back-highlight-soft);
         box-shadow: 0 0 0 2px var(--kb-back-highlight);
     }
     .binding-back-pulse[data-back-pulse] svg { color: var(--kb-back-highlight); }

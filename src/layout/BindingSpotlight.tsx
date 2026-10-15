@@ -39,11 +39,10 @@ const HINT_MS = 2600;
 const BACK = "[data-binding-editor-back]";
 
 function visibleBackArrow(): HTMLElement | null {
-    for (const el of document.querySelectorAll<HTMLElement>(BACK)) {
-        if (el.closest("[hidden], [inert], [aria-hidden='true']")) continue;
-        return el;
-    }
-    return null;
+    const candidates = [...document.querySelectorAll<HTMLElement>(BACK)]
+        .filter(el => !el.closest("[hidden], [inert], [aria-hidden='true']"));
+    // A copy inside a display: none container has no boxes; prefer the one on screen.
+    return candidates.find(el => el.getClientRects().length > 0) ?? candidates[0] ?? null;
 }
 /** Covered controls inside lifted areas (the canvas): dimmed, out of the Tab order, and a click nudges. */
 const COVER = "[data-spotlight-cover]";

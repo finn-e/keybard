@@ -56,6 +56,27 @@ describe('binding editor spotlight', () => {
         expect(document.querySelector('[aria-label="Hidden back"]')).not.toHaveClass('binding-back-pulse');
     });
 
+    it('pulses the back arrow on screen, not an earlier copy inside a display: none layout', () => {
+        render(
+            <>
+                <div><button type="button" aria-label="Off-screen back" data-binding-editor-back="" /></div>
+                <button type="button" aria-label="Go back" data-binding-editor-back="" />
+                <BindingSpotlight />
+            </>,
+        );
+        const shown = screen.getByRole('button', { name: 'Go back' });
+        const rects = vi.spyOn(HTMLElement.prototype, 'getClientRects').mockImplementation(function (this: HTMLElement) {
+            return (this === shown ? [{}] : []) as unknown as DOMRectList;
+        });
+        try {
+            act(() => nudgeBindingEditor());
+            expect(shown).toHaveClass('binding-back-pulse');
+            expect(document.querySelector('[aria-label="Off-screen back"]')).not.toHaveClass('binding-back-pulse');
+        } finally {
+            rects.mockRestore();
+        }
+    });
+
     it.each(['ring', 'glow', 'nudge'])('uses the ?backPulse=%s style, with the same callout', style => {
         window.history.replaceState(null, '', `/?backPulse=${style}`);
         render(<><button type="button" aria-label="Go back" data-binding-editor-back="" /><BindingSpotlight /></>);
