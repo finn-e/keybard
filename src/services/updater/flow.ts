@@ -159,9 +159,10 @@ export function sessionFlowStore(storage: Storage | null = typeof sessionStorage
         save(state) { set(KEY, JSON.stringify(state)); },
         saveFiles(files, backupSvil) {
             const raw: Partial<Record<Hand, string>> = {};
+            // The backup first: it's small, and a full storage must not cost the restore.
+            if (backupSvil !== null) set(`${KEY}:backup`, backupSvil);
             for (const h of [0, 1] as Hand[]) if (files[h]) raw[h] = toB64(files[h]!);
             set(`${KEY}:files`, JSON.stringify(raw));
-            if (backupSvil !== null) set(`${KEY}:backup`, backupSvil);
         },
         clear() { del(KEY); del(`${KEY}:files`); del(`${KEY}:backup`); },
     };
@@ -625,6 +626,11 @@ export class UpdateFlow {
         let flags = await this.host.readStorageFlags();
         if (flags & 0x02) throw new Stop({ id: "F17" });
         let trimmed: string[] = [];
+        // "Put my layout back" with the backup lost (a reload with storage full): never reset
+        // instead. The pre-update snapshot and the downloaded file still hold the layout.
+        if (this.state.afterwards === "restore" && !this.backupSvil) {
+            throw new Stop({ id: "F16", detail: `This tab lost its copy of the backup. Restore ${this.state.backup?.fileName ?? "the pre-update backup"} from Backups.` });
+        }
         if (this.state.afterwards === "restore" && this.backupSvil) {
             this.step("restore");
             this.row(usbHand, { stage: "restoring", progress: null });

@@ -105,7 +105,8 @@ export function refusalFor(file: SvupFile, half: Info0, isOther: boolean): strin
     const m = file.manifest;
     const ok = isOther ? [2, 3, 4] : [UPDATER_PROTOCOL];
     if (!ok.includes(half.protocol)) return `it speaks updater protocol ${half.protocol}`;
-    if (half.releaseBuild && m.diagnostic) return "it's a developer file and this keyboard runs a release";
+    // A no-chord build (D43) is a developer file even if it was packed without DIAGNOSTIC.
+    if (half.releaseBuild && (m.diagnostic || file.noChord)) return "it's a developer file and this keyboard runs a release";
     if (m.securityEpoch < half.securityEpoch) return "it's older than this keyboard allows";
     if (m.storageFormat < half.storageFormat) return "its settings format is older than this keyboard's";
     if (m.imageLen > half.maxImage) return "it's too large for this keyboard";

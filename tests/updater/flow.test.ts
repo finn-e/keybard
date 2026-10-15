@@ -234,6 +234,12 @@ describe("the sheet's checks", () => {
         const p = await planInstall(new UpdaterClient(board), { kind: "file", files: [diag.files[L], diag.files[R]] }, { clock }) as Plan;
         expect(p.refusal?.label).toMatch(/won't accept this file/);
     });
+
+    it("refuses a no-chord build on a release board even without DIAGNOSTIC", async () => {
+        const { board } = fakeSetup({ clock, running: v3, release: true });
+        const p = await planInstall(new UpdaterClient(board), { kind: "file", files: [dev.files[L], dev.files[R]] }, { clock }) as Plan;
+        expect(p.refusal?.label).toMatch(/won't accept this file/);
+    });
 });
 
 describe("afterwards", () => {
@@ -286,6 +292,22 @@ describe("a reload mid-update", () => {
         expect(state.approvalsAsked).toBe(1);
         expect(host.restores).toBe(1);
         expect(board.halves[R].cfg.fwVersion).toBe(4000);
+    });
+
+    it("never resets settings in place of a restore when the tab lost the backup", async () => {
+        const { board, host, plan: p } = await plan();
+        const store = memoryFlowStore();
+        const dying = Object.assign(Object.create(Object.getPrototypeOf(host)), host, { waitForDevice: () => new Promise(() => undefined) }) as FakeHost;
+        const flow = UpdateFlow.create(dying, store, { plan: p as Plan, afterwards: "restore", backup: { fileName: "b.svil", svil: "{}" } });
+        void flow.run();
+        for (let i = 0; i < 20000 && !store.snapshot?.includes('"step":"reconnect"'); i++) await new Promise((r) => setTimeout(r, 0));
+        // Storage was full: the reloaded tab has the state but not the backup.
+        const lossy = { ...store, load: () => { const x = store.load(); return x && { ...x, backupSvil: null }; } };
+        const state = await (await UpdateFlow.restore(host, lossy))!.run();
+        expect(state.failure?.id).toBe("F16");
+        expect(state.settingsResetSent).toBe(false);
+        expect(board.requests.some((r) => r.op === Op.SETTINGS_RESET)).toBe(false);
+        expect(host.events).not.toContain("0x2A");
     });
 
     it("reports F6 when the tab went away mid-transfer", async () => {
