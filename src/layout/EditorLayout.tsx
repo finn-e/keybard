@@ -45,7 +45,7 @@ import { EditorControls } from "./EditorControls";
 import BindingSpotlight, { SpotlightScrim, useBindingSpotlight } from "./BindingSpotlight";
 import PickerTray from "./PickerTray";
 import { PickerTrayProvider, type PickerTrayValue } from "@/contexts/PickerTrayContext";
-import { effectivePickerShape, fittedTrayHeight, isLShape, pickerShapeFromSearch, standardKeysInPlay, TRAY_MOTION_MS, trayHeightFor, trayKeyboardHeight, trayReserve, trayState } from "@/lib/pickerShape";
+import { effectivePickerShape, isLShape, layoutCanvasNeed, openTraySizing, pickerShapeFromSearch, standardKeysInPlay, TRAY_MOTION_MS, trayReserve, trayState } from "@/lib/pickerShape";
 import { effectivePickerMode, isBindingEditorOpen } from "@/lib/bindingSpotlight";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { getBackdropLayerFromElements } from "@/utils/layer-drop-target";
@@ -1210,6 +1210,12 @@ const EditorLayoutInner = () => {
     const requestedPickerShape = React.useMemo(() => pickerShapeFromSearch(window.location.search), []);
     const pickerShape = effectivePickerShape(requestedPickerShape, layoutMode);
     const lShape = isLShape(pickerShape) && showDetailsSidebar;
+    // Single-combo editing keeps the whole keyboard visible: the editor sits
+    // below it (or floats clear of it) and reserves the height it needs here.
+    const { placement: savedComboEditorPlacement } = useComboEditorPlacement();
+    // The L shape keeps every editor pinned at the top of the side panel.
+    const comboEditorPlacement = isLShape(pickerShape) ? "panel" : savedComboEditorPlacement;
+    const [comboEditorReserve, setComboEditorReserve] = React.useState(0);
     const editorOpen = isBindingEditorOpen(activePanel, itemToEdit);
     const trayInputs = {
         panelOpen: showDetailsSidebar,
@@ -1233,25 +1239,64 @@ const EditorLayoutInner = () => {
         window.addEventListener("resize", update);
         return () => window.removeEventListener("resize", update);
     }, []);
-    const fullTrayHeight = trayHeightFor(viewportHeight);
-    // The tray takes what its keyboard needs, up to the budget for this window.
+    // The layout keeps exactly the height its content needs at the key size in
+    // use (Auto's pick or the user's), measured as laid out; the open tray takes
+    // the rest. Measured only while the tray is open over a single layer: the
+    // multi-layer view keeps the tray at its handle as before.
+    const canvasControlsRef = React.useRef<HTMLDivElement>(null);
+    const [layoutExtent, setLayoutExtent] = React.useState({ top: 0, need: 0 });
+    const measureLayout = trayInPlay && !isMultiLayersActive;
+    React.useLayoutEffect(() => {
+        if (!measureLayout) {
+            setLayoutExtent(prev => prev.need === 0 ? prev : { top: prev.top, need: 0 });
+            return;
+        }
+        const canvas = viewsScrollRef.current;
+        const container = contentContainerRef.current;
+        if (!canvas || !container) return;
+        const measure = () => {
+            let contentBottom = 0;
+            let keyboardBottom = 0;
+            for (const el of Array.from(canvas.children)) {
+                if (!(el instanceof HTMLElement)) continue;
+                const position = getComputedStyle(el).position;
+                if (position === "absolute" || position === "fixed") continue;
+                const bottom = el.offsetTop + el.offsetHeight;
+                contentBottom = Math.max(contentBottom, bottom);
+                if (el.hasAttribute("data-layout-keyboard")) keyboardBottom = bottom;
+            }
+            const top = Math.round(canvas.getBoundingClientRect().top - container.getBoundingClientRect().top);
+            const need = layoutCanvasNeed({ contentBottom, keyboardBottom, controlsHeight: canvasControlsRef.current?.offsetHeight ?? 0 });
+            setLayoutExtent(prev => prev.top === top && prev.need === need ? prev : { top, need });
+        };
+        measure();
+        if (typeof ResizeObserver === "undefined") return;
+        const observer = new ResizeObserver(measure);
+        observer.observe(canvas);
+        for (const el of Array.from(canvas.children)) observer.observe(el);
+        if (canvasControlsRef.current) observer.observe(canvasControlsRef.current);
+        return () => observer.disconnect();
+    }, [measureLayout, keyVariant, activePanel, is3DMode]);
+    // The tray's keyboard as laid out: the fallback size fits it.
     const [trayContentHeight, setTrayContentHeight] = React.useState(0);
-    const openTrayHeight = fittedTrayHeight(fullTrayHeight, trayContentHeight);
+    const traySizing = openTraySizing({
+        viewportHeight,
+        canvasTop: layoutExtent.top,
+        layoutNeed: layoutExtent.need,
+        reserveBelow: comboEditorReserve,
+        contentHeight: trayContentHeight,
+    });
+    const openTrayHeight = traySizing.height;
+    const trayFills = lShape && currentTrayState === "open" && traySizing.fills;
     const layoutTrayReserve = lShape ? trayReserve(currentTrayState, openTrayHeight) : 0;
     const reducedMotion = usePrefersReducedMotion();
     const [trayHeader, setTrayHeader] = React.useState<HTMLElement | null>(null);
     const [trayBody, setTrayBody] = React.useState<HTMLElement | null>(null);
     const trayValue = React.useMemo<PickerTrayValue>(() => lShape
-        ? { header: trayHeader, body: trayBody, keyboardHeight: trayKeyboardHeight(fullTrayHeight) }
+        ? { header: trayHeader, body: trayBody, keyboardHeight: traySizing.keyboardHeight }
         : { header: null, body: null, keyboardHeight: 0 },
-    [lShape, trayHeader, trayBody, fullTrayHeight]);
+    [lShape, trayHeader, trayBody, traySizing.keyboardHeight]);
 
-    // Single-combo editing keeps the whole keyboard visible: the editor sits
-    // below it (or floats clear of it) and reserves the height it needs here.
-    const { placement: savedComboEditorPlacement } = useComboEditorPlacement();
-    // The L shape keeps every editor pinned at the top of the side panel.
-    const comboEditorPlacement = isLShape(pickerShape) ? "panel" : savedComboEditorPlacement;
-    const [comboEditorReserve, setComboEditorReserve] = React.useState(0);
     const getPrimaryKeyboardElement = React.useCallback(
         () => sceneViewRefs.current.get("primary") ?? layerViewRefs.current.get(selectedLayer) ?? null,
         [selectedLayer],
@@ -1300,6 +1345,7 @@ const EditorLayoutInner = () => {
                 shape={pickerShape}
                 state={currentTrayState}
                 height={openTrayHeight}
+                fills={trayFills}
                 panelOpen={showDetailsSidebar}
                 onContentHeight={setTrayContentHeight}
                 onToggle={() => setTrayToggled(t => !t)}
@@ -1337,6 +1383,8 @@ const EditorLayoutInner = () => {
                     className={cn(
                         "keyboard-canvas-scroll flex-1 min-h-0 min-w-0 overflow-auto overscroll-contain flex flex-col items-start max-w-full relative pb-16",
                         isMultiLayersActive && !isScene3D && "pt-11",
+                        // Sized to its content above the L tray, with the controls kept clear by that size.
+                        trayFills && "pb-0",
                         // Lifted above the column's scrim, with its own background so it reads as lit.
                         spotlight && "z-[41] bg-kb-gray"
                     )}
@@ -1381,6 +1429,7 @@ const EditorLayoutInner = () => {
 
                                 return (
                                     <div
+                                        data-layout-keyboard=""
                                         className="relative w-full shrink-0 flex flex-col items-center"
                                         style={{ minWidth: rawKeyboardWidths[keyVariant] - 2 * fingerClusterSqueeze * currentUnitSize, ...(isScene3D ? {
                                             perspective: "1200px",
@@ -1556,7 +1605,7 @@ const EditorLayoutInner = () => {
                 {
                     !useBottomLayout && (
                         <>
-                            <div className={cn("absolute bottom-4 right-2 max-w-[calc(100%-4rem)] flex flex-col items-end gap-1 pointer-events-none", spotlight && "z-[42]")} style={comboEditorReserve + layoutTrayReserve > 0 ? { bottom: `calc(1rem + ${comboEditorReserve + (layoutTrayReserve > 0 ? layoutTrayReserve + 8 : 0)}px)`, transition: lShape && !reducedMotion ? `bottom ${TRAY_MOTION_MS}ms cubic-bezier(0.33, 1, 0.68, 1)` : undefined } : undefined}>
+                            <div ref={canvasControlsRef} className={cn("absolute bottom-4 right-2 max-w-[calc(100%-4rem)] flex flex-col items-end gap-1 pointer-events-none", spotlight && "z-[42]")} style={comboEditorReserve + layoutTrayReserve > 0 ? { bottom: `calc(1rem + ${comboEditorReserve + (layoutTrayReserve > 0 ? layoutTrayReserve + 8 : 0)}px)`, transition: lShape && !reducedMotion ? `bottom ${TRAY_MOTION_MS}ms cubic-bezier(0.33, 1, 0.68, 1)` : undefined } : undefined}>
                                 {/* While editing, the size controls stay in view above the lit canvas but dimmed and out of reach; a click on them nudges the editor. */}
                                 <div className={cn("pointer-events-auto", spotlight && "relative")} data-combo-editor-avoid data-inspector-avoid data-spotlight-dimmed={spotlight ? "" : undefined}>
                                     <div inert={spotlight} className={cn(spotlight && "opacity-40")}>

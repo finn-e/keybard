@@ -73,6 +73,8 @@ interface PickerTrayProps {
     state: TrayState;
     /** The tray's height when open. */
     height: number;
+    /** The tray takes all the room under the layout, so its keyboard is centered in it. */
+    fills: boolean;
     /** The side panel is open, so the L surface is drawn. */
     panelOpen: boolean;
     onToggle: () => void;
@@ -88,7 +90,7 @@ interface PickerTrayProps {
  * the two read as one L: same fill, one border, rounded outer corners and a
  * concave fillet where the tray meets the panel.
  */
-export default function PickerTray({ shape, state, height, panelOpen, onToggle, headerRef, bodyRef, onContentHeight }: PickerTrayProps) {
+export default function PickerTray({ shape, state, height, fills, panelOpen, onToggle, headerRef, bodyRef, onContentHeight }: PickerTrayProps) {
     const reducedMotion = usePrefersReducedMotion();
     const shown = useTrayHeight(trayVisibleHeight(state, height), reducedMotion);
     const box = usePanelBox(panelOpen);
@@ -165,7 +167,7 @@ export default function PickerTray({ shape, state, height, panelOpen, onToggle, 
                     <span ref={headerRef} className={cn("flex items-center", collapsed && "hidden")} />
                 </div>
                 {shape === "Lfull" && <div aria-hidden="true" className="absolute top-0 h-px bg-border" style={{ left: 16, width: Math.max(0, box.right - box.left - 32) }} />}
-                <div ref={setBody} className="shrink-0 px-4 pb-3 pt-1" data-picker-tray-body="" />
+                <div ref={setBody} className={cn("px-4 pb-3 pt-1", fills ? "flex min-h-0 flex-1 flex-col justify-center" : "shrink-0")} data-picker-tray-body="" />
             </section>
         </>
     );
