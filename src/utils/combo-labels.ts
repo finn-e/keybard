@@ -12,6 +12,9 @@ const MOD: Record<string, string> = {
     LCTL: "Ctrl", LSFT: "Shift", LALT: "Alt", LGUI: "GUI", RCTL: "RCtrl", RSFT: "RShift", RALT: "AltGr", RGUI: "RGUI",
 };
 
+/** Short name for a basic keycode Keybard abbreviates ("KC_BSPACE" -> "Bksp"), else undefined. */
+export const knownShortName = (s: string): string | undefined => NAMES[s.replace(/^KC_/, "")];
+
 /** "KC_ESCAPE" -> "Esc", "LCTL(KC_C)" -> "Ctrl C", "LGUI_T(KC_TAB)" -> "Tab / GUI". */
 export function shortKeyName(s: string | undefined): string {
     if (!s) return "";
