@@ -55,11 +55,12 @@ const gitSubject = getGitSubject();
 const devPort = getPortForBranch(gitBranch);
 
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
     const env = loadEnv(mode, process.cwd(), "VITE_");
     const paranoid = mode === "paranoid";
     return {
-    base: env.VITE_BASE_PATH || "/keybard-ng/",
+    // The dev server serves the app at the root; builds keep their default (deploys set VITE_BASE_PATH).
+    base: env.VITE_BASE_PATH || (command === "serve" ? "/" : "/keybard-ng/"),
     plugins: [
         react(),
         tailwindcss(),

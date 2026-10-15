@@ -126,7 +126,7 @@ function createAppHost(ref: { current: AppState }): FirmwareUiHost {
                 if (keyboardLoaded() && usbInstance.isOpen()) return transport;
                 const [device] = await listPermittedDevices();
                 if (device && !usbInstance.hasDevice(device)) await ref.current.kb.connectDevice(device).catch(() => false);
-                await new Promise((r) => setTimeout(r, 500));
+                await realClock.sleep(500);
             }
             return null;
         },
@@ -144,7 +144,7 @@ function createAppHost(ref: { current: AppState }): FirmwareUiHost {
         async restoreLayout(svil) {
             // Wait for the reconnect's load, so the restore writes onto what the board holds now.
             const deadline = Date.now() + 20_000;
-            while (!keyboardLoaded() && Date.now() < deadline) await new Promise((r) => setTimeout(r, 250));
+            while (!keyboardLoaded() && Date.now() < deadline) await realClock.sleep(250);
             const { kb: k, changes: ch } = ref.current;
             const current = k.keyboard;
             if (!current) throw new Error("The keyboard didn't finish loading.");
@@ -153,7 +153,7 @@ function createAppHost(ref: { current: AppState }): FirmwareUiHost {
         async keymapBlank() {
             // After the wipe's reconnect: wait for the load, then every key on every layer is KC_NO.
             const deadline = Date.now() + 20_000;
-            while (!keyboardLoaded() && Date.now() < deadline) await new Promise((r) => setTimeout(r, 250));
+            while (!keyboardLoaded() && Date.now() < deadline) await realClock.sleep(250);
             const keymap = ref.current.kb.keyboard?.keymap;
             return !!keymap?.length && keymap.every((layer) => layer.every((code) => code === 0));
         },

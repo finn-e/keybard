@@ -2,6 +2,7 @@
 // webhid-transport.ts implements it over usb.service; fake-board.ts implements it in memory.
 
 import type { UpdaterReply } from "./protocol";
+import { updaterSleep } from "./timers";
 
 /** The board refused our client ID at the wrapper (it expired, or is unknown). */
 export class ClientRejectedError extends Error {
@@ -50,9 +51,10 @@ export interface Clock {
     sleep(ms: number): Promise<void>;
 }
 
+/** Wall-clock time; sleeps on the update's timers, which a background tab doesn't clamp. */
 export const realClock: Clock = {
     now: () => Date.now(),
-    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    sleep: (ms) => updaterSleep(ms),
 };
 
 /**
