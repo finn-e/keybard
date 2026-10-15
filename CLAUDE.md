@@ -54,7 +54,7 @@ Keybard (https://keybard.svalboard.com) is a React 19 + TypeScript web applicati
 ## Development Commands
 
 ```bash
-npm run dev            # Dev server at http://localhost:5173/keybard-ng/ (port per branch in vite.config.ts; main uses 5170)
+npm run dev            # Dev server at http://localhost:5173/ (port per branch in vite.config.ts; main uses 5170)
 npm run build          # Production build (TypeScript check + Vite build)
 npm test               # Run all tests
 npm run test:watch     # Watch mode for development
@@ -381,7 +381,7 @@ The keyboard definition JSON includes a `menus` array that defines dynamic, keyb
 
 ## Browser-Based Test Plan (Claude-in-Chrome)
 
-This test plan can be executed autonomously via Claude-in-Chrome browser automation against `http://localhost:5173/keybard-ng/`. Tests are organized by feature area and include expected results.
+This test plan can be executed autonomously via Claude-in-Chrome browser automation against `http://localhost:5173/`. Tests are organized by feature area and include expected results.
 
 ### Prerequisites
 - Dev server running: `npm run dev`
@@ -494,7 +494,7 @@ To run these tests via Claude-in-Chrome:
 
 ```
 1. Get tab context: mcp__claude-in-chrome__tabs_context_mcp
-2. Navigate if needed: mcp__claude-in-chrome__navigate (url: "http://localhost:5173/keybard-ng/")
+2. Navigate if needed: mcp__claude-in-chrome__navigate (url: "http://localhost:5173/")
 3. Find elements: mcp__claude-in-chrome__find (query: "element description")
 4. Click elements: mcp__claude-in-chrome__computer (action: "left_click", ref: "ref_X")
 5. Take screenshots: mcp__claude-in-chrome__computer (action: "screenshot")

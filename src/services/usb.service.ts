@@ -1,6 +1,7 @@
 // USB HID communication layer for Svil protocol
 // Supports client ID wrapper (0xDD) for multi-client concurrent access
 import type { USBSendOptions } from "../types/keyboard.types";
+import { updaterTimers } from "./updater/timers";
 import { BE16, LE16 } from "./utils";
 import {
   DEFAULT_REPORT_LENGTH,
@@ -343,24 +344,27 @@ export class SvilUSB {
     const message = this.buildWrappedMessage(VIA_PREFIX, payload);
     const operation = this.queue.then(() => new Promise<Uint8Array>((resolve, reject) => {
       if (!this.device) { reject(new Error("USB device not connected")); return; }
-      const timeoutId = setTimeout(() => reject(new Error("USB Command Timeout")), timeoutMs);
+      // The reply timeout runs on the update's timers: a background tab clamps the page's
+      // timers (to a minute, after a while), and a late timeout holds the queue that long.
+      const timers = updaterTimers();
+      const timeoutId = timers.setTimeout(() => reject(new Error("USB Command Timeout")), timeoutMs);
       this.listener = (data: ArrayBuffer) => {
         const u8 = new Uint8Array(data);
         if (u8[0] !== WRAPPER_PREFIX) return;
         const respClientId = (u8[1] | (u8[2] << 8) | (u8[3] << 16) | (u8[4] << 24)) >>> 0;
         if (respClientId !== clientId >>> 0) return;
         if (u8[5] === CLIENT_ERROR_PROTOCOL) {
-          clearTimeout(timeoutId);
+          timers.clearTimeout(timeoutId);
           reject(new ClientIdRejectedError(u8[6]));
           return;
         }
         if (u8[5] !== VIA_PREFIX) return;
         for (let i = 0; i < echo; i++) if (u8[6 + i] !== payload[i]) return;
-        clearTimeout(timeoutId);
+        timers.clearTimeout(timeoutId);
         resolve(new Uint8Array(u8));
       };
       this.device.sendReport(0, message as BufferSource).catch((err) => {
-        clearTimeout(timeoutId);
+        timers.clearTimeout(timeoutId);
         reject(err);
       });
     }));

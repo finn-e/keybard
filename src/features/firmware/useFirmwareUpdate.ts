@@ -64,19 +64,30 @@ export function useFirmwareUpdate(host: FirmwareUiHost | null, o: UseFirmwareUpd
     const [ui, setUi] = useState<UpdateUi>({ kind: "idle" });
     const storeRef = useRef<FlowStore>(o.store ?? (tabStore ??= sessionFlowStore()));
     const flowRef = useRef<UpdateFlow | null>(null);
-    const unsubscribeRef = useRef<(() => void) | null>(null);
+    // The flow this dialog shows. Its subscription lives in an effect keyed on it, so every
+    // mount subscribes again: under StrictMode an effect's cleanup runs once more on mount,
+    // and a subscription taken outside the effect was dropped then, leaving the dialog on
+    // whatever step it showed when the editor remounted.
+    const [flow, setFlow] = useState<UpdateFlow | null>(null);
     const hostRef = useRef(host);
     hostRef.current = host;
     const lastSource = useRef<{ source: InstallSource; onlyHand?: Hand } | null>(lastSources.get(storeRef.current) ?? null);
     const releases = o.releases ?? CARRIED_RELEASES;
 
-    const attach = useCallback((flow: UpdateFlow) => {
-        unsubscribeRef.current?.();
-        flowRef.current = flow;
-        liveFlows.set(storeRef.current, flow);
-        setUi({ kind: "flow", state: flow.state });
-        unsubscribeRef.current = flow.subscribe((state) => setUi({ kind: "flow", state }));
+    const attach = useCallback((next: UpdateFlow) => {
+        flowRef.current = next;
+        liveFlows.set(storeRef.current, next);
+        setFlow(next);
+        setUi({ kind: "flow", state: next.state });
     }, []);
+
+    useEffect(() => {
+        if (!flow) return;
+        const show = (state: FlowState) => { if (flowRef.current === flow) setUi({ kind: "flow", state }); };
+        // Whatever it did between attach and now (a remount can take a while).
+        show(flow.state);
+        return flow.subscribe(show);
+    }, [flow]);
 
     const runFlow = useCallback((flow: UpdateFlow) => {
         attach(flow);
@@ -84,11 +95,10 @@ export function useFirmwareUpdate(host: FirmwareUiHost | null, o: UseFirmwareUpd
     }, [attach]);
 
     const forget = useCallback(() => {
-        unsubscribeRef.current?.();
-        unsubscribeRef.current = null;
         flowRef.current?.dismiss();
         if (flowRef.current && liveFlows.get(storeRef.current) === flowRef.current) liveFlows.delete(storeRef.current);
         flowRef.current = null;
+        setFlow(null);
     }, []);
 
     // Remounted mid-update: show the flow that is still running. After a reload: pick the
@@ -106,8 +116,6 @@ export function useFirmwareUpdate(host: FirmwareUiHost | null, o: UseFirmwareUpd
         }).catch((error) => console.warn("[firmware] couldn't resume the update", error));
         return () => { cancelled = true; };
     }, [host, attach, runFlow]);
-
-    useEffect(() => () => { unsubscribeRef.current?.(); unsubscribeRef.current = null; }, []);
 
     const openSheet = useCallback(async (source: InstallSource, onlyHand?: Hand) => {
         const h = hostRef.current;
@@ -176,5 +184,5 @@ export function useFirmwareUpdate(host: FirmwareUiHost | null, o: UseFirmwareUpd
         void openSheet(last.source, stale);
     }, [ui, openSheet, forget]);
 
-    return { ui, openSheet, setAfterwards, start, close, retry, finish, flow: flowRef.current };
+    return { ui, openSheet, setAfterwards, start, close, retry, finish, flow };
 }
