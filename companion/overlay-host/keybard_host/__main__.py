@@ -13,7 +13,12 @@ import time
 # so keys could stay lit or patches go blank until the next change. Software rendering hands
 # the window whole frames, and the overlay is small enough that it costs nothing noticeable.
 # Must be set before Qt WebEngine starts.
-WINDOWS_CHROMIUM_FLAGS = ('--disable-gpu', '--disable-gpu-compositing')
+# WebGL then runs on SwiftShader (software GL through ANGLE), so the overlay can draw the
+# pointing devices with the same renderer as Keybard; without these three, WebGL has no
+# context at all under --disable-gpu and only the flat stand-in ball is drawn. The overlay
+# shows only the Host's own Keybard build, which is what makes the "unsafe" flag acceptable.
+WINDOWS_CHROMIUM_FLAGS = ('--disable-gpu', '--disable-gpu-compositing',
+                          '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader')
 if sys.platform == 'win32':
     _flags = os.environ.get('QTWEBENGINE_CHROMIUM_FLAGS', '').split()
     os.environ['QTWEBENGINE_CHROMIUM_FLAGS'] = ' '.join(_flags + [f for f in WINDOWS_CHROMIUM_FLAGS if f not in _flags])
