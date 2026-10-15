@@ -21,7 +21,35 @@ EFFECTS = {'Off': dict(effect='Off'), 'Flash': dict(effect='Quick flash', durati
 
 DEFAULTS = dict(layoutId='us', appearance=dict(PRESETS['Outline only']),
     effect='Short fade', duration=150, scale=100, hands='Both', highlightPressed=True, manualDefault=1,
-    capitalAlphas=False, adaptiveContrast=False)
+    capitalAlphas=False, adaptiveContrast=False,
+    # Pointing devices in the overlay: drawn devices off, the sniper and boost pills on,
+    # the multiplier beside the mouse cursor off.
+    showPointing=False, pointingPills=True, cursorMultiplier=False)
+
+# The balls Keybard can draw (Keybard's src/components/pointing-viz/webgl/materials.ts).
+BALLS = frozenset({'silver', 'red', 'black', 'pearl_blue', 'pearl_purple', 'pearl_white', 'pearl_black'})
+# Boards whose pointing look is kept; the oldest is dropped beyond this.
+REMEMBERED_POINTING_BOARDS = 16
+
+
+def validate_pointing_look(value):
+    """A board's pointing look from Keybard: uid plus optional left/right ball, gloss, sparkle.
+
+    Only how the overlay draws the devices; nothing here reaches the board."""
+    if not isinstance(value, dict) or set(value) - {'op', 'uid', 'left', 'right', 'gloss', 'sparkle'}:
+        raise ValueError('Unknown pointing look fields')
+    uid = value.get('uid')
+    if not isinstance(uid, str) or not re.fullmatch(r'[0-9]{1,20}', uid): raise ValueError('Invalid board uid')
+    look = {}
+    for side in ('left', 'right'):
+        if side in value:
+            if value[side] not in BALLS: raise ValueError('Unknown ball')
+            look[side] = value[side]
+    for key in ('gloss', 'sparkle'):
+        if key in value:
+            if type(value[key]) not in (int, float) or not 0 <= value[key] <= 1: raise ValueError('Invalid pointing look value')
+            look[key] = float(value[key])
+    return uid, look
 
 
 def _highlight_held_keys(config):
@@ -58,7 +86,7 @@ def validate_config(value):
         elif key == 'layoutId':
             if not isinstance(val, str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,32}', val): raise ValueError('Invalid keyboard language')
             result[key] = val
-        elif key in ('highlightPressed', 'capitalAlphas', 'adaptiveContrast'):
+        elif key in ('highlightPressed', 'capitalAlphas', 'adaptiveContrast', 'showPointing', 'pointingPills', 'cursorMultiplier'):
             if type(val) is not bool: raise ValueError('Invalid on/off preference')
             result[key] = val
         elif val not in dict(effect=('Off', 'Quick flash', 'Short fade'), hands=('Both', 'Left', 'Right'))[key]:
@@ -99,6 +127,7 @@ class HostState:
         self.practice_at = 0
         self.visible = True
         self.session = secrets.token_hex(12)
+        self.pointing_looks = {}
         try:
             saved = json.loads(self.path.read_text())
         except (OSError, ValueError):
@@ -107,6 +136,13 @@ class HostState:
         try: self.config = validate_config(saved.get('config', {}))
         except (ValueError, TypeError, KeyError): pass
         self.remembered = remembered_board(saved.get('remembered'))
+        looks = saved.get('pointingLooks')
+        if isinstance(looks, dict):
+            for uid, look in list(looks.items())[-REMEMBERED_POINTING_BOARDS:]:
+                try:
+                    key, checked = validate_pointing_look(dict(look, uid=uid))
+                    self.pointing_looks[key] = checked
+                except (ValueError, TypeError): pass
         version = saved.get('version', 0)
         if 'config' in saved and type(version) is int and 0 <= version < PREFERENCES_VERSION:
             for migrate in PREFERENCES_MIGRATIONS[version:]: migrate(self.config)
@@ -116,7 +152,7 @@ class HostState:
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix('.tmp')
-        temporary.write_text(json.dumps(dict(version=PREFERENCES_VERSION, config=self.config, remembered=self.remembered)))
+        temporary.write_text(json.dumps(dict(version=PREFERENCES_VERSION, config=self.config, remembered=self.remembered, pointingLooks=self.pointing_looks)))
         temporary.replace(self.path)
 
     def configure(self, config, revision):
@@ -132,12 +168,27 @@ class HostState:
             self.revision += 1
             return self.revision
 
+    def set_pointing_look(self, value):
+        """Keep a board's pointing look (validated); saved with the preferences."""
+        uid, look = validate_pointing_look(value)
+        with self.lock:
+            self.pointing_looks.pop(uid, None)
+            self.pointing_looks[uid] = look
+            while len(self.pointing_looks) > REMEMBERED_POINTING_BOARDS:
+                self.pointing_looks.pop(next(iter(self.pointing_looks)))
+            try: self.save()
+            except OSError: pass  # still used this session
+
+    def pointing_look(self):
+        board = self.board
+        return dict(self.pointing_looks.get(board.get('uid'), {})) if board else {}
+
     def snapshot(self, known_layout=None):
         with self.lock:
             return copy.deepcopy(dict(apiVersion=1, config=self.config, revision=self.revision,
                 layoutRevision=self.layout_revision, board=self.board if known_layout != self.layout_revision else None,
                 status=self.status, devices=self.devices, selectedDevice=self.selected_device, active=self.active, default=self.default, valid=self.valid,
-                modifiers=self.modifiers, practiceHidden=self.practice_hidden, practiceTarget=self.practice_target, pressed=self.pressed, matrixAvailable=self.matrix_available, visible=self.visible, session=self.session))
+                modifiers=self.modifiers, pointingLook=self.pointing_look(), practiceHidden=self.practice_hidden, practiceTarget=self.practice_target, pressed=self.pressed, matrixAvailable=self.matrix_available, visible=self.visible, session=self.session))
 
 
 def serialize_profile(profile):
@@ -146,4 +197,5 @@ def serialize_profile(profile):
         keymap=[[code for row in layer for code in row] for layer in profile.layers],
         keylayout={str(k.row * 6 + k.col): dict(row=k.row, col=k.col, x=k.x, y=k.y, w=1, h=1) for k in profile.keys},
         cosmetic=dict(layer={str(i): profile.layer_name(i) for i in range(len(profile.layers))}),
-        trainerLabels={str(code): profile.label(code) for layer in profile.layers for row in layer for code in row})
+        trainerLabels={str(code): profile.label(code) for layer in profile.layers for row in layer for code in row},
+        pointing=dict(getattr(profile, 'pointing', ()) or ()))

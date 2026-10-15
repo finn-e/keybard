@@ -7,6 +7,7 @@ import { useKeyboard } from "@/contexts/KeyboardContext";
 import { isWidgetInstance } from "@/services/fragment-composer.service";
 import { keyboardService } from "@/services/keyboard.service";
 import type { FragmentInstance, KeyboardInfo } from "@/types/keyboard.types";
+import { PointingBallPicker } from "@/components/pointing-viz/PointingBallPicker";
 
 /**
  * Safely get a value from something that might be a Map or a plain object
@@ -362,6 +363,7 @@ const FragmentsPanel: React.FC = () => {
                             );
                         })}
                         {renderPointingRows("left")}
+                        <PointingBallPicker side="left" kbid={keyboard.kbid} />
                     </div>
                 )}
                 {rightInstances.length > 0 && (
@@ -431,6 +433,7 @@ const FragmentsPanel: React.FC = () => {
                             );
                         })}
                         {renderPointingRows("right")}
+                        <PointingBallPicker side="right" kbid={keyboard.kbid} />
                     </div>
                 )}
                 {otherInstances.map(({ idx, instance }) => {

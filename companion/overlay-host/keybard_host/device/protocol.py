@@ -21,10 +21,14 @@ CHUNK_HEADER = WRAPPER_OVERHEAD + 4
 DEFAULT_LAYER_STATE_FLAG = 1 << 6
 # Second feature byte: 0x16 appends the board's modifiers and Caps Word / Caps Lock.
 MODIFIER_STATE_FLAG2 = 1 << 2
+# Second feature byte, bit 3: the board answers POINTING_MOTION (0x2D), a read that
+# returns and clears each hand's pointing motion since the last read.
+POINTING_MOTION_FLAG2 = 1 << 3
+POINTING_MOTION = 0x2D
 SHIFT_BITS = 0x22  # left and right Shift in the HID modifier byte
 # Protocol -> command -> exact request argument length. No setter is expressible.
 READ_COMMANDS = {
-    0xDF: {0x00: 0, 0x01: 2, 0x0D: 0, 0x0E: 3, 0x16: 0, 0x18: 0, 0x19: 0, 0x1B: 3},
+    0xDF: {0x00: 0, 0x01: 2, 0x0D: 0, 0x0E: 3, 0x16: 0, 0x18: 0, 0x19: 0, 0x1B: 3, 0x2D: 0},
     0xFE: {0x02: 2, 0x11: 0, 0x12: 3},
 }
 
@@ -36,6 +40,53 @@ class LayerSnapshot:
     # The board's own Shift and Caps Lock, or None on firmware that doesn't report them.
     # Caps Word counts as Caps Lock: it capitalizes letters and leaves symbols alone.
     modifiers: dict | None = None
+
+
+def parse_pointing_motion(data):
+    """A POINTING_MOTION reply's payload (after the command echo) as a dict, or None.
+
+    format(1) modes(1) ms(1) left(10) right(10) axis(1); each hand: flags(1) dx(2) dy(2)
+    h(1) v(1) buttons(1) touch_x(1) touch_y(1). Counts are raw sensor counts.
+    """
+    data = bytes(data or b"")
+    if len(data) < 24 or data[0] != 1:
+        return None
+
+    def hand(offset):
+        flags = data[offset]
+        return dict(valid=bool(flags & 1), scrolling=bool(flags & 2), touchValid=bool(flags & 0x10),
+                    fingers=(flags >> 5) & 3,
+                    dx=int.from_bytes(data[offset + 1:offset + 3], "little", signed=True),
+                    dy=int.from_bytes(data[offset + 3:offset + 5], "little", signed=True),
+                    touchX=data[offset + 8], touchY=data[offset + 9])
+    modes = data[1]
+    return dict(sniper=bool(modes & 1), boost=bool(modes & 2), elapsedMs=data[2],
+                left=hand(3), right=hand(13))
+
+
+def pointing_kinds(definition, hardware):
+    """Each hand's pointing module ('trackball', 'touchpad', 'trackpoint') from the
+    definition's widget fragments and the 0x18 hardware bytes; None where not known."""
+    out = dict(left=None, right=None)
+    fragments = definition.get("fragments") if isinstance(definition, dict) else None
+    instances = ((definition.get("composition") or {}).get("instances") if isinstance(definition, dict) else None)
+    if not isinstance(fragments, dict) or not isinstance(instances, list):
+        return out
+    for index, instance in enumerate(instances):
+        if not isinstance(instance, dict) or index >= len(hardware) or hardware[index] == 255:
+            continue
+        side = "left" if str(instance.get("id", "")).startswith("left_") else "right" if str(instance.get("id", "")).startswith("right_") else None
+        if side is None:
+            continue
+        options = [instance] if "fragment" in instance else instance.get("fragment_options") or []
+        for option in options:
+            fragment = fragments.get(option.get("fragment")) if isinstance(option, dict) else None
+            widget = fragment.get("widget") if isinstance(fragment, dict) else None
+            if isinstance(widget, dict) and fragment.get("id") == hardware[index]:
+                module = widget.get("module")
+                if module in ("trackball", "touchpad", "trackpoint"):
+                    out[side] = module
+    return out
 
 
 class ProtocolError(Exception):
@@ -271,6 +322,12 @@ class SvalReader:
             modifiers = dict(shift=bool(mods & SHIFT_BITS), capsLock=bool(status & 2) != bool(status & 1))
         return LayerSnapshot(int.from_bytes(data[:4], "little"), default, modifiers)
 
+    def pointing_motion(self):
+        """Each hand's motion since the last read, or None on firmware without 0x2D (never sent there)."""
+        if not self.feature_flags2 & POINTING_MOTION_FLAG2:
+            return None
+        return parse_pointing_motion(self._read(POINTING_MOTION))
+
     def pressed_keys(self):
         # VIA GET_KEYBOARD_VALUE / SWITCH_MATRIX_STATE, row offset zero.
         # Svalboard's 10 rows × 6 columns fit in ten bytes after the two echoes.
@@ -415,7 +472,8 @@ class SvalReader:
                 if (keyed(hardware) != keyed(self.fragment_state(0x18))
                         or keyed(selections) != keyed(self.fragment_state(0x19))):
                     raise ProtocolError("Cluster selection changed during loading; reload")
+            pointing = tuple(pointing_kinds(definition, hardware).items()) if has_fragments else ()
             return replace(profile, keys=keys, layer_names=tuple(layer_names.items()),
-                           code_labels=tuple(code_labels.items()), from_board=True)
+                           code_labels=tuple(code_labels.items()), from_board=True, pointing=pointing)
         finally:
             self.load_deadline = None

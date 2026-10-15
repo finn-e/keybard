@@ -879,6 +879,7 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
                             showDropTargetHighlight={isLayoutDropTarget}
                             isLayerDragActive={isLayerDragActive}
                             showKeyInspector={isPrimary}
+                            showPointing={isPrimary}
                         />
                     </div>
                 </div>

@@ -36,6 +36,8 @@ import { KeyInspector } from "@/components/combo/KeyInspector";
 import { useFoldMotion } from "@/hooks/useFoldMotion";
 import type { KeyComboProps } from "./Key";
 import { dark3DLabelColor, needsDarkIndicatorOutline, screenedBackdropHex } from "./layer3DColors";
+import { PointingLayer } from "./pointing-viz/PointingLayer";
+import { placedKeyRects } from "@/utils/pointing-geometry";
 
 const NO_MEMBERSHIPS: ComboMembership[] = [];
 
@@ -63,7 +65,8 @@ interface KeyboardProps {
     isLayerDragActive?: boolean;
     /** Render the key inspector under this view (the primary view only, so it shows once). */
     showKeyInspector?: boolean;
-    /** Draw each hand's pointing slot (live module animation). Only the primary layer view does, so stacked and 3D views don't each run their own animations. */
+    /** Draw each hand's pointing device (live). Only the primary layer view does, so stacked and 3D views don't each run their own. */
+    showPointing?: boolean;
 }
 
 /**
@@ -84,6 +87,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
     showDropTargetHighlight = false,
     isLayerDragActive = false,
     showKeyInspector = false,
+    showPointing = false,
 }) => {
     const {
         selectKeyboardKey,
@@ -801,6 +805,12 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                             transition: THUMB_BACKDROP_TRANSITION,
                         }}
                     />
+                )}
+                {/* Pointing devices at true size beside the thumbs (2D only; they follow the squeeze). */}
+                {showPointing && !visual3DActive && !isThumb3DOffsetActive && (
+                    <PointingLayer keyboard={keyboard} unitPx={currentUnitSize} keys={placedKeyRects(layoutValues, {
+                        getYPos, squeeze: fingerClusterSqueeze, midline: layoutMidline, offsetX: layoutOffsets.offsetX, offsetY: layoutOffsets.offsetY,
+                    })} />
                 )}
                 {/* Keys */}
                 {Object.entries(keyboardLayout).map(([matrixPos, layout]) => {

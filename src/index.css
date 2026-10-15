@@ -82,6 +82,13 @@
     --kb-active: #000000;
     --kb-active-fg: #ffffff;
     --kb-popover: #EEEEEE;
+    /* Pointing devices (new; beside the brand tokens): the sniper and boost pills in the
+       layout follow the active chip colors; the Keybard Host overlay's pills are light on
+       any desktop, with a shadow. */
+    --kb-pointing-pill-bg: var(--kb-active);
+    --kb-pointing-pill-fg: var(--kb-active-fg);
+    --kb-pointing-host-pill-bg: rgba(255, 255, 255, 0.94);
+    --kb-pointing-host-pill-fg: #111214;
     /* Underslung combo editor card (new; sits beside the brand tokens). */
     --kb-combo-editor-border: #d6d7d8;
     --kb-combo-editor-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);

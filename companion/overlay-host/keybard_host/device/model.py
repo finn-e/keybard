@@ -22,6 +22,8 @@ class Profile:
     layer_names: tuple = ()
     code_labels: tuple = ()
     from_board: bool = False
+    # Each hand's pointing module, (('left', 'trackball'), ('right', None)), when the board reports it.
+    pointing: tuple = ()
 
     def label(self, code):
         return dict(self.code_labels).get(code, legend(code))

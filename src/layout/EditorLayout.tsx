@@ -44,6 +44,7 @@ import { MatrixTester } from "@/components/MatrixTester";
 import { EditorControls } from "./EditorControls";
 import BindingSpotlight, { useBindingSpotlight } from "./BindingSpotlight";
 import DeepLinkEditor from "./DeepLinkEditor";
+import PointingDeepLink from "./PointingDeepLink";
 import PickerTray from "./PickerTray";
 import { PickerTrayProvider, type PickerTrayValue } from "@/contexts/PickerTrayContext";
 import { CANVAS_CONTROLS_INSET_PX, effectivePickerShape, isLShape, layoutCanvasNeed, layoutFitScale, openTraySizing, pickerShapeFromSearch, standardKeysInPlay, TRAY_MOTION_MS, trayReserve, trayState } from "@/lib/pickerShape";
@@ -1346,6 +1347,7 @@ const EditorLayoutInner = () => {
             <AppSidebar />
             <BindingSpotlight />
             <DeepLinkEditor />
+            <PointingDeepLink />
             <div className="contents">
             {/* Keep the panel mounted when its placement changes. */}
             <PickerTrayProvider value={trayValue}>

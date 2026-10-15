@@ -7,6 +7,11 @@ import { DEFAULT_THEME_PREF, THEME_SETTING_NAME } from "@/lib/theme";
 import { COMBO_EDITOR_PLACEMENT_SETTING, DEFAULT_COMBO_EDITOR_PLACEMENT } from "@/lib/comboEditorPlacement";
 import { DEFAULT_SHOW_ALT_REPEAT, SHOW_ALT_REPEAT_SETTING } from "@/lib/altRepeatVisibility";
 import { COMBO_COLORBLIND_SETTING, COMBO_INDICATOR_SETTING, DEFAULT_COMBO_INDICATOR_MODE } from "@/lib/comboIndicators";
+import { GLOSS_DEFAULT, SPARKLE_DEFAULT } from "@/components/pointing-viz/webgl/materials";
+
+/** Pointing device look: app preferences (this browser), not board settings. */
+export const POINTING_GLOSS_SETTING = "pointing-ball-gloss";
+export const POINTING_SPARKLE_SETTING = "pointing-sparkle";
 
 // Settings definitions - single source of truth
 export const SETTINGS: SettingDefinition[] = [
@@ -20,6 +25,26 @@ export const SETTINGS: SettingDefinition[] = [
             { label: "Dark", value: "dark" },
         ],
         defaultValue: DEFAULT_THEME_PREF,
+    },
+    {
+        name: POINTING_GLOSS_SETTING,
+        label: "Ball Gloss",
+        description: "How glossy the clear coat on trackball balls looks.",
+        type: "slider",
+        defaultValue: GLOSS_DEFAULT,
+        min: 0,
+        max: 1,
+        step: 0.01,
+    },
+    {
+        name: POINTING_SPARKLE_SETTING,
+        label: "Sparkle Density",
+        description: "How much sparkle silver and black trackball balls show.",
+        type: "slider",
+        defaultValue: SPARKLE_DEFAULT,
+        min: 0,
+        max: 1,
+        step: 0.01,
     },
     {
         name: "live-updating",
@@ -225,7 +250,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         name: "general",
         label: "General",
         icon: SettingsIcon,
-        settings: [THEME_SETTING_NAME, "typing-binds-key", COMBO_INDICATOR_SETTING, COMBO_COLORBLIND_SETTING, COMBO_EDITOR_PLACEMENT_SETTING, SHOW_ALT_REPEAT_SETTING, "serial-assignment", "international-keyboards", "qmk-settings", "print"],
+        settings: [THEME_SETTING_NAME, POINTING_GLOSS_SETTING, POINTING_SPARKLE_SETTING, "typing-binds-key", COMBO_INDICATOR_SETTING, COMBO_COLORBLIND_SETTING, COMBO_EDITOR_PLACEMENT_SETTING, SHOW_ALT_REPEAT_SETTING, "serial-assignment", "international-keyboards", "qmk-settings", "print"],
     },
     {
         name: "fragments",

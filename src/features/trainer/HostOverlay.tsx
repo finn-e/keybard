@@ -5,6 +5,7 @@ import { surfaceKeys } from './useSurfaceKeys';
 import type { Appearance } from './core';
 import { adaptKeys, keyPad, type Backdrop } from './adaptiveContrast';
 import './trainer.css';
+import { PointingOverlayLayer } from './PointingOverlayLayer';
 export default function HostOverlay() {
     const { state } = useHost();
     const [changed, setChanged] = useState<Set<number>>(new Set());
@@ -65,5 +66,6 @@ export default function HostOverlay() {
     return <div className="trainer-native-surface"><OverlaySurface keys={keys} appearance={state.config.appearance}
         effect={state.config.effect} duration={state.config.duration} changed={changed}
         held={new Set(state.pressed)} hidden={new Set(state.practiceHidden)} target={state.practiceTarget ?? undefined}
-        capitals={state.config.capitalAlphas === true} keyAppearance={keyAppearance} /></div>;
+        capitals={state.config.capitalAlphas === true} keyAppearance={keyAppearance} />
+        <PointingOverlayLayer keys={keys} keymap={state.board?.keymap} config={state.config} pointing={(state.board as { pointing?: { left?: string; right?: string } } | null)?.pointing} look={(state as { pointingLook?: unknown }).pointingLook} /></div>;
 }
