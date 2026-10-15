@@ -12,7 +12,7 @@ vi.mock('@/components/ui/sidebar', () => ({ useSidebar: () => ({ state: 'collaps
 vi.mock('@/contexts/PanelsContext', () => ({ usePanels: () => state }));
 vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ keyboard: null }) }));
 vi.mock('../../src/layout/SecondarySidebar/components/BindingEditor/BindingEditorContainer', () => ({
-    default: ({ shouldClose }: { shouldClose?: boolean }) => <p data-testid="editor" data-should-close={String(!!shouldClose)}>Editor</p>,
+    default: ({ shouldClose, bar }: { shouldClose?: boolean; bar?: boolean }) => <p data-testid="editor" data-bar={String(!!bar)} data-should-close={String(!!shouldClose)}>Editor</p>,
 }));
 vi.mock('../../src/layout/SecondarySidebar/Panels/AltRepeatPanel', () => ({default: () => <p>AltRepeatPanel</p>}));
 vi.mock('../../src/layout/SecondarySidebar/Panels/BasicKeyboards', () => ({default: () => <button type="button">KC_A</button>}));
@@ -81,17 +81,23 @@ describe('binding editor in the side panel', () => {
         expect(state.setItemToEdit).not.toHaveBeenCalled();
     });
 
-    it('closes from the editor X and the back arrow', () => {
-        state.activePanel = 'tapdances';
-        const view = render(ui());
-        fireEvent.click(within(workspaces(view.container)[0]).getByRole('button', { name: 'Close binding editor' }));
-        expect(screen.getByTestId('editor')).toHaveAttribute('data-should-close', 'true');
-        cleanup();
+    it.each(['combos', 'tapdances', 'macros', 'overrides', 'altrepeat', 'leaders'])('shows the %s editor as the compact bar, with no X: the back arrow closes it', editor => {
+        state.activePanel = editor;
         render(ui());
+        const ws = document.querySelector('.binding-workspace') as HTMLElement;
+        expect(within(ws).getByTestId('editor')).toHaveAttribute('data-bar', 'true');
+        expect(within(ws).queryByRole('button', { name: 'Close binding editor' })).toBeNull();
         const back = screen.getAllByRole('button', { name: 'Go back' }).find(b => !b.closest('[hidden]'))!;
         expect(back).toHaveAttribute('data-binding-editor-back');
         fireEvent.click(back);
         expect(screen.getByTestId('editor')).toHaveAttribute('data-should-close', 'true');
+    });
+
+    it('keeps the close button in the other placements', () => {
+        state.activePanel = 'tapdances';
+        render(ui({ comboPlacement: 'half' }));
+        expect(screen.getByRole('button', { name: 'Close binding editor' })).toBeInTheDocument();
+        expect(screen.getByTestId('editor')).toHaveAttribute('data-bar', 'false');
     });
 
     it('returns to the list scrolled where the edited item was', async () => {

@@ -26,6 +26,7 @@ import ComboEditor from "./ComboEditor";
 import MacroEditor from "./MacroEditor";
 import OverrideEditor from "./OverrideEditor";
 import TapdanceEditor from "./TapdanceEditor";
+import { AnimatedHeight, BarDelete, BarToggle } from "./EditorBar";
 import { useBindingNames } from "@/hooks/useBindingNames";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { getKeyContents } from "@/utils/keys";
@@ -44,6 +45,12 @@ interface Props {
     movable?: boolean;
     /** Compact card: title row above the keys instead of one long row. */
     stacked?: boolean;
+    /**
+     * The compact bar of the side-panel placement, for every kind: one row of
+     * labeled slots with on/off, any time field and delete at its end. No name,
+     * icon or close button; the panel header has the name and the way back.
+     */
+    bar?: boolean;
 }
 
 
@@ -58,7 +65,7 @@ const labels = {
 
 
 
-const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compact = false, onRequestClose, movable = false, stacked = false }) => {
+const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compact = false, onRequestClose, movable = false, stacked = false, bar = false }) => {
     const { itemToEdit, handleCloseEditor, bindingTypeToEdit } = usePanels();
     const [isClosing, setIsClosing] = useState(false);
     const [yOffset, setYOffset] = useState(0);
@@ -478,6 +485,70 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compac
             }}
         />
     ) : null;
+
+    // On/off for the kinds that have it, saved straight away.
+    const enabledToggle = (() => {
+        if (!keyboard || itemToEdit === null) return null;
+        const save = async (updated: typeof keyboard, kind: "tapdance" | "leader" | "override" | "altrepeat" | "combo") => {
+            setKeyboard(updated);
+            await persistBinding(updated, kind, itemToEdit);
+        };
+        const flip = (options: number, bit: number, on: boolean) => on ? options | bit : options & ~bit;
+        switch (bindingTypeToEdit) {
+            case "tapdances":
+                if (!keyboard.tapdances?.[itemToEdit]) return null;
+                return <BarToggle label="Tap dance enabled" value={keyboard.tapdances[itemToEdit].enabled !== false} onToggle={on => {
+                    const u = structuredClone(keyboard); u.tapdances![itemToEdit].enabled = on; void save(u, "tapdance");
+                }} />;
+            case "leaders":
+                if (!keyboard.leaders?.[itemToEdit]) return null;
+                return <BarToggle label="Leader sequence enabled" value={(keyboard.leaders[itemToEdit].options & LeaderOptions.ENABLED) !== 0} onToggle={on => {
+                    const u = structuredClone(keyboard); const e = u.leaders![itemToEdit]; e.options = flip(e.options, LeaderOptions.ENABLED, on); void save(u, "leader");
+                }} />;
+            case "overrides":
+                if (!keyboard.key_overrides?.[itemToEdit]) return null;
+                return <BarToggle label="Override enabled" value={isOverrideEnabled(keyboard.key_overrides[itemToEdit])} onToggle={on => {
+                    const u = structuredClone(keyboard); const o = prepareOverrideForEdit(u.key_overrides![itemToEdit], u.layers); o.options = flip(o.options, KeyOverrideOptions.ENABLED, on); void save(u, "override");
+                }} />;
+            case "altrepeat":
+                if (!keyboard.alt_repeat_keys?.[itemToEdit]) return null;
+                return <BarToggle label="Alt-repeat enabled" value={(keyboard.alt_repeat_keys[itemToEdit].options & AltRepeatKeyOptions.ENABLED) !== 0} onToggle={on => {
+                    const u = structuredClone(keyboard); const e = u.alt_repeat_keys![itemToEdit]; e.options = flip(e.options, AltRepeatKeyOptions.ENABLED, on); void save(u, "altrepeat");
+                }} />;
+            case "combos":
+                if (!keyboard.combos?.[itemToEdit]) return null;
+                return <BarToggle label="Combo enabled" value={(keyboard.combos[itemToEdit].options & ComboOptions.ENABLED) !== 0} onToggle={on => {
+                    const u = structuredClone(keyboard); const e = u.combos![itemToEdit]; e.options = flip(e.options, ComboOptions.ENABLED, on); void save(u, "combo");
+                }} />;
+            default:
+                return null;
+        }
+    })();
+
+    if (bar) {
+        const barEnd = (
+            <>
+                {enabledToggle}
+                <BarDelete label={`Clear ${getEditorTitle()}`} enabled={hasContent} onClick={() => setIsConfirmOpen(true)} />
+            </>
+        );
+        return (
+            <div className="editor-bar w-full min-w-0" data-editor-bar={bindingTypeToEdit ?? ""}>
+                <AnimatedHeight>
+                    <div className="px-2.5 py-2">
+                        {bindingTypeToEdit === "tapdances" && <TapdanceEditor bar barEnd={barEnd} />}
+                        {bindingTypeToEdit === "combos" && <ComboEditor bar barEnd={barEnd} />}
+                        {bindingTypeToEdit === "overrides" && <OverrideEditor bar barEnd={barEnd} />}
+                        {bindingTypeToEdit === "macros" && <MacroEditor bar barEnd={barEnd} />}
+                        {bindingTypeToEdit === "altrepeat" && <AltRepeatEditor bar barEnd={barEnd} />}
+                        {bindingTypeToEdit === "leaders" && <LeaderEditor bar barEnd={barEnd} />}
+                        {nameError && <p role="alert" className="pt-1 text-sm text-red-700 dark:text-red-400">{nameError}</p>}
+                    </div>
+                </AnimatedHeight>
+                {confirmDialog}
+            </div>
+        );
+    }
 
     // Compact single-combo editor: title, enabled, keys, clear and close in
     // one row that wraps when narrow. Placement is owned by the sidebar.

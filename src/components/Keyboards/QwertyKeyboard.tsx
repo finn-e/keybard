@@ -10,6 +10,7 @@ import { KeyContent } from "@/types/keyboard.types";
 import { LAYOUTS, BUTTON_TO_KEYCODE_MAP, KEY_DISPLAY_OVERRIDES, LAYOUT_KEY_MAPS, US_SHIFT_ALIASES } from "@/components/Keyboards/layouts";
 import { useLayoutSettings } from "@/contexts/LayoutSettingsContext";
 import { applyModifiers, Modifier, ModifierSide, PLAIN_MODIFIER_KEYCODES } from "@/utils/modifierUtils";
+import { QWERTY_KEY_PX, TRAY_MIN_KEY_PX } from "@/lib/pickerShape";
 
 interface IProps {
     onKeyPress?: (button: string) => void;
@@ -96,7 +97,7 @@ const QwertyKeyboard: FunctionComponent<IProps> = ({ onKeyPress: onKeyPressCallb
     const naturalHeight = currentLayout.default.length * 30 + (currentLayout.default.length - 1) * 4;
     const scale = fit
         ? fit.scaleFor(availableWidth, fit.maxHeight, naturalWidth, naturalHeight)
-        : availableWidth > 0 ? Math.min(1, availableWidth / naturalWidth) : 1;
+        : availableWidth > 0 ? Math.max(TRAY_MIN_KEY_PX / QWERTY_KEY_PX, Math.min(1, availableWidth / naturalWidth)) : 1;
 
     const renderRow = (defaultRowStr: string, shiftRowStr: string) => {
         const defaultKeys = defaultRowStr.split(" ");
@@ -226,7 +227,8 @@ const QwertyKeyboard: FunctionComponent<IProps> = ({ onKeyPress: onKeyPressCallb
             )}
 
             <div ref={fitRef} className="w-full min-w-0 overflow-hidden" data-fitted-keyboard style={{ height: naturalHeight * scale }}>
-                <div className="flex flex-col gap-1 origin-top-left" style={{ width: naturalWidth, transform: `scale(${scale})`, marginLeft: fit ? Math.max(0, (availableWidth - naturalWidth * scale) / 2) : undefined }}>
+                {/* Zoom, not a transform: the keyboard's laid-out width is its scaled width, so it never makes its box scroll sideways. */}
+                <div className="flex flex-col gap-1" style={{ width: naturalWidth, zoom: scale, marginLeft: fit ? Math.max(0, (availableWidth - naturalWidth * scale) / 2) / scale : undefined }}>
                     {currentLayout.default.map((row, i) => (
                         <div key={i}>{renderRow(row, currentLayout.shift[i])}</div>
                     ))}

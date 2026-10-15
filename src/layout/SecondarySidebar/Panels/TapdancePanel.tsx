@@ -203,11 +203,12 @@ const TapdancePanel: React.FC<Props> = ({ isPicker = false }) => {
                 </DescriptionBlock>
                 {/* Header Row - Sticky */}
                 <div className="sticky top-0 z-20 bg-kb-surface pt-4 pb-4 -mt-4 flex flex-row items-end pl-12 pr-12 mb-2">
-                    <div className="flex-grow flex flex-row justify-between w-full max-w-[240px] ml-6">
-                        <span className="text-xs font-bold text-center w-[30px]">Tap</span>
-                        <span className="text-xs font-bold text-center w-[30px]">Hold</span>
-                        <span className="text-xs font-bold text-center w-[30px] whitespace-nowrap">Tap-Hold</span>
-                        <span className="text-xs font-bold text-center w-[30px] whitespace-nowrap">Double-Tap</span>
+                    {/* Four equal columns shared with the rows, wide enough for each label. */}
+                    <div className="flex-grow grid grid-cols-4 justify-items-center w-full max-w-[272px] ml-6">
+                        <span className="text-[11px] font-bold text-center whitespace-nowrap">Tap</span>
+                        <span className="text-[11px] font-bold text-center whitespace-nowrap">Hold</span>
+                        <span className="text-[11px] font-bold text-center whitespace-nowrap">Tap-Hold</span>
+                        <span className="text-[11px] font-bold text-center whitespace-nowrap">Double-Tap</span>
                     </div>
                 </div>
 
@@ -233,7 +234,7 @@ const TapdancePanel: React.FC<Props> = ({ isPicker = false }) => {
                     );
 
                     const rowChildren = hasAssignment ? (
-                        <div className="flex flex-row gap-4 w-full max-w-[240px] ml-6 justify-between">
+                        <div className="grid grid-cols-4 justify-items-center w-full max-w-[272px] ml-6">
                             {stateContents.map((content, idx) => {
                                 const slotName = idx === 0 ? "tap" : idx === 1 ? "hold" : idx === 2 ? "taphold" : "doubletap";
                                 return renderSmallKey(content, idx, i, slotName);

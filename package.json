@@ -7,6 +7,7 @@
         "dev": "vite --host",
         "dev:local": "vite --host --port 5174",
         "build": "tsc && vite build",
+        "check:side-panel": "node scripts/check-side-panel-overflow.cjs",
         "preview": "vite preview",
         "test": "vitest run",
         "test:watch": "vitest",

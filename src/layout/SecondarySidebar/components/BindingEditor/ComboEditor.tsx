@@ -1,4 +1,4 @@
-import { FC, useEffect } from "react";
+import { FC, ReactNode, useEffect } from "react";
 import { ArrowRightFromLine, Plus } from "lucide-react";
 
 import { useKeyBinding } from "@/contexts/KeyBindingContext";
@@ -9,14 +9,18 @@ import { DragItem } from "@/contexts/DragContext";
 import { useBindingChanges } from "@/hooks/useBindingChanges";
 
 import EditorKey from "./EditorKey";
+import { BAR_KEY_PX, BAR_KEY_SIZE, BAR_KEY_VARIANT, BarEnd, BarRow, BarSep, BarSlot } from "./EditorBar";
 import { ComboEntry } from "@/types/keyboard.types";
 
 interface ComboEditorProps {
     /** One compact row for the underslung placements (dock, anchored, float). */
     strip?: boolean;
+    /** The compact bar of the side-panel placement, with these controls at the row's end. */
+    bar?: boolean;
+    barEnd?: ReactNode;
 }
 
-const ComboEditor: FC<ComboEditorProps> = ({ strip = false }) => {
+const ComboEditor: FC<ComboEditorProps> = ({ strip = false, bar = false, barEnd }) => {
     const { keyboard, setKeyboard } = useKeyboard();
     const persistBinding = useBindingChanges();
     const { setPanelToGoBack, setAlternativeHeader, itemToEdit, initialEditorSlot } = usePanels();
@@ -24,8 +28,8 @@ const ComboEditor: FC<ComboEditorProps> = ({ strip = false }) => {
     const { layoutMode } = useLayoutSettings();
     const isHorizontal = layoutMode === "bottombar";
     const isCompact = strip || isHorizontal;
-    const keySize = isCompact ? "w-[45px] h-[45px]" : "w-[50px] h-[50px]";
-    const keyVariant = isCompact ? "medium" : "default";
+    const keySize = bar ? BAR_KEY_SIZE : isCompact ? "w-[45px] h-[45px]" : "w-[50px] h-[50px]";
+    const keyVariant = bar ? BAR_KEY_VARIANT : isCompact ? "medium" : "default";
 
     // Fix type assertion
     const currCombo = keyboard?.combos?.[itemToEdit!] as ComboEntry;
@@ -142,6 +146,8 @@ const ComboEditor: FC<ComboEditorProps> = ({ strip = false }) => {
                     trashSize={trashSize}
                     variant={keyVariant}
                     wrapperClassName={`relative ${keySize} group/key z-20`}
+                    trashCorner={bar}
+                    unitSize={bar ? BAR_KEY_PX : undefined}
                     // We don't use the built-in EditorKey label, we render it externally for consistent positioning in grid
                     label={undefined}
                     labelClassName={undefined}
@@ -154,6 +160,21 @@ const ComboEditor: FC<ComboEditorProps> = ({ strip = false }) => {
     };
 
     if (!currCombo) return <div className="p-5">Combo entry not found</div>;
+
+    // Bar: [k1] + [k2] + [k3] + [k4] -> output, labeled, controls at the end.
+    if (bar) {
+        return (
+            <BarRow label="Combo keys">
+                {[0, 1, 2, 3].map((slotIdx) => [
+                    slotIdx > 0 && <BarSep key={`sep${slotIdx}`}><Plus /></BarSep>,
+                    <BarSlot key={slotIdx} label={`Key ${slotIdx + 1}`}>{renderComboKey(currCombo.keys[slotIdx], slotIdx)}</BarSlot>,
+                ])}
+                <BarSep><ArrowRightFromLine /></BarSep>
+                <BarSlot label="Output">{renderComboKey(currCombo.output, 4)}</BarSlot>
+                <BarEnd>{barEnd}</BarEnd>
+            </BarRow>
+        );
+    }
 
     // Strip layout: one compact row, [k1] + [k2] + [k3] + [k4] -> output.
     // It wraps between keys when the space is narrow.

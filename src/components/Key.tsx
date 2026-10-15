@@ -284,6 +284,7 @@ export const Key = React.forwardRef<HTMLDivElement, KeyProps>((props, ref) => {
             <div
                 ref={ref}
                 className={styles.containerClasses}
+                data-keycap=""
                 style={styles.boxStyle}
                 onClick={handleClick}
                 onDoubleClick={handleDoubleClick}
@@ -312,6 +313,7 @@ export const Key = React.forwardRef<HTMLDivElement, KeyProps>((props, ref) => {
         <div
             ref={ref}
             className={styles.containerClasses}
+            data-keycap=""
             style={styles.boxStyle}
             onClick={handleClick}
             onDoubleClick={handleDoubleClick}

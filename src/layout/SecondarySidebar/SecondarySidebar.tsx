@@ -192,7 +192,6 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
     // only; the bottom bar keeps its own arrangement.
     const panelPlacement = !bottom && isPanelEditorPlacement(comboPlacement);
     const panelEditor = showPicker && panelPlacement;
-    const panelCombo = panelEditor && activePanel === "combos";
     const reducedMotion = usePrefersReducedMotion();
     const pinCue = React.useMemo(() => pinCueStyle(typeof window === "undefined" ? "" : window.location.search), []);
 
@@ -510,7 +509,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                     <AlternativeHeader onBack={() => setIsClosingEditor(true)} menus={keyboard?.menus} />
                 </div>
 
-                <div ref={railRef} className="absolute top-24 right-0 bottom-0 overflow-y-auto z-30">
+                <div ref={railRef} data-picker-rail="" className="absolute top-24 right-0 bottom-0 overflow-y-auto z-30">
                     <EditorSidePanel activeTab={pickerMode} onTabChange={setPickerMode} categories={pickerCategories} />
                 </div>
 
@@ -527,17 +526,8 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                     >
                         <EditorSnapshotProbe onLeave={takeEditorSnapshot} />
                         {pinCue === "notch" && <Pin aria-hidden="true" className="pin-cue-glyph" />}
-                        {!panelCombo && <div className="flex justify-end px-1 pt-1">
-                            <Button type="button" variant="ghost" size="icon" aria-label="Close binding editor"
-                                className="h-8 w-8 rounded-full" onClick={() => setIsClosingEditor(true)}><X className="h-4 w-4" /></Button>
-                        </div>}
-                        <BindingEditorContainer
-                            shouldClose={isClosingEditor}
-                            inline
-                            compact={panelCombo}
-                            stacked={panelCombo}
-                            onRequestClose={panelCombo ? () => setIsClosingEditor(true) : undefined}
-                        />
+                        {/* The compact bar: no close button here, the header's back arrow is the way out. */}
+                        <BindingEditorContainer shouldClose={isClosingEditor} inline bar />
                     </div>}
                     {/* Fills the pinned editor's rounded top corners with the panel's
                         background, so picker content scrolling beneath never shows there.

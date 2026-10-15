@@ -6,3 +6,6 @@ dist-paranoid
 .DS_Store
 coverage/
 docs/dev-sessions/
+
+# Screenshots from scripts/check-side-panel-overflow.cjs
+.side-panel-shots/
