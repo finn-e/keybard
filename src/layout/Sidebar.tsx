@@ -27,6 +27,7 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
 import { PARANOID } from "@/lib/paranoid";
+import { isBindingEditorOpen, pickerCategoryForRail, effectivePickerMode } from "@/lib/bindingSpotlight";
 
 // --- Constants ---
 const MENU_ITEM_GAP_PX = 42; // Matches Gap-4 (16px) + Button Height (26px)
@@ -176,7 +177,14 @@ const AppSidebar = () => {
         open,
         handleCloseDetails,
         setOpen,
+        itemToEdit,
+        pickerMode,
+        setPickerMode,
     } = usePanels();
+    // While a binding editor is open, the rail's picker categories switch the
+    // picker and nothing on the rail leaves the editor.
+    const editing = isBindingEditorOpen(activePanel, itemToEdit);
+    const shownPickerMode = editing ? effectivePickerMode(pickerMode ?? "keyboard", activePanel) : null;
 
     const { keyboard } = useKeyboard();
 
@@ -184,6 +192,11 @@ const AppSidebar = () => {
 
     const handleItemSelect = useCallback(
         (item: SidebarItem) => {
+            if (editing) {
+                const category = pickerCategoryForRail(item.url, activePanel);
+                if (category) setPickerMode(category);
+                return;
+            }
             // Labels can be expanded to choose a destination; return the narrow
             // viewport to its icon rail so the chosen panel remains usable.
             if (window.innerWidth < 900) setNavigationOpen(false);
@@ -211,7 +224,7 @@ const AppSidebar = () => {
                 setItemToEdit(null);
             }
         },
-        [setNavigationOpen, activePanel, open, handleCloseDetails, setActivePanel, openDetails, setPanelToGoBack, setAlternativeHeader, setItemToEdit, setOpen]
+        [editing, setPickerMode, setNavigationOpen, activePanel, open, handleCloseDetails, setActivePanel, openDetails, setPanelToGoBack, setAlternativeHeader, setItemToEdit, setOpen]
     );
 
 
@@ -236,12 +249,14 @@ const AppSidebar = () => {
             });
     }, [keyboard?.menus]);
 
-    const activeTopIndex = topSectionItems.findIndex((item) => item.url === activePanel);
-    const activeMiddleIndex = middleSectionItems.findIndex((item) => item.url === activePanel);
-    const activeFeatureIndex = featureSidebarItems.findIndex((item) => item.url === activePanel);
-    const activeLayoutIndex = layoutSidebarItems.findIndex((item) => item.url === activePanel);
-    const activeDynamicIndex = dynamicMenuItems.findIndex((item) => item.url === activePanel);
-    const activeFooterIndex = footerItems.findIndex((item) => item.url === activePanel);
+    // While editing, the rail marks the picker category in use.
+    const markedPanel = editing ? shownPickerMode : activePanel;
+    const activeTopIndex = topSectionItems.findIndex((item) => item.url === markedPanel);
+    const activeMiddleIndex = middleSectionItems.findIndex((item) => item.url === markedPanel);
+    const activeFeatureIndex = featureSidebarItems.findIndex((item) => item.url === markedPanel);
+    const activeLayoutIndex = layoutSidebarItems.findIndex((item) => item.url === markedPanel);
+    const activeDynamicIndex = dynamicMenuItems.findIndex((item) => item.url === markedPanel);
+    const activeFooterIndex = footerItems.findIndex((item) => item.url === markedPanel);
 
     let indicatorY = -1;
     if (activeTopIndex !== -1) {
@@ -325,9 +340,9 @@ const AppSidebar = () => {
                                 <SidebarNavItem
                                     key={item.url}
                                     item={item}
-                                    isActive={activePanel === item.url}
+                                    isActive={markedPanel === item.url}
                                     isPreviousPanel={panelToGoBack === item.url}
-                                    alternativeHeader={alternativeHeader}
+                                    alternativeHeader={alternativeHeader && !editing}
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
                                 />
@@ -338,9 +353,9 @@ const AppSidebar = () => {
                                 <SidebarNavItem
                                     key={item.url}
                                     item={item}
-                                    isActive={activePanel === item.url}
+                                    isActive={markedPanel === item.url}
                                     isPreviousPanel={panelToGoBack === item.url}
-                                    alternativeHeader={alternativeHeader}
+                                    alternativeHeader={alternativeHeader && !editing}
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
                                 />
@@ -354,9 +369,9 @@ const AppSidebar = () => {
                                 <SidebarNavItem
                                     key={item.url}
                                     item={item}
-                                    isActive={activePanel === item.url}
+                                    isActive={markedPanel === item.url}
                                     isPreviousPanel={panelToGoBack === item.url}
-                                    alternativeHeader={alternativeHeader}
+                                    alternativeHeader={alternativeHeader && !editing}
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
                                 />
@@ -368,9 +383,9 @@ const AppSidebar = () => {
                                 <SidebarNavItem
                                     key={item.url}
                                     item={item}
-                                    isActive={activePanel === item.url}
+                                    isActive={markedPanel === item.url}
                                     isPreviousPanel={panelToGoBack === item.url}
-                                    alternativeHeader={alternativeHeader}
+                                    alternativeHeader={alternativeHeader && !editing}
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
                                 />
@@ -382,9 +397,9 @@ const AppSidebar = () => {
                                 <SidebarNavItem
                                     key={item.url}
                                     item={item}
-                                    isActive={activePanel === item.url}
+                                    isActive={markedPanel === item.url}
                                     isPreviousPanel={panelToGoBack === item.url}
-                                    alternativeHeader={alternativeHeader}
+                                    alternativeHeader={alternativeHeader && !editing}
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
                                 />
@@ -400,7 +415,7 @@ const AppSidebar = () => {
                                 <SidebarNavItem
                                     key={item.url}
                                     item={item}
-                                    isActive={activePanel === item.url}
+                                    isActive={markedPanel === item.url}
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
                                 />

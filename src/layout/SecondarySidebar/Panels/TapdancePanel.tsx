@@ -13,7 +13,12 @@ import { getKeyContents } from "@/utils/keys";
 import { KeyContent } from "@/types/keyboard.types";
 import DescriptionBlock from "@/layout/SecondarySidebar/components/DescriptionBlock";
 
-const TapdancePanel: React.FC = () => {
+interface Props {
+    /** Shown as a binding editor's picker: a click puts TD(n) in the slot and never opens another editor. */
+    isPicker?: boolean;
+}
+
+const TapdancePanel: React.FC<Props> = ({ isPicker = false }) => {
     const { keyboard } = useKeyboard();
     const { assignKeycode } = useKeyBinding();
     const { selectedLayer } = useLayer();
@@ -82,7 +87,7 @@ const TapdancePanel: React.FC = () => {
                         !hasContent ? "bg-transparent border border-kb-gray-border" : "border-kb-key-border"
                     }
                     headerClassName={!hasContent ? "hidden" : "bg-kb-sidebar-dark"}
-                    onClick={() => handleEdit(tdIndex, slotName)}
+                    onClick={isPicker ? () => assignKeycode(`TD(${tdIndex})`) : () => handleEdit(tdIndex, slotName)}
                     disableTooltip={true}
                 />
             </div>
@@ -120,7 +125,7 @@ const TapdancePanel: React.FC = () => {
                         <div
                             key={i}
                             className="flex flex-col bg-gray-50 dark:bg-neutral-800/60 rounded-lg p-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors min-w-[100px]"
-                            onClick={() => handleEdit(i)}
+                            onClick={() => isPicker ? assignKeycode(tdKeycode) : handleEdit(i)}
                         >
                             {/* Header row with draggable TD key and label */}
                             <div className="flex flex-row items-center gap-2 mb-2">
@@ -162,7 +167,7 @@ const TapdancePanel: React.FC = () => {
                         </div>
                     );
                 })}
-                {emptyIndex >= 0 && (
+                {!isPicker && emptyIndex >= 0 && (
                     <button
                         type="button"
                         title="Add new tap dance"
@@ -187,6 +192,11 @@ const TapdancePanel: React.FC = () => {
     // Vertical list layout for sidebar (original)
     return (
         <div className="space-y-3 pt-0 pb-8 relative flex flex-col">
+            {isPicker && (
+                <div className="pb-2">
+                    <span className="font-semibold text-xl text-kb-ink">Tap Dance Keys</span>
+                </div>
+            )}
             <div className="flex flex-col">
                 <DescriptionBlock>
                     Allows a single key to perform multiple, different actions based on the number of times it is tapped in sequence (e.g., tap once for 'A', twice for 'B', or hold for a modifier).
@@ -239,7 +249,7 @@ const TapdancePanel: React.FC = () => {
                             keycode={keycode}
                             label={i.toString()}
                             keyContents={keyContents}
-                            onEdit={handleEdit}
+                            onEdit={isPicker ? undefined : handleEdit}
                             onAssignKeycode={assignKeycode}
                             hoverBorderColor={hoverBorderColor}
                             hoverBackgroundColor={hoverBackgroundColor}

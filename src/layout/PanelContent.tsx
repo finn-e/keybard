@@ -63,7 +63,7 @@ export const getPanelTitle = (panel: string | null | undefined, menus?: CustomUI
 
 export function PanelContent({ panel, horizontal = false, isPicker = false }: { panel: string | null | undefined; horizontal?: boolean; isPicker?: boolean }) {
     if (isPicker) {
-        const pickers = {keyboard: BasicKeyboards, layers: LayersPanel, macros: MacrosPanel, qmk: QmkKeyPanel, oneshot: OneShotComposerPanel, special: SpecialKeysPanel, pointing: PointingPanel, mouse: MousePanel};
+        const pickers = {keyboard: BasicKeyboards, layers: LayersPanel, macros: MacrosPanel, tapdances: TapdancePanel, qmk: QmkKeyPanel, oneshot: OneShotComposerPanel, special: SpecialKeysPanel, pointing: PointingPanel, mouse: MousePanel};
         const Picker = pickers[panel as keyof typeof pickers] ?? BasicKeyboards;
         return <Picker isPicker />;
     }

@@ -2,58 +2,42 @@ import LayersDefaultIcon from "@/components/icons/LayersDefault";
 import MacrosIcon from "@/components/icons/MacrosIcon";
 import MouseIcon from "@/components/icons/Mouse";
 import PointingDeviceBall01Icon from "@/components/icons/PointingDeviceBall01Icon";
+import TapdanceIcon from "@/components/icons/Tapdance";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { cn } from "@/lib/utils";
+import { PICKER_CATEGORIES, type PickerMode } from "@/lib/bindingSpotlight";
 import { FC } from "react";
 
 import { Keyboard, Piano } from "lucide-react";
 
-export type PickerMode = "keyboard" | "layers" | "macros" | "qmk" | "oneshot" | "special" | "mouse" | "pointing";
+export type { PickerMode };
 
-const iconsToShow: { icon: React.ReactNode; panel: PickerMode; title: string }[] = [
-    {
-        icon: <Keyboard className="w-4 h-4" />,
-        panel: "keyboard",
-        title: "Standard Keys",
-    },
-    {
-        icon: <PointingDeviceBall01Icon className="w-4 h-4" />,
-        panel: "pointing",
-        title: "Pointing Devices",
-    },
-    {
-        icon: <Piano className="w-4 h-4" />,
-        panel: "special",
-        title: "Special Keys",
-    },
-    {
-        icon: <LayersDefaultIcon className="w-4 h-4" />,
-        panel: "layers",
-        title: "Layer Keys",
-    },
-    {
-        icon: <MouseIcon className="w-4 h-4" />,
-        panel: "mouse",
-        title: "Mouse Keys",
-    },
-    {
-        icon: <MacrosIcon className="w-4 h-4" />,
-        panel: "macros",
-        title: "Macros",
-    },
-];
+const ICONS: Partial<Record<PickerMode, React.ReactNode>> = {
+    keyboard: <Keyboard className="w-4 h-4" />,
+    pointing: <PointingDeviceBall01Icon className="w-4 h-4" />,
+    special: <Piano className="w-4 h-4" />,
+    layers: <LayersDefaultIcon className="w-4 h-4" />,
+    mouse: <MouseIcon className="w-4 h-4" />,
+    tapdances: <TapdanceIcon className="w-4 h-4" />,
+    macros: <MacrosIcon className="w-4 h-4" />,
+};
+
+// The same categories, names and order as the rail.
+const iconsToShow: { icon: React.ReactNode; panel: PickerMode; title: string }[] =
+    PICKER_CATEGORIES.map(c => ({ icon: ICONS[c.id], panel: c.id, title: c.title }));
 
 interface Props {
     className?: string;
     activeTab?: PickerMode;
     onTabChange?: (tab: PickerMode) => void;
-    showMacros?: boolean;
+    /** The categories the open editor can use (see usablePickerCategories); all by default. */
+    categories?: readonly PickerMode[];
     horizontal?: boolean;
 }
 
-const EditorSidePanel: FC<Props> = ({ className, activeTab, onTabChange, showMacros = true, horizontal = false }) => {
-    const visibleIcons = showMacros ? iconsToShow : iconsToShow.filter((i) => i.panel !== "macros");
+const EditorSidePanel: FC<Props> = ({ className, activeTab, onTabChange, categories, horizontal = false }) => {
+    const visibleIcons = categories ? iconsToShow.filter((i) => categories.includes(i.panel)) : iconsToShow;
 
     if (horizontal) {
         return (

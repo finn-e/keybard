@@ -4,13 +4,14 @@ import * as React from "react";
 import { ArrowLeft, X } from "lucide-react";
 
 import BindingEditorContainer from "./components/BindingEditor/BindingEditorContainer";
-import EditorSidePanel, { PickerMode } from "./components/EditorSidePanel";
+import EditorSidePanel from "./components/EditorSidePanel";
 import BasicKeyboards from "./Panels/BasicKeyboards";
 import LayersPanel from "./Panels/LayersPanel";
 import MacrosPanel from "./Panels/MacrosPanel";
 import SpecialKeysPanel from "./Panels/SpecialKeysPanel/SpecialKeysPanel";
 import PointingPanel from "./Panels/PointingPanel";
 import OneShotComposerPanel from "./Panels/OneShotComposerPanel";
+import TapdancePanel from "./Panels/TapdancePanel";
 import QmkKeyPanel from "./Panels/QmkKeysPanel";
 import MousePanel from "./Panels/MousePanel";
 
@@ -20,6 +21,7 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
 import type { ComboEditorPlacement } from "@/lib/comboEditorPlacement";
+import { effectivePickerMode, isBindingEditorOpen, usablePickerCategories, type PickerMode } from "@/lib/bindingSpotlight";
 import type { CustomUIMenuItem } from "@/types/keyboard.types";
 
 import { getPanelTitle, PanelContent } from "../PanelContent";
@@ -84,7 +86,7 @@ interface SecondarySidebarProps {
 }
 const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlacement, canvasRef, getKeyboardElement, onComboReserveChange }: SecondarySidebarProps) => {
     const primarySidebar = useSidebar("primary-nav", { defaultOpen: false });
-    const { activePanel, handleCloseDetails, state, alternativeHeader, itemToEdit, setItemToEdit } = usePanels();
+    const { activePanel, handleCloseDetails, state, alternativeHeader, itemToEdit, setItemToEdit, pickerMode: chosenPickerMode = "keyboard", setPickerMode } = usePanels();
     const { keyboard } = useKeyboard();
 
     const panelRef = React.useRef<HTMLElement>(null);
@@ -110,7 +112,10 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
 
     // Check if we should show the key picker overlay
     // We show it if we are editing an item and we are in a panel that supports key picking
-    const showPicker = itemToEdit !== null && ["tapdances", "combos", "macros", "overrides", "altrepeat", "leaders"].includes(activePanel || "");
+    const showPicker = isBindingEditorOpen(activePanel, itemToEdit);
+    // The picker tabs and the rail's picker categories share one choice.
+    const pickerCategories = React.useMemo(() => usablePickerCategories(activePanel), [activePanel]);
+    const pickerMode: PickerMode = effectivePickerMode(chosenPickerMode, activePanel);
 
     const bindingRef = React.useRef<HTMLDivElement>(null);
     React.useEffect(() => {
@@ -141,16 +146,15 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
         onReserveChange: onComboReserveChange,
     });
 
-    const [pickerMode, setPickerMode] = React.useState<PickerMode>("keyboard");
     const [isClosingEditor, setIsClosingEditor] = React.useState(false);
 
     // Reset picker mode when picker closes
     React.useEffect(() => {
         if (!showPicker) {
-            const timeout = setTimeout(() => setPickerMode("keyboard"), 500);
+            const timeout = setTimeout(() => setPickerMode?.("keyboard"), 500);
             return () => clearTimeout(timeout);
         }
-    }, [showPicker]);
+    }, [showPicker, setPickerMode]);
 
     React.useEffect(() => {
         if (itemToEdit === null) setIsClosingEditor(false);
@@ -205,7 +209,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                     <PanelContent panel={activePanel} horizontal={bottom} />
                 </div>
                 {bottom && showPicker && comboActive && (
-                    <EditorSidePanel horizontal className="pb-2" activeTab={pickerMode} onTabChange={setPickerMode} showMacros />
+                    <EditorSidePanel horizontal className="pb-2" activeTab={pickerMode} onTabChange={setPickerMode} categories={pickerCategories} />
                 )}
                 {bottom && showPicker && <PanelContent panel={pickerMode} horizontal isPicker />}
             </div>
@@ -225,7 +229,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                 </div>
 
                 <div className="absolute top-24 right-0 bottom-0 overflow-y-auto z-30">
-                    <EditorSidePanel activeTab={pickerMode} onTabChange={setPickerMode} showMacros={activePanel !== "macros"} />
+                    <EditorSidePanel activeTab={pickerMode} onTabChange={setPickerMode} categories={pickerCategories} />
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-auto overscroll-contain pl-4 pr-16 pb-4">
@@ -237,6 +241,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                     {pickerMode === "special" && <SpecialKeysPanel isPicker />}
                     {pickerMode === "pointing" && <PointingPanel isPicker />}
                     {pickerMode === "mouse" && <MousePanel isPicker />}
+                    {pickerMode === "tapdances" && <TapdancePanel isPicker />}
                 </div>
             </div>
             {showPicker && <div
@@ -252,7 +257,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                 onPointerDown={comboActive ? comboGeometry.onPointerDown : undefined}
             >
                 {bottom && !comboActive && <div className="shrink-0 bg-kb-surface overflow-y-auto">
-                    <EditorSidePanel activeTab={pickerMode} onTabChange={setPickerMode} showMacros={activePanel !== "macros"} />
+                    <EditorSidePanel activeTab={pickerMode} onTabChange={setPickerMode} categories={pickerCategories} />
                 </div>}
                 <div className="relative min-w-0 flex-1 overflow-auto overscroll-contain" data-binding-scroll-owner>
                     {!comboActive && <Button type="button" variant="ghost" size="icon" aria-label="Close binding editor"
