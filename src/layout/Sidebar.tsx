@@ -4,7 +4,7 @@ import PointingDeviceBall01Icon from "@/components/icons/PointingDeviceBall01Ico
 import LayoutLayersIcon from "@/components/icons/LayoutLayersIcon";
 import AltRepeatArrowsIcon from "@/components/icons/AltRepeatArrowsIcon";
 import GraduationCapIcon from "@/components/icons/GraduationCapIcon";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { OverlayDialog, overlayRequested } from "@/features/trainer/OverlayDialog";
 
 import ComboIcon from "@/components/ComboIcon";
@@ -30,6 +30,8 @@ import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
 import { PARANOID } from "@/lib/paranoid";
 import { isBindingEditorOpen, pickerCategoryForRail, effectivePickerMode } from "@/lib/bindingSpotlight";
+import { ALT_REPEAT_PANEL, panelAllowed, SHOW_ALT_REPEAT_SETTING } from "@/lib/altRepeatVisibility";
+import { useSettings } from "@/contexts/SettingsContext";
 
 // --- Constants ---
 const MENU_ITEM_GAP_PX = 42; // Matches Gap-4 (16px) + Button Height (26px)
@@ -74,17 +76,18 @@ export const primarySidebarItems: SidebarItem[] = [
     ...middleSectionItems,
 ];
 
-// Alt-Repeat - enabled for testing
-const SHOW_ALT_REPEAT = true;
 // Leaders - enable when ready to test
 const SHOW_LEADERS = true;
 
-const featureSidebarItems: SidebarItem[] = [
-    ...(SHOW_ALT_REPEAT ? [{ title: "Alt-Repeat", url: "altrepeat", icon: AltRepeatArrowsIcon }] : []),
-    ...(SHOW_LEADERS ? [{ title: "Leaders", url: "leaders", icon: ListOrdered }] : []),
-    { title: "Combos", url: "combos", icon: ComboIcon },
-    { title: "Overrides", url: "overrides", icon: OverridesIcon },
-];
+/** The binding group of the rail. Alt-Repeat comes last, only when its app preference is on. */
+export function featureSidebarItemsFor(showAltRepeat: boolean): SidebarItem[] {
+    return [
+        ...(SHOW_LEADERS ? [{ title: "Leaders", url: "leaders", icon: ListOrdered }] : []),
+        { title: "Combos", url: "combos", icon: ComboIcon },
+        { title: "Overrides", url: "overrides", icon: OverridesIcon },
+        ...(showAltRepeat ? [{ title: "Alt-Repeat", url: ALT_REPEAT_PANEL, icon: AltRepeatArrowsIcon }] : []),
+    ];
+}
 
 const layoutSidebarItems: SidebarItem[] = [
     { title: "Layouts", url: "layouts", icon: LayoutLayersIcon },
@@ -192,6 +195,7 @@ const AppSidebar = () => {
         itemToEdit,
         pickerMode,
         setPickerMode,
+        bindingTypeToEdit,
     } = usePanels();
     // While a binding editor is open, the rail's picker categories switch the
     // picker and nothing on the rail leaves the editor.
@@ -201,6 +205,20 @@ const AppSidebar = () => {
         !editing ? undefined : pickerCategoryForRail(url, activePanel) ? "lift" : "cover";
 
     const { keyboard } = useKeyboard();
+
+    // Alt-Repeat is an app preference, off by default. Turning it off while its
+    // panel or editor is open closes them; the board's entries are untouched.
+    const { getSetting } = useSettings();
+    const showAltRepeat = getSetting(SHOW_ALT_REPEAT_SETTING) === true;
+    const featureSidebarItems = useMemo(() => featureSidebarItemsFor(showAltRepeat), [showAltRepeat]);
+    useEffect(() => {
+        const editingAltRepeat = itemToEdit !== null && !panelAllowed(bindingTypeToEdit, showAltRepeat);
+        if (panelAllowed(activePanel, showAltRepeat) && !editingAltRepeat) return;
+        setItemToEdit(null);
+        setAlternativeHeader(false);
+        setPanelToGoBack(null);
+        handleCloseDetails();
+    }, [activePanel, itemToEdit, bindingTypeToEdit, showAltRepeat, setItemToEdit, setAlternativeHeader, setPanelToGoBack, handleCloseDetails]);
 
 
 
@@ -216,6 +234,7 @@ const AppSidebar = () => {
             if (window.innerWidth < 900) setNavigationOpen(false);
             // The desktop overlay is a separate app: a small dialog, not a panel.
             if (item.url === "trainer") { setOverlayOpen(true); return; }
+            if (!panelAllowed(item.url, showAltRepeat)) return;
             if (item.url === "matrixtester") {
                 if (activePanel === item.url) {
                     setActivePanel(null);
@@ -238,7 +257,7 @@ const AppSidebar = () => {
                 setItemToEdit(null);
             }
         },
-        [editing, setPickerMode, setNavigationOpen, activePanel, open, handleCloseDetails, setActivePanel, openDetails, setPanelToGoBack, setAlternativeHeader, setItemToEdit, setOpen]
+        [editing, showAltRepeat, setPickerMode, setNavigationOpen, activePanel, open, handleCloseDetails, setActivePanel, openDetails, setPanelToGoBack, setAlternativeHeader, setItemToEdit, setOpen]
     );
 
 

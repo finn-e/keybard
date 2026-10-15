@@ -8,12 +8,16 @@ import AppSidebar from '../../src/layout/Sidebar';
 
 vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => false }));
 vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ keyboard: null }) }));
+const settings: Record<string, unknown> = {};
+vi.mock('@/contexts/SettingsContext', () => ({
+    useSettings: () => ({ getSetting: (name: string) => settings[name] ?? false }),
+}));
 vi.mock('@/features/trainer/OverlayDialog', () => ({ OverlayDialog: () => null, overlayRequested: () => false }));
 
 beforeAll(() => {
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); for (const k of Object.keys(settings)) delete settings[k]; });
 
 let panels: ReturnType<typeof usePanels>;
 const Probe = () => { panels = usePanels(); return null; };
@@ -55,6 +59,7 @@ describe('the rail while a binding editor is open', () => {
     });
 
     it('does not navigate from covered rail items', () => {
+        settings['show-alt-repeat'] = true;
         renderRail();
         openEditor('combos', 1);
         for (const name of ['Combos', 'Overrides', 'Alt-Repeat', 'Leaders', 'Layouts', 'Overlay', 'Quick Start', 'About', 'Settings']) {
@@ -109,5 +114,35 @@ describe('the rail while a binding editor is open', () => {
         expect(container.querySelector('[data-logo-mark="brand"]')).not.toBeNull();
         expect(container.querySelector('[data-binding-scrim]')).toBeNull();
         expect(item('Combos')).not.toHaveAttribute('inert');
+    });
+});
+
+describe('Alt-Repeat behind its app preference', () => {
+    const railNames = () => [...document.querySelectorAll('[data-sidebar="menu"] button[aria-label]')].map(b => b.getAttribute('aria-label'));
+
+    it('is absent from the rail by default, also while an editor is open', () => {
+        renderRail();
+        expect(screen.queryByRole('button', { name: 'Alt-Repeat' })).toBeNull();
+        openEditor('combos', 0);
+        expect(screen.queryByRole('button', { name: 'Alt-Repeat' })).toBeNull();
+    });
+
+    it('sits last in the binding group, after Overrides, when on', () => {
+        settings['show-alt-repeat'] = true;
+        renderRail();
+        const names = railNames();
+        expect(names.indexOf('Alt-Repeat')).toBe(names.indexOf('Overrides') + 1);
+        expect(names.indexOf('Leaders')).toBeLessThan(names.indexOf('Combos'));
+        fireEvent.click(rail('Alt-Repeat'));
+        expect(panels.activePanel).toBe('altrepeat');
+    });
+
+    it('closes its panel and editor when the preference is off', () => {
+        renderRail();
+        act(() => { panels.setActivePanel('altrepeat'); panels.openDetails(); });
+        expect(panels.activePanel).toBeNull();
+        openEditor('altrepeat', 2);
+        expect(panels.activePanel).toBeNull();
+        expect(panels.itemToEdit).toBeNull();
     });
 });
