@@ -211,6 +211,19 @@ describe("combo preview", () => {
         expect(readout()).toBeNull();
     });
 
+    it("while a binding editor is open, Esc clears the preview without consuming it, so the same press closes the editor", () => {
+        renderAll();
+        fireEvent.mouseEnter(keyEl("KC_J"));
+        tick(HOVER_DELAY_MS);
+        document.documentElement.setAttribute("data-binding-spotlight", "");
+        try {
+            expect(fireEvent.keyDown(window, { key: "Escape" })).toBe(true);
+            expect(readout()).toBeNull();
+        } finally {
+            document.documentElement.removeAttribute("data-binding-spotlight");
+        }
+    });
+
     it("pins on click, keeps the pin after the pointer leaves, and Esc clears it", () => {
         renderAll();
         fireEvent.click(keyEl("KC_K"));

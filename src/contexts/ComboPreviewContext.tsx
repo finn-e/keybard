@@ -138,7 +138,10 @@ export const ComboPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ 
             clearTimers();
             suppressEl.current = document.activeElement;
             if (!had) return;
-            const consume = !document.querySelector("[role='dialog'], [role='alertdialog']");
+            // While a binding editor is open the same Esc also closes it (BindingSpotlight),
+            // so one press clears the preview and leaves the editor.
+            const editing = document.documentElement.hasAttribute("data-binding-spotlight");
+            const consume = !editing && !document.querySelector("[role='dialog'], [role='alertdialog']");
             commitPin(null);
             commitHover(null);
             if (consume) e.preventDefault();
