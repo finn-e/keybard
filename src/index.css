@@ -85,8 +85,20 @@
     /* Underslung combo editor card (new; sits beside the brand tokens). */
     --kb-combo-editor-border: #d6d7d8;
     --kb-combo-editor-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
-    /* Spotlight scrim over everything a binding editor cannot use (new; beside the brand tokens). */
-    --kb-scrim: rgb(17 18 20 / 0.42);
+    /* Binding editor spotlight (new; beside the brand tokens). One scrim, in one color and
+       strength, over everything the editor cannot use; ?spot=soft|deep tries other strengths.
+       Covered controls inside a lit area darken by the same strength (see the spotlight rules). */
+    --kb-scrim-rgb: 17 18 20;
+    --kb-scrim-alpha: 0.42;
+    --kb-scrim: rgb(var(--kb-scrim-rgb) / var(--kb-scrim-alpha));
+    /* Lit surfaces (panel, L tray, rail) and lit rail items. */
+    --kb-spot-radius: 18px;
+    --kb-spot-pill-radius: 10px;
+    /* The bar on the rail item the editor was opened from. */
+    --kb-spot-bar-radius: 2px;
+    --kb-spot-rail-fg: #6b7079;
+    /* The selected slot's red, as a named token. */
+    --kb-pick-accent: #ef4444;
     /* Back arrow highlight when a click lands under the spotlight (new; the brand green, beside the brand tokens). */
     --kb-back-highlight: #099e7c;
     --kb-back-highlight-fg: #ffffff;
@@ -179,7 +191,9 @@
     --kb-popover: #33363b;
     --kb-combo-editor-border: #3a3d42;
     --kb-combo-editor-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
-    --kb-scrim: rgb(0 0 0 / 0.58);
+    --kb-scrim-rgb: 0 0 0;
+    --kb-scrim-alpha: 0.58;
+    --kb-spot-rail-fg: #a3a6ab;
     --kb-back-highlight: #0bb48d;
     --kb-back-highlight-fg: #ffffff;
     --kb-back-highlight-soft: rgb(11 180 141 / 0.22);
@@ -373,12 +387,111 @@ html.dark {
     }
 }
 
-/* Binding editor spotlight: what the editor cannot use is covered or dimmed,
-   and a click there pulses the back arrow and shows a callout under it (see
-   BindingSpotlight). The pulse style is picked by ?backPulse=ring|glow|nudge. */
+/* Binding editor spotlight. One system, every value from the spotlight tokens:
+   - One scrim (--kb-scrim) covers the page; SpotlightScrim draws it. The rail
+     is its own fixed layer, so it carries the same scrim over its own surface;
+     no pixel is ever covered twice.
+   - Lit surfaces (panel, L tray, bottom bar, rail items) sit above it, flat:
+     no border, no shadow, --kb-spot-radius corners.
+   - The lifted canvas has no fill: only the keys and layer tabs read as lit.
+     Covered controls inside it darken by the scrim's own strength.
+   A click on anything covered pulses the back arrow (see BindingSpotlight). */
+:root[data-spot="soft"] { --kb-scrim-alpha: 0.32; }
+:root[data-spot="deep"] { --kb-scrim-alpha: 0.52; }
+:root.dark[data-spot="soft"] { --kb-scrim-alpha: 0.48; }
+:root.dark[data-spot="deep"] { --kb-scrim-alpha: 0.68; }
+
+/* Under the scrim the page is the canvas tone everywhere, as in one app frame. */
+:root[data-binding-spotlight] [data-spotlight-page] {
+    background-color: var(--kb-gray);
+}
 :root[data-binding-spotlight] [data-spotlight-cover] {
-    opacity: 0.35;
+    filter: brightness(calc(1 - var(--kb-scrim-alpha)));
     cursor: default;
+}
+:root[data-binding-spotlight] [data-spotlight-surface] {
+    border-color: transparent;
+    box-shadow: none;
+}
+:root[data-binding-spotlight] [data-spotlight-surface="rounded"] {
+    border-radius: var(--kb-spot-radius);
+}
+/* The L outline is the same flat surface as the plain panel. */
+:root[data-binding-spotlight] svg[data-spotlight-surface] {
+    filter: none;
+}
+:root[data-binding-spotlight] svg[data-spotlight-surface] path {
+    stroke: none;
+}
+/* The rail while editing: its own surface under the scrim, edge to edge, no rim or shadow. */
+:root[data-binding-spotlight] [data-spotlight-rail-frame] {
+    border-color: var(--kb-surface);
+    box-shadow: none;
+    /* The panel starts 8px inside the rail's right edge; pills end 8px clear of it. */
+    --kb-spot-pill-right: 16px;
+}
+:root[data-binding-spotlight] [data-spotlight-rail-frame],
+:root[data-binding-spotlight] [data-spotlight-rail-frame] > [data-sidebar="sidebar"],
+:root[data-binding-spotlight] [data-spotlight-rail-frame] [data-binding-scrim] {
+    border-radius: var(--kb-spot-radius);
+}
+/* Lit rail items: a surface pill inside the rail padding, clear of the panel. */
+[data-spotlight-rail] {
+    position: relative;
+    z-index: 6;
+}
+[data-spotlight-rail]::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: -5px;
+    bottom: -5px;
+    left: 8px;
+    right: var(--kb-spot-pill-right, 8px);
+    border-radius: var(--kb-spot-pill-radius);
+    background-color: var(--kb-surface);
+}
+[data-spotlight-rail] [data-sidebar="menu-button"] {
+    color: var(--kb-spot-rail-fg);
+}
+[data-spotlight-rail][data-spotlight-current] [data-sidebar="menu-button"] {
+    color: var(--kb-ink);
+    font-weight: 600;
+}
+/* The item the editor was opened from carries the rail's active bar. */
+[data-spotlight-rail="origin"]::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 0;
+    bottom: 0;
+    margin: auto 0;
+    width: 3px;
+    height: 26px;
+    border-radius: var(--kb-spot-bar-radius);
+    background-color: var(--kb-ink);
+}
+/* An editor workspace beside the side panel joins it as one lit surface: the
+   pair has the panel's outer corners, with a square seam between them. */
+:root[data-binding-spotlight] .detail-panel[data-placement="side"]:not([data-combo-placement]):not([data-editor-placement]) {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+:root[data-binding-spotlight] .detail-panel[data-placement="side"]:not([data-combo-placement]):not([data-editor-placement]) .binding-workspace {
+    border-top-right-radius: var(--kb-spot-radius);
+    border-bottom-right-radius: var(--kb-spot-radius);
+}
+@media (max-width: 1000px) {
+    :root[data-binding-spotlight] .detail-panel[data-placement="side"]:not([data-combo-placement]):not([data-editor-placement]) {
+        border-radius: var(--kb-spot-radius);
+    }
+    :root[data-binding-spotlight] .detail-panel[data-placement="side"]:not([data-combo-placement]):not([data-editor-placement]) .binding-workspace {
+        border-radius: var(--kb-spot-radius);
+    }
+}
+/* The floating editor card: a lit surface, its edge leaning to the pick accent while a slot is selected. */
+:root[data-binding-spotlight] .binding-workspace:has([data-editor-slot-selected]) {
+    border-color: color-mix(in srgb, var(--kb-pick-accent) 40%, var(--kb-combo-editor-border));
 }
 .binding-back-pulse {
     position: relative;

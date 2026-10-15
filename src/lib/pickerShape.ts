@@ -93,6 +93,8 @@ export const TRAY_HANDLE_PX = 32;
 export const TRAY_EDGE_PX = 8;
 /** The surface's corner radius (the side panel's rounded-2xl). */
 export const SURFACE_RADIUS_PX = 16;
+/** The surface's corner radius while a binding editor is open (--kb-spot-radius in index.css). */
+export const SPOTLIGHT_SURFACE_RADIUS_PX = 18;
 /** The tray's header row and padding around the keyboard. */
 const TRAY_CHROME_PX = 52;
 /** Largest share of the window height the tray takes, and its cap. */

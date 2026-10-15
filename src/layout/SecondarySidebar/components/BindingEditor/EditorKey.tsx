@@ -142,6 +142,7 @@ const EditorKey: FC<EditorKeyProps> = ({
             {label && <span className={labelClassName}>{label}</span>}
             <div
                 className={`relative ${size} group/editorkey`}
+                data-editor-slot-selected={selected ? "" : undefined}
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
                 onMouseUp={handleMouseUp}

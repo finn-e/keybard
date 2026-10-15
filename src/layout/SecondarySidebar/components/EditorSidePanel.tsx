@@ -78,10 +78,8 @@ const EditorSidePanel: FC<Props> = ({ className, activeTab, onTabChange, categor
 
     return (
         <div className={cn("items-start justify-start flex", className)}>
-            <div
-                className="bg-kb-surface rounded-r-[18px] text-gray-400 dark:text-neutral-400 flex items-center flex-col justify-start py-3 px-2 gap-1 shadow-[4px_0_16px_rgba(0,0,0,0.1)] border-l-0"
-                style={{ clipPath: "inset(-50px -50px -50px 0px)" }}
-            >
+            {/* A flat column inside the panel: no card, no shadow. The category on show is a filled tile. */}
+            <div className="text-gray-400 dark:text-neutral-400 flex items-center flex-col justify-start py-3 px-2 gap-1">
                 {visibleIcons.map((i) => (
                     <Tooltip key={i.panel}>
                         <TooltipTrigger asChild>
@@ -91,8 +89,8 @@ const EditorSidePanel: FC<Props> = ({ className, activeTab, onTabChange, categor
                                 aria-pressed={activeTab === i.panel}
                                 key={i.panel}
                                 className={cn(
-                                    "cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 transition-colors px-2 py-3 h-10 w-10 items-center justify-center flex",
-                                    activeTab === i.panel ? "text-slate-900 dark:text-neutral-100" : "text-gray-400 dark:text-neutral-400 hover:text-slate-900 dark:hover:text-neutral-100"
+                                    "cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 transition-colors px-2 py-3 h-10 w-10 items-center justify-center flex rounded-[10px]",
+                                    activeTab === i.panel ? "bg-kb-active text-kb-active-fg" : "text-gray-400 dark:text-neutral-400 hover:text-slate-900 dark:hover:text-neutral-100"
                                 )}
                                 onClick={() => {
                                     if (onTabChange) {

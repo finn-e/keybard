@@ -436,6 +436,8 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
             data-editor-placement={panelEditor ? "panel" : undefined}
             data-editor-motion={motion ?? undefined}
             data-picker-shape={!bottom && isLShape(pickerShape) ? pickerShape : undefined}
+            // A lit surface while editing: flat on the scrim (see the spotlight rules in index.css).
+            data-spotlight-surface={showPicker ? (bottom ? "flat" : "rounded") : undefined}
             className={cn("detail-panel fixed z-[60] flex flex-col bg-kb-surface border shadow-lg min-h-0", bottom ? "bottom-panel bottom-0 right-0" : "top-2 bottom-2 rounded-2xl", state !== "expanded" && "hidden")}
             style={{
                 left: leftOffset ?? primaryOffset,
@@ -497,7 +499,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                 className={panelPlacement
                     ? cn("absolute inset-0 z-20 flex flex-col rounded-[inherit]", !(showPicker || motion === "exit") && "invisible opacity-0 pointer-events-none")
                     : cn(
-                        "absolute top-0 bottom-0 left-0 -right-[2px] bg-kb-surface shadow-[4px_0_16px_rgba(0,0,0,0.1)] z-20 transition-all duration-500 ease-in-out flex flex-col",
+                        "absolute inset-y-0 left-0 right-0 bg-kb-surface z-20 transition-all duration-500 ease-in-out flex flex-col",
                         showPicker && !bottom ? "translate-x-0 opacity-100" : "-translate-x-[120%] opacity-0 pointer-events-none"
                     )}
                 aria-hidden={!showPicker || bottom}
@@ -517,7 +519,8 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                     {panelEditor && <div
                         ref={bindingRef}
                         tabIndex={-1}
-                        className="binding-workspace sticky z-30 mb-3 flex flex-col rounded-xl border bg-kb-gray-medium shadow-sm"
+                        // Flat inside the lit panel: a tint, no shadow of its own beyond the pin cue.
+                        className="binding-workspace sticky z-30 mb-3 flex flex-col rounded-xl border border-transparent bg-kb-gray-medium"
                         aria-label="Binding editor"
                         data-editor-placement="panel"
                         data-pin-cue={pinCue}
@@ -551,7 +554,8 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
             {showPicker && !panelEditor && <div
                 ref={bindingRef}
                 tabIndex={-1}
-                className="binding-workspace z-30 bg-kb-gray-medium shadow-lg flex min-h-0"
+                // The combo card is a lit surface of its own; the side workspace keeps its tint.
+                className={cn("binding-workspace z-30 flex min-h-0", comboActive ? "bg-kb-surface" : "bg-kb-gray-medium")}
                 aria-label="Binding editor"
                 data-combo-placement={comboActive ? comboPlacement : undefined}
                 data-combo-spot={comboActive && comboGeometry.spot ? comboGeometry.spot : undefined}

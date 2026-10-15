@@ -29,7 +29,7 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
 import { PARANOID } from "@/lib/paranoid";
-import { isBindingEditorOpen, pickerCategoryForRail, effectivePickerMode } from "@/lib/bindingSpotlight";
+import { isBindingEditorOpen, pickerCategoryForRail, effectivePickerMode, nudgeBindingEditor } from "@/lib/bindingSpotlight";
 import { ALT_REPEAT_PANEL, panelAllowed, SHOW_ALT_REPEAT_SETTING } from "@/lib/altRepeatVisibility";
 import { useSettings } from "@/contexts/SettingsContext";
 
@@ -121,10 +121,16 @@ interface SidebarNavItemProps {
     onClick: (item: SidebarItem) => void;
     /**
      * While a binding editor is open: "lift" keeps a usable picker category
-     * above the rail's scrim; "cover" leaves the item under it, out of reach.
+     * above the rail's scrim; "origin" lifts the item the editor was opened
+     * from (marked, but a click only points to the way out); "cover" leaves
+     * the item under the scrim, out of reach.
      */
-    spotlight?: "lift" | "cover";
+    spotlight?: RailSpotlight;
+    /** While editing: the picker category on show. */
+    current?: boolean;
 }
+
+type RailSpotlight = "lift" | "origin" | "cover";
 
 const SidebarNavItem = ({
     item,
@@ -134,11 +140,14 @@ const SidebarNavItem = ({
     isCollapsed,
     onClick,
     spotlight,
+    current,
 }: SidebarNavItemProps) => (
     <SidebarMenuItem
-        className={cn("cursor-pointer", spotlight === "lift" && "relative z-[6] rounded-md bg-kb-surface")}
+        className="cursor-pointer"
         inert={spotlight === "cover"}
         data-spotlight={spotlight}
+        data-spotlight-rail={spotlight === "lift" || spotlight === "origin" ? spotlight : undefined}
+        data-spotlight-current={current ? "" : undefined}
     >
         <SidebarMenuButton
             asChild
@@ -201,8 +210,8 @@ const AppSidebar = () => {
     // picker and nothing on the rail leaves the editor.
     const editing = isBindingEditorOpen(activePanel, itemToEdit);
     const shownPickerMode = editing ? effectivePickerMode(pickerMode ?? "keyboard", activePanel) : null;
-    const railSpotlight = (url: string): "lift" | "cover" | undefined =>
-        !editing ? undefined : pickerCategoryForRail(url, activePanel) ? "lift" : "cover";
+    const railSpotlight = (url: string): RailSpotlight | undefined =>
+        !editing ? undefined : pickerCategoryForRail(url, activePanel) ? "lift" : url === activePanel ? "origin" : "cover";
 
     const { keyboard } = useKeyboard();
 
@@ -227,6 +236,8 @@ const AppSidebar = () => {
             if (editing) {
                 const category = pickerCategoryForRail(item.url, activePanel);
                 if (category) setPickerMode(category);
+                // The editor's own item never leaves it: it points to the way out.
+                else if (item.url === activePanel) nudgeBindingEditor();
                 return;
             }
             // Labels can be expanded to choose a destination; return the narrow
@@ -326,6 +337,7 @@ const AppSidebar = () => {
 
     const sidebarClasses = cn(
         // Above the page scrim while editing; its own scrim covers what the editor cannot use.
+        // The spotlight rules take the rim and shadow off (data-spotlight-rail-frame).
         editing ? "z-[47]" : "z-11",
         "fixed transition-[box-shadow,border-color] duration-300 ease-out border border-sidebar-border shadow-lg ml-2 h-[98vh] mt-[1vh] transition-all",
         "rounded-3xl select-none"
@@ -338,13 +350,16 @@ const AppSidebar = () => {
 
 
 
-            <Sidebar rounded name="primary-nav" defaultOpen={false} collapsible="icon" hideGap className={sidebarClasses}>
-                {editing && <SpotlightScrim className="absolute inset-0 z-[5] rounded-3xl" />}
+            <Sidebar rounded name="primary-nav" defaultOpen={false} collapsible="icon" hideGap className={sidebarClasses}
+                data-spotlight-rail-frame={editing ? "" : undefined}>
+                {/* The rail is its own fixed layer above the page scrim, so it carries the
+                    same scrim over its own surface, rim included. */}
+                {editing && <SpotlightScrim className="absolute -inset-px z-[5]" />}
                 <SidebarContent className={cn("py-4 overflow-y-auto overflow-x-hidden flex flex-col", isCollapsed && "scrollbar-none")}>
                     {/* Header section - Logo, Connect, Import/Export */}
                     <SidebarMenu>
-                        {/* While editing, the logo stays lit as a focus cue but is not a control. */}
-                        <SidebarMenuItem className={cn(editing && "relative z-[6]")} inert={editing}>
+                        {/* While editing, the logo stays under the scrim and is not a control. */}
+                        <SidebarMenuItem inert={editing}>
                             <SidebarMenuButton
                                 asChild
                                 size="nav"
@@ -372,7 +387,8 @@ const AppSidebar = () => {
                     {/* Main navigation - vertically centered in available space */}
                     <div className="flex-1 flex flex-col justify-center py-2">
                         <SidebarMenu className="relative">
-                            {indicatorY !== -1 && <SlidingIndicator y={indicatorY} />}
+                            {/* While editing, the current category is marked by weight and the origin by its own bar. */}
+                            {indicatorY !== -1 && !editing && <SlidingIndicator y={indicatorY} />}
 
                             {/* Top section items (Keyboard, Pointing Devices) */}
                             {topSectionItems.map((item) => (
@@ -385,6 +401,7 @@ const AppSidebar = () => {
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
                                     spotlight={railSpotlight(item.url)}
+                                    current={editing && shownPickerMode === item.url}
                                 />
                             ))}
 
@@ -399,6 +416,7 @@ const AppSidebar = () => {
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
                                     spotlight={railSpotlight(item.url)}
+                                    current={editing && shownPickerMode === item.url}
                                 />
                             ))}
 
@@ -416,6 +434,7 @@ const AppSidebar = () => {
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
                                     spotlight={railSpotlight(item.url)}
+                                    current={editing && shownPickerMode === item.url}
                                 />
                             ))}
 
@@ -431,6 +450,7 @@ const AppSidebar = () => {
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
                                     spotlight={railSpotlight(item.url)}
+                                    current={editing && shownPickerMode === item.url}
                                 />
                             ))}
 
@@ -446,6 +466,7 @@ const AppSidebar = () => {
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
                                     spotlight={railSpotlight(item.url)}
+                                    current={editing && shownPickerMode === item.url}
                                 />
                             ))}
                         </SidebarMenu>
@@ -454,7 +475,7 @@ const AppSidebar = () => {
                     {/* Footer section - Quick Start, Manual, About, Settings */}
                     <div className="py-2 mb-3">
                         <SidebarMenu className="relative">
-                            {activeFooterIndex !== -1 && <SlidingIndicator y={activeFooterIndex * MENU_ITEM_GAP_PX} />}
+                            {activeFooterIndex !== -1 && !editing && <SlidingIndicator y={activeFooterIndex * MENU_ITEM_GAP_PX} />}
                             {footerItems.map((item) => (
                                 <SidebarNavItem
                                     key={item.url}
@@ -463,6 +484,7 @@ const AppSidebar = () => {
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
                                     spotlight={railSpotlight(item.url)}
+                                    current={editing && shownPickerMode === item.url}
                                 />
                             ))}
                         </SidebarMenu>

@@ -2,9 +2,10 @@ import * as React from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
+import { useBindingSpotlight } from "@/layout/BindingSpotlight";
 import { cn } from "@/lib/utils";
 import {
-    lSurfacePath, TRAY_EDGE_PX, TRAY_HANDLE_PX, TRAY_MOTION_MS, trayVisibleHeight,
+    lSurfacePath, SPOTLIGHT_SURFACE_RADIUS_PX, TRAY_EDGE_PX, TRAY_HANDLE_PX, TRAY_MOTION_MS, trayVisibleHeight,
     type PickerShape, type SurfaceGeometry, type TrayState,
 } from "@/lib/pickerShape";
 
@@ -92,6 +93,8 @@ export default function PickerTray({ shape, state, height, panelOpen, onToggle, 
     const reducedMotion = usePrefersReducedMotion();
     const shown = useTrayHeight(trayVisibleHeight(state, height), reducedMotion);
     const box = usePanelBox(panelOpen);
+    // While an editor is open the L is a lit surface like the plain panel: flat, same corners.
+    const spotlight = useBindingSpotlight();
 
     React.useLayoutEffect(() => {
         document.documentElement.style.setProperty(TRAY_HEIGHT_VAR, `${Math.round(shown)}px`);
@@ -140,8 +143,9 @@ export default function PickerTray({ shape, state, height, panelOpen, onToggle, 
                 width={box.vw}
                 height={box.vh}
                 data-picker-surface={shape}
+                data-spotlight-surface={spotlight ? "" : undefined}
             >
-                <path d={lSurfacePath(geometry)} />
+                <path d={lSurfacePath(geometry, spotlight ? SPOTLIGHT_SURFACE_RADIUS_PX : undefined)} />
             </svg>
             <section
                 aria-label="Standard Keys"

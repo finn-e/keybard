@@ -101,12 +101,27 @@ describe('the rail while a binding editor is open', () => {
             expect(item(name)).toHaveAttribute('data-spotlight', 'lift');
             expect(item(name)).not.toHaveAttribute('inert');
         }
-        for (const name of ['Macro Keys', 'Combos', 'Overrides', 'Layouts', 'Settings', 'About']) {
+        // The category on show is marked by weight, not by a bar.
+        expect(item('Standard Keys')).toHaveAttribute('data-spotlight-current');
+        expect(item('Pointing Devices')).not.toHaveAttribute('data-spotlight-current');
+        expect(container.querySelector('[data-spotlight-rail="lift"]')).not.toBeNull();
+        // The item the editor was opened from is lit and carries the bar, but never leaves the editor.
+        expect(item('Macro Keys')).toHaveAttribute('data-spotlight', 'origin');
+        expect(item('Macro Keys')).toHaveAttribute('data-spotlight-rail', 'origin');
+        expect(item('Macro Keys')).not.toHaveAttribute('inert');
+        const nudged = vi.fn();
+        window.addEventListener('keybard:binding-spotlight-nudge', nudged);
+        fireEvent.click(rail('Macro Keys'));
+        window.removeEventListener('keybard:binding-spotlight-nudge', nudged);
+        expect(nudged).toHaveBeenCalledTimes(1);
+        expect(panels.itemToEdit).toBe(0);
+        expect(panels.activePanel).toBe('macros');
+        for (const name of ['Combos', 'Overrides', 'Layouts', 'Settings', 'About']) {
             expect(item(name)).toHaveAttribute('data-spotlight', 'cover');
             expect(item(name)).toHaveAttribute('inert');
         }
         expect(container.querySelector('[data-binding-scrim]')).not.toBeNull();
-        // The logo becomes the viewfinder mark, a focus cue rather than a control.
+        // The logo becomes the viewfinder mark, under the scrim and not a control.
         expect(container.querySelector('[data-logo-mark="viewfinder"]')).not.toBeNull();
         expect(container.querySelector('[data-logo-mark="brand"]')).toBeNull();
         expect(screen.getByRole('button', { name: /navigation/ }).closest('li')).toHaveAttribute('inert');
