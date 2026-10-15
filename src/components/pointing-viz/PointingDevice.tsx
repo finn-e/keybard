@@ -3,6 +3,7 @@ import { useEffect, useRef, type CSSProperties } from "react";
 import type { DevicePlacement } from "@/utils/pointing-geometry";
 import type { PointingMotionReport } from "@/utils/pointing-motion";
 import { PAD_COUNTS_PER_HALF } from "@/features/pointing-demo";
+import { ballRollRadians } from "./ball-gearing";
 import { BALLS, type BallId } from "./webgl/materials";
 import { drawDevice, roll, rotFromEuler, type Theme } from "./webgl/renderer";
 import { drawContact, drawPadReticle, drawPills, drawReticle, type PillColors } from "./overlay-draw";
@@ -12,8 +13,6 @@ export interface PointingFeed {
     subscribe(listener: (report: PointingMotionReport, dtMs: number) => void): () => void;
 }
 
-/** Counts per inch assumed for a trackball's motion (the firmware's default CPI). */
-export const DEFAULT_CPI = 800;
 /** How long a touchpad contact stays after the last motion before it lifts. */
 const PAD_LIFT_MS = 160;
 
@@ -43,7 +42,6 @@ export interface PointingDeviceProps {
     onMenu?: (x: number, y: number) => void;
     /** This hand moved (so it carries the pills). */
     onMoved?: (side: "left" | "right") => void;
-    cpi?: number;
 }
 
 function prefersReducedMotion(): boolean {
@@ -169,8 +167,9 @@ export function PointingDevice(props: PointingDeviceProps) {
             if (!moved) return;
             if (!s.reduce) {
                 if (p.placement.kind === "ball") {
-                    const countsPerRadius = ((p.cpi ?? DEFAULT_CPI) / 25.4) * (BALLS[p.ball].mm / 2);
-                    roll(s.M, half.dx / countsPerRadius, half.dy / countsPerRadius);
+                    // The ball's physical size, not its drawn size, and never the DPI setting.
+                    const mm = BALLS[p.ball].mm;
+                    roll(s.M, ballRollRadians(half.dx, mm), ballRollRadians(half.dy, mm));
                     s.dirty = true;
                 } else {
                     const c = s.contact;

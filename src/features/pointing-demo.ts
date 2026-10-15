@@ -15,6 +15,7 @@
 // devices through one path.
 
 import type { PointingMotionReport } from "@/utils/pointing-motion";
+import { TRACKBALL_COUNTS_PER_MM } from "@/components/pointing-viz/ball-gearing";
 
 export type DemoKind = "trackball" | "touchpad" | "none";
 export interface PointingDemo {
@@ -72,8 +73,8 @@ export function _resetPointingDemoForTests() { cached = undefined; }
 /* Scripted motion                                                      */
 /* ------------------------------------------------------------------ */
 
-/** Counts per mm the demo reports, as an 800 CPI sensor would. */
-export const DEMO_COUNTS_PER_MM = 800 / 25.4;
+/** Counts per mm the demo reports: what a board reports for a trackball. */
+export const DEMO_COUNTS_PER_MM = TRACKBALL_COUNTS_PER_MM;
 const BALL_RADIUS_MM = 22;
 
 function smooth(a: number, b: number, x: number) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
