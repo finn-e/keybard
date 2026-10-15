@@ -292,11 +292,13 @@ describe("combo preview", () => {
         expect(readout()!.textContent).toContain("in 1 combo");
     });
 
-    it("a combos-list row previews its combo at once and pins on click", () => {
+    it("a combos-list row previews its combo at once and pins on click, without the inspector", () => {
         renderAll();
         const row = document.querySelector('[data-combo-row="4"]') as HTMLElement;
         fireEvent.mouseEnter(row);
-        expect(readout()!.textContent).toContain("Combo 4");
+        // The row already shows the combo; the inspector would only echo it.
+        expect(readout()).toBeNull();
+        expect(document.querySelector("[data-key-inspector]")).toBeNull();
         expect(order("KC_D")).toBe("4");
         expect(order("KC_K")).toBe("4");
         expect(foldOf("KC_J")!.style.opacity).toBe("0.22");
@@ -305,10 +307,22 @@ describe("combo preview", () => {
         expect(row.getAttribute("aria-pressed")).toBe("true");
         fireEvent.mouseLeave(row);
         tick(LEAVE_DELAY_MS + 10);
-        expect(readout()!.textContent).toContain("Pinned · Esc clears");
+        // Pinned: the layout keeps the combo lit, still with no inspector card.
+        expect(readout()).toBeNull();
+        expect(order("KC_D")).toBe("4");
+        expect(row.getAttribute("data-lit")).toBe("true");
         act(() => row.focus());
         fireEvent.keyDown(row, { key: "Enter" });
         expect(row.getAttribute("aria-pressed")).toBe("false");
+        expect(document.querySelector("[data-inspector-summary]")!.textContent).toBe("");
+    });
+
+    it("the inspector still shows for a layout key after a list row was hovered", () => {
+        renderAll();
+        const row = document.querySelector('[data-combo-row="4"]') as HTMLElement;
+        fireEvent.mouseEnter(row);
+        fireEvent.mouseEnter(keyEl("KC_K"));
+        expect(document.querySelector("[data-inspector-title]")!.textContent).toBe("K");
     });
 
     it("an open combo editor counts as the previewed combo", () => {

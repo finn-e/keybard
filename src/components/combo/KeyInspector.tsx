@@ -1,5 +1,5 @@
 // Key inspector: the one card that shows key details on the layout. It describes the hovered,
-// focused or pinned layout key (or a combos-list row): the key's action, tap dance or macro,
+// focused or pinned layout key: the key's action, tap dance or macro,
 // every combo it is in, key overrides, alt repeat, leaders and where else it is used. It
 // overlays the space under the layout, so showing it never moves a key, and it stops short
 // of any editor or control below (the "lane"). Sections render only when they have content.
@@ -200,7 +200,11 @@ export function KeyInspector({ keyboard, hues, className }: {
     hues: ReadonlyMap<number, number>;
     className?: string;
 }) {
-    const { enabled: indicators, active, activeVia, isPinned } = useComboPreview();
+    const { enabled: indicators, active: previewed, activeVia: previewedVia, isPinned } = useComboPreview();
+    // Layout keys only. A side panel list row (a combo row) already shows its item, so the card
+    // would only echo it; the row's preview still lights its keys on the layout.
+    const active = previewed?.kind === "key" ? previewed : null;
+    const activeVia = active ? previewedVia : null;
     const { internationalLayout } = useLayoutSettings();
     const combos = keyboard.combos || [];
     const index = useMemo(
@@ -232,13 +236,7 @@ export function KeyInspector({ keyboard, hues, className }: {
         let title: string;
         let meta: string;
         let list: ComboMembership[];
-        if (active.kind === "combo") {
-            list = active.combos.map(i => membershipOf(combos, i)).filter((c): c is ComboMembership => !!c);
-            const c = list[0];
-            title = `Combo ${active.combos[0]}`;
-            meta = c ? `${c.inputs.length} keys${c.enabled ? "" : " · off"}` : "";
-            summary = c ? comboSentence(c) : title;
-        } else if (model) {
+        if (model) {
             list = model.combos;
             title = model.title;
             const inN = list.length ? `in ${list.length} combo${list.length === 1 ? "" : "s"}` : "";
@@ -251,11 +249,11 @@ export function KeyInspector({ keyboard, hues, className }: {
             summary = `${title}, ${meta}`;
         }
         // A key draws its three lowest-numbered combos; the inspector names the rest too.
-        const hidden = active.kind === "key" ? hiddenOnKey(list) : new Set<number>();
+        const hidden = hiddenOnKey(list);
         const capped = !pinned && list.length > HOVER_COMBO_CAP;
         const shownCombos = capped ? list.slice(0, HOVER_COMBO_CAP) : list;
         const comboLines = shownCombos.map(c => (
-            <ComboLine key={c.index} c={c} hue={hues.get(c.index) ?? 0} notShown={hidden.has(c.index)} showHue={indicators || active.kind === "combo"} />
+            <ComboLine key={c.index} c={c} hue={hues.get(c.index) ?? 0} notShown={hidden.has(c.index)} showHue={indicators} />
         ));
 
         const header = (
@@ -273,14 +271,12 @@ export function KeyInspector({ keyboard, hues, className }: {
                 </div>
             );
         } else {
-            const combosBlock = list.length > 0 && (active.kind === "combo"
-                ? <ul className="list-none mt-2 p-0 grid gap-1">{comboLines}</ul>
-                : (
-                    <SectionBlock id="combos" title="Combos">
-                        {comboLines}
-                        {capped && <li className="text-[12px] text-muted-foreground pl-[26px]" data-inspector-more-combos="">+{list.length - HOVER_COMBO_CAP} More Combos</li>}
-                    </SectionBlock>
-                ));
+            const combosBlock = list.length > 0 && (
+                <SectionBlock id="combos" title="Combos">
+                    {comboLines}
+                    {capped && <li className="text-[12px] text-muted-foreground pl-[26px]" data-inspector-more-combos="">+{list.length - HOVER_COMBO_CAP} More Combos</li>}
+                </SectionBlock>
+            );
             body = (
                 <div
                     className={cn(

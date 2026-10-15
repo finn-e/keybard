@@ -1,6 +1,7 @@
-// Key inspector and combo preview: hovering or focusing a layout key (or a row in the Combos
-// list) shows the key inspector card for it. With combo indicators on, member keys also lift a
-// larger fold showing only the previewed combos, and every other fold recedes.
+// Key inspector and combo preview: hovering or focusing a layout key shows the key inspector
+// card for it; a row in the Combos list previews its combo on the layout without the card. With
+// combo indicators on, member keys also lift a larger fold showing only the previewed combos,
+// and every other fold recedes.
 //
 // - First hover waits 250 ms, so sweeping the pointer across the layout does not flicker;
 //   while a preview is up, moving to another key switches at once. Leaving waits 90 ms.
