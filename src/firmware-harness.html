@@ -6,7 +6,7 @@
         <title>Firmware harness</title>
         <!-- Dev only: Vite serves this page in `npm run dev`; builds use index.html alone. -->
         <script>
-            if (new URLSearchParams(location.search).get("theme") === "dark") document.documentElement.classList.add("dark");
+            if (new URLSearchParams(location.search).get("theme") === "dark" || location.hash.indexOf("dark") >= 0) document.documentElement.classList.add("dark");
         </script>
         <style>html.dark{color-scheme:dark;background-color:#141517}</style>
     </head>

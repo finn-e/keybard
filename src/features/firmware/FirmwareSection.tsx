@@ -2,7 +2,7 @@
 // Choose a file…), highlights, one primary button, Advanced. Every button opens the sheet.
 
 import { ChevronRight } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { FirmwareReleasePin } from "@/constants/firmware-releases";
@@ -46,6 +46,7 @@ export function FirmwareSection({ board, releases, onInstall, onManual, onConnec
     const [fileError, setFileError] = useState<string | null>(null);
     const [pendingHand, setPendingHand] = useState<Hand | undefined>(undefined);
     const fileInput = useRef<HTMLInputElement>(null);
+    const group = useId();
     const pick = releases.find((r) => r.tag === selected) ?? null;
     const boardNewer = !!(board?.updater && newest && board.fwVersion > newest.fwVersion);
 
@@ -105,7 +106,7 @@ export function FirmwareSection({ board, releases, onInstall, onManual, onConnec
                     const installed = installedTag === r.tag && board?.fwVersion === r.fwVersion;
                     return (
                         <label key={r.tag} className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm ${selected === r.tag ? "border-kb-primary" : "border-kb-gray-border"}`}>
-                            <input type="radio" name="fw-release" checked={selected === r.tag} onChange={() => setSelected(r.tag)} />
+                            <input type="radio" name={group} checked={selected === r.tag} onChange={() => setSelected(r.tag)} />
                             <span className="font-mono font-medium">{r.tag}</span>
                             <span className="text-muted-foreground">{installed ? "Installed" : i === 0 ? "Newest" : "Older"}{r.kind === "x" ? " · Prerelease" : ""}</span>
                             {board && !board.updater && i === 0 && <span className="text-muted-foreground">· One manual install, then updates come from Keybard</span>}
@@ -114,7 +115,7 @@ export function FirmwareSection({ board, releases, onInstall, onManual, onConnec
                     );
                 })}
                 <label className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm ${selected === FILE_ROW ? "border-kb-primary" : "border-kb-gray-border"}`}>
-                    <input type="radio" name="fw-release" checked={selected === FILE_ROW} onChange={() => setSelected(FILE_ROW)} />
+                    <input type="radio" name={group} checked={selected === FILE_ROW} onChange={() => setSelected(FILE_ROW)} />
                     <span className="font-medium">Choose a file…</span>
                 </label>
                 <input ref={fileInput} type="file" accept=".svup" multiple hidden data-testid="svup-input" onChange={(e) => void onFiles(e.target.files)} />

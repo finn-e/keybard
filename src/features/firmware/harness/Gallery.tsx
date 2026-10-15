@@ -95,11 +95,12 @@ const warnings: CheckRow[] = [
 ];
 
 export function Gallery() {
-    const only = new URLSearchParams(location.search).get("screen");
+    // ?gallery=1&screen=B1, or #B1 (and #B1,dark) where a shell eats the ampersand.
+    const only = new URLSearchParams(location.search).get("screen") ?? (location.hash.slice(1).split(",")[0] || null);
     const show = (id: string) => !only || only === id;
     return (
         <div className="min-h-screen bg-kb-gray text-kb-ink">
-            <div className="mx-auto flex max-w-xl flex-col gap-8 p-4">
+            <div className="mx-auto flex max-w-xl flex-col gap-8 p-4" style={location.hash.includes("phone") ? { maxWidth: 390, padding: 16 } : undefined}>
                 {show("D2") && <Card id="D2" title="Firmware page, update available"><FirmwareSection board={BOARD} releases={RELEASES} onInstall={noop} onManual={noop} paranoid={false} /></Card>}
                 {show("D2a") && <Card id="D2a" title="Up to date"><FirmwareSection board={UP_TO_DATE} releases={RELEASES} onInstall={noop} onManual={noop} paranoid={false} /></Card>}
                 {show("D2b") && <Card id="D2b" title="No usable updater"><FirmwareSection board={LEGACY} releases={RELEASES} onInstall={noop} onManual={noop} paranoid={false} /></Card>}

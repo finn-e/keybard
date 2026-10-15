@@ -85,7 +85,7 @@ export function ProgressView({ state, legends, now }: { state: FlowState; legend
                                 </span>
                                 <span className="truncate text-muted-foreground tabular-nums">{r.stage === "done" ? `${r.toTag} ✓` : stageLabel(r.stage, r.progress, `${handName(o)} half`)}</span>
                             </div>
-                            <Bar row={r} />
+                            <Bar row={r.stage === "approve" && countdown !== null ? { ...r, progress: countdown / 30 } : r} />
                         </div>
                     </li>
                 ))}
