@@ -27,6 +27,8 @@ interface BackupContextType {
     chooseFolder: () => Promise<void>;
     resumeFolder: () => Promise<void>;
     stopFolder: () => Promise<void>;
+    /** A manual snapshot of the connected board now, kept until deleted. */
+    backUpNow: () => Promise<void>;
 }
 
 const BackupContext = createContext<BackupContextType | undefined>(undefined);
@@ -142,6 +144,13 @@ export const BackupProvider: React.FC<BackupProviderProps> = ({ children, servic
     const resumeFolder = useCallback(async () => { await service?.resumeFolder(); }, [service]);
     const stopFolder = useCallback(async () => { await service?.stopFolder(); }, [service]);
 
+    const backUpNow = useCallback(async () => {
+        const target = boardRef.current;
+        const kbinfo = keyboardRef.current;
+        if (!service || !target || !kbinfo || target.session !== sessionRef.current) throw new Error("Connect your keyboard to back it up.");
+        await service.saveSnapshot({ boardKey: target.key, boardName: target.name, svil: serializeForBackup(kbinfo), kind: "manual", pendingCount: pendingRef.current });
+    }, [service]);
+
     const folderSupported = folderPickerSupported();
 
     const value: BackupContextType = {
@@ -155,6 +164,7 @@ export const BackupProvider: React.FC<BackupProviderProps> = ({ children, servic
         chooseFolder,
         resumeFolder,
         stopFolder,
+        backUpNow,
     };
     return <BackupContext.Provider value={value}>{children}</BackupContext.Provider>;
 };

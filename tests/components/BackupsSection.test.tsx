@@ -119,4 +119,36 @@ describe('Settings > Backups', () => {
         expect(screen.getByRole('button', { name: 'Choose backup folder' })).toBeVisible();
         expect(screen.queryByRole('button', { name: 'Resume backups' })).toBeNull();
     });
+
+    it('pins Before <release> and manual backups at the top of a board, labelled, beyond the row limit', () => {
+        const many = Array.from({ length: 10 }, (_, i) => snap({ id: `e${i}`, boardKey: 'sval:BBBB', boardName: 'Travel', savedAt: now - 10_000 - i }));
+        mocks.backups = backups({ snapshots: [
+            ...many,
+            snap({ id: 'pre', boardKey: 'sval:BBBB', boardName: 'Travel', kind: 'pre-update', fromTag: 'v3', toTag: 'x4', savedAt: now - 900_000 }),
+            snap({ id: 'man', boardKey: 'sval:BBBB', boardName: 'Travel', kind: 'manual', savedAt: now - 800_000 }),
+        ] });
+        openBackups();
+        const rows = within(boardRegions()[0]).getAllByTestId('backup-row');
+        expect(rows[0]).toHaveTextContent('Backed up');
+        expect(rows[1]).toHaveTextContent('Before x4');
+        expect(rows[0]).toHaveAttribute('data-pinned', 'true');
+        expect(rows[2]).toHaveTextContent('Edited');
+        expect(rows).toHaveLength(2 + 8); // the pins, then the usual eight
+        expect(screen.getByRole('button', { name: 'Show all (10)' })).toBeVisible();
+    });
+
+    it('backs up the connected board now', async () => {
+        const backUpNow = vi.fn(async () => undefined);
+        mocks.backups = backups({ backUpNow });
+        openBackups();
+        fireEvent.click(screen.getByRole('button', { name: 'Back up now' }));
+        await waitFor(() => expect(backUpNow).toHaveBeenCalled());
+        expect(await screen.findByText(/^Saved Today/)).toBeVisible();
+    });
+
+    it('offers Back up now only with a board connected', () => {
+        mocks.backups = backups({ board: null });
+        openBackups();
+        expect(screen.queryByRole('button', { name: 'Back up now' })).toBeNull();
+    });
 });
