@@ -4,7 +4,7 @@ import PointingDeviceBall01Icon from "@/components/icons/PointingDeviceBall01Ico
 import LayoutLayersIcon from "@/components/icons/LayoutLayersIcon";
 import AltRepeatArrowsIcon from "@/components/icons/AltRepeatArrowsIcon";
 import GraduationCapIcon from "@/components/icons/GraduationCapIcon";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OverlayDialog, overlayRequested } from "@/features/trainer/OverlayDialog";
 
 import ComboIcon from "@/components/ComboIcon";
@@ -29,7 +29,7 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
 import { PARANOID } from "@/lib/paranoid";
-import { isBindingEditorOpen, pickerCategoryForRail, effectivePickerMode, nudgeBindingEditor } from "@/lib/bindingSpotlight";
+import { currentRailMode, isBindingEditorOpen, pickerCategoryForRail, effectivePickerMode, nudgeBindingEditor } from "@/lib/bindingSpotlight";
 import { ALT_REPEAT_PANEL, panelAllowed, SHOW_ALT_REPEAT_SETTING } from "@/lib/altRepeatVisibility";
 import { useSettings } from "@/contexts/SettingsContext";
 
@@ -187,7 +187,7 @@ const SidebarNavItem = ({
 
 const AppSidebar = () => {
     const [overlayOpen, setOverlayOpen] = useState(() => overlayRequested());
-    const { state, toggleSidebar, setOpen: setNavigationOpen } = useSidebar("primary-nav", { defaultOpen: false });
+    const { state, toggleSidebar, setOpen: setNavigationOpen, setForcedCollapsed } = useSidebar("primary-nav", { defaultOpen: false });
     const isCollapsed = state === "collapsed";
     const {
         setItemToEdit,
@@ -210,8 +210,27 @@ const AppSidebar = () => {
     // picker and nothing on the rail leaves the editor.
     const editing = isBindingEditorOpen(activePanel, itemToEdit);
     const shownPickerMode = editing ? effectivePickerMode(pickerMode ?? "keyboard", activePanel) : null;
+    // ?railMode=collapse: while editing the whole rail is under the scrim and
+    // narrows to its icons; the side panel's category strip picks instead.
+    const railMode = useMemo(currentRailMode, []);
+    const railCollapse = editing && railMode === "collapse";
     const railSpotlight = (url: string): RailSpotlight | undefined =>
-        !editing ? undefined : pickerCategoryForRail(url, activePanel) ? "lift" : url === activePanel ? "origin" : "cover";
+        !editing ? undefined : railCollapse ? "cover" : pickerCategoryForRail(url, activePanel) ? "lift" : url === activePanel ? "origin" : "cover";
+    useEffect(() => {
+        if (railMode !== "collapse") return;
+        const root = document.documentElement;
+        root.setAttribute("data-rail-mode", "collapse");
+        return () => root.removeAttribute("data-rail-mode");
+    }, [railMode]);
+    // Held narrow while editing, never saved: leaving the editor brings back the person's own width.
+    // (The setter is new on every sidebar change, so it is read through a ref.)
+    const setForcedRef = useRef(setForcedCollapsed);
+    setForcedRef.current = setForcedCollapsed;
+    useEffect(() => {
+        if (!railCollapse) return;
+        setForcedRef.current(true);
+        return () => setForcedRef.current(false);
+    }, [railCollapse]);
 
     const { keyboard } = useKeyboard();
 
@@ -233,6 +252,10 @@ const AppSidebar = () => {
 
     const handleItemSelect = useCallback(
         (item: SidebarItem) => {
+            if (railCollapse) {
+                nudgeBindingEditor(undefined, "rail");
+                return;
+            }
             if (editing) {
                 const category = pickerCategoryForRail(item.url, activePanel);
                 if (category) setPickerMode(category);
@@ -268,7 +291,7 @@ const AppSidebar = () => {
                 setItemToEdit(null);
             }
         },
-        [editing, showAltRepeat, setPickerMode, setNavigationOpen, activePanel, open, handleCloseDetails, setActivePanel, openDetails, setPanelToGoBack, setAlternativeHeader, setItemToEdit, setOpen]
+        [editing, railCollapse, showAltRepeat, setPickerMode, setNavigationOpen, activePanel, open, handleCloseDetails, setActivePanel, openDetails, setPanelToGoBack, setAlternativeHeader, setItemToEdit, setOpen]
     );
 
 
@@ -340,7 +363,9 @@ const AppSidebar = () => {
         // The spotlight rules take the rim and shadow off (data-spotlight-rail-frame).
         editing ? "z-[47]" : "z-11",
         "fixed transition-[box-shadow,border-color] duration-300 ease-out border border-sidebar-border shadow-lg ml-2 h-[98vh] mt-[1vh] transition-all",
-        "rounded-3xl select-none"
+        "rounded-3xl select-none",
+        // The collapse variant narrows and restores in 250ms; instant with reduced motion.
+        railMode === "collapse" && "duration-[250ms] motion-reduce:transition-none"
     );
 
     return (
@@ -351,10 +376,11 @@ const AppSidebar = () => {
 
 
             <Sidebar rounded name="primary-nav" defaultOpen={false} collapsible="icon" hideGap className={sidebarClasses}
-                data-spotlight-rail-frame={editing ? "" : undefined}>
+                data-spotlight-rail-frame={editing ? "" : undefined}
+                data-rail-collapsed={railCollapse ? "" : undefined}>
                 {/* The rail is its own fixed layer above the page scrim, so it carries the
                     same scrim over its own surface, the same shape as it. */}
-                {editing && <SpotlightScrim className="absolute inset-0 z-[5]" />}
+                {editing && <SpotlightScrim className="absolute inset-0 z-[5]" source="rail" />}
                 <SidebarContent className={cn("py-4 overflow-y-auto overflow-x-hidden flex flex-col", isCollapsed && "scrollbar-none")}>
                     {/* Header section - Logo, Connect, Import/Export */}
                     <SidebarMenu>

@@ -22,7 +22,7 @@ import { useKeyboard } from "@/contexts/KeyboardContext";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { cn } from "@/lib/utils";
 import { isPanelEditorPlacement, pinnedEditorTop, type ComboEditorPlacement } from "@/lib/comboEditorPlacement";
-import { bindingEditorHeading, bindingEditorSubtitle, effectivePickerMode, isBindingEditorOpen, usablePickerCategories, type PickerMode } from "@/lib/bindingSpotlight";
+import { bindingEditorHeading, bindingEditorSubtitle, currentRailMode, effectivePickerMode, isBindingEditorOpen, RAIL_COLLAPSE_EASE, RAIL_COLLAPSE_MS, usablePickerCategories, type PickerMode } from "@/lib/bindingSpotlight";
 import {
     EDITOR_REST_FRAME, isUsableRect, PANEL_EDITOR_EASE_OUT, PANEL_EDITOR_FADE_MS, PANEL_EDITOR_MOTION_MS,
     PANEL_PICKER_RISE_PX, pickerScrolledUnder, pinCueStyle, rowToEditorFrame, type MotionRect, type PanelEditorMotion,
@@ -203,6 +203,11 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
     const panelPlacement = !bottom && isPanelEditorPlacement(comboPlacement);
     const panelEditor = showPicker && panelPlacement;
     const reducedMotion = usePrefersReducedMotion();
+    // ?railMode=collapse: the panel follows the rail's edge as it narrows and comes back.
+    const railMode = React.useMemo(currentRailMode, []);
+    const railMotion = railMode === "collapse" && !bottom && !reducedMotion
+        ? `left ${RAIL_COLLAPSE_MS}ms ${RAIL_COLLAPSE_EASE}, width ${RAIL_COLLAPSE_MS}ms ${RAIL_COLLAPSE_EASE}`
+        : undefined;
     const pinCue = React.useMemo(() => pinCueStyle(typeof window === "undefined" ? "" : window.location.search), []);
 
     // Entering and leaving the side-panel editor. Set while rendering, so the
@@ -454,6 +459,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                 width: bottom ? undefined : `min(${DETAIL_SIDEBAR_WIDTH}, calc(100vw - ${leftOffset ?? primaryOffset} - 8px))`,
                 height: bottom ? getDetailPanelHeight(activePanel, height) : undefined,
                 maxHeight: "calc(100dvh - 16px)",
+                transition: railMotion,
                 "--panel-left": leftOffset ?? primaryOffset,
                 "--panel-height": `${height}px`,
             } as React.CSSProperties}

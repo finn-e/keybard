@@ -46,7 +46,7 @@ import BindingSpotlight, { useBindingSpotlight } from "./BindingSpotlight";
 import PickerTray from "./PickerTray";
 import { PickerTrayProvider, type PickerTrayValue } from "@/contexts/PickerTrayContext";
 import { effectivePickerShape, fittedTrayHeight, isLShape, pickerShapeFromSearch, standardKeysInPlay, TRAY_MOTION_MS, trayHeightFor, trayKeyboardHeight, trayReserve, trayState } from "@/lib/pickerShape";
-import { effectivePickerMode, isBindingEditorOpen } from "@/lib/bindingSpotlight";
+import { currentRailMode, effectivePickerMode, isBindingEditorOpen, RAIL_COLLAPSE_EASE, RAIL_COLLAPSE_MS } from "@/lib/bindingSpotlight";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { getBackdropLayerFromElements } from "@/utils/layer-drop-target";
 import { svalService } from "@/services/sval.service";
@@ -1099,6 +1099,7 @@ const EditorLayoutInner = () => {
     // tabs and keys), the editor, the picker and the rail's picker categories
     // stay usable; the rest of this column sits under the spotlight scrim.
     const spotlight = useBindingSpotlight();
+    const railMode = React.useMemo(currentRailMode, []);
 
     // Editor overlay state for bottom bar mode
 
@@ -1261,16 +1262,20 @@ const EditorLayoutInner = () => {
         // The L tray's reserve includes the 8px gap under it, as the side panel has.
         const panelPadding = showBottomPanel ? bottomPanelHeight : layoutTrayReserve > 0 ? layoutTrayReserve + 8 : 0;
         const panelCss = typeof panelPadding === "number" ? `${panelPadding}px` : panelPadding;
+        // ?railMode=collapse: the layout takes the rail's width in step with it (250ms; none with reduced motion).
+        const marginMotion = railMode === "collapse"
+            ? (reducedMotion ? "0ms" : `${RAIL_COLLAPSE_MS}ms ${RAIL_COLLAPSE_EASE}`)
+            : "320ms cubic-bezier(0.22, 1, 0.36, 1)";
         const paddingMotion = lShape ? (reducedMotion ? "0ms" : `${TRAY_MOTION_MS}ms cubic-bezier(0.33, 1, 0.68, 1)`) : "300ms ease-in-out";
         return {
             marginLeft: contentOffset,
-            transition: `margin-left 320ms cubic-bezier(0.22, 1, 0.36, 1), padding-bottom ${paddingMotion}`,
+            transition: `margin-left ${marginMotion}, padding-bottom ${paddingMotion}`,
             willChange: "margin-left, padding-bottom",
             // Add bottom padding when bottom panel is shown, plus whatever the
             // combo editor reserves under the keyboard.
             paddingBottom: comboEditorReserve > 0 ? `calc(${panelCss} + ${comboEditorReserve}px)` : panelPadding,
         };
-    }, [contentOffset, showBottomPanel, bottomPanelHeight, comboEditorReserve, layoutTrayReserve, lShape, reducedMotion]);
+    }, [contentOffset, showBottomPanel, bottomPanelHeight, comboEditorReserve, layoutTrayReserve, lShape, reducedMotion, railMode]);
 
     return (
         // While editing, the whole page under the scrim takes the canvas tone (data-spotlight-page).

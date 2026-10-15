@@ -125,9 +125,44 @@ export function spotStrength(search: string): SpotStrength {
     return (SPOT_STRENGTHS as readonly string[]).includes(value ?? "") ? value as SpotStrength : "medium";
 }
 
+/**
+ * What the rail does while an editor is open (owner review: ?railMode=collapse).
+ * "lift" (the default) keeps the rail's picker categories usable above its
+ * scrim. "collapse" puts the whole rail under the scrim and narrows it to its
+ * icons, giving that width to the layout; the side panel's own category strip
+ * is then the one picker selector. Read from the URL only, never saved.
+ */
+export const RAIL_MODES = ["lift", "collapse"] as const;
+export type RailMode = typeof RAIL_MODES[number];
+export const RAIL_MODE_PARAM = "railMode";
+
+export function railModeFrom(search: string): RailMode {
+    let value: string | null = null;
+    try { value = new URLSearchParams(search).get(RAIL_MODE_PARAM); } catch { value = null; }
+    return (RAIL_MODES as readonly string[]).includes(value ?? "") ? value as RailMode : "lift";
+}
+
+/** This page load's rail mode. */
+export const currentRailMode = (): RailMode =>
+    typeof window === "undefined" ? "lift" : railModeFrom(window.location.search);
+
+/** How long the rail takes to narrow and to come back (none with reduced motion). */
+export const RAIL_COLLAPSE_MS = 250;
+export const RAIL_COLLAPSE_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+
+/** The second cue on a rail click in collapse mode, at the side panel's category strip. */
+export const PICKER_STRIP_HINT = "Pick keys here";
+/** The same cue for screen readers, which cannot see where "here" is. */
+export const PICKER_STRIP_HINT_SR = "Or pick keys from the categories in the side panel.";
+
 export const SPOTLIGHT_NUDGE_EVENT = "keybard:binding-spotlight-nudge";
 
+/** Where a blocked click came from: "rail" also points at the side panel's category strip in collapse mode. */
+export type NudgeSource = "rail";
+export type NudgeDetail = { x?: number; y?: number; from?: NudgeSource } | null;
+
 /** Ask the open editor to point at its way out: pulses the back arrow and shows the callout there. */
-export function nudgeBindingEditor(at?: { x: number; y: number }) {
-    window.dispatchEvent(new CustomEvent(SPOTLIGHT_NUDGE_EVENT, { detail: at ?? null }));
+export function nudgeBindingEditor(at?: { x: number; y: number }, from?: NudgeSource) {
+    const detail: NudgeDetail = at || from ? { ...(at ?? {}), ...(from ? { from } : {}) } : null;
+    window.dispatchEvent(new CustomEvent(SPOTLIGHT_NUDGE_EVENT, { detail }));
 }
