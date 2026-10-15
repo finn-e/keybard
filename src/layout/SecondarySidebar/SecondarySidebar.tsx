@@ -21,7 +21,7 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
 import { isPanelEditorPlacement, pinnedEditorTop, type ComboEditorPlacement } from "@/lib/comboEditorPlacement";
-import { effectivePickerMode, isBindingEditorOpen, usablePickerCategories, type PickerMode } from "@/lib/bindingSpotlight";
+import { bindingEditorHeading, effectivePickerMode, isBindingEditorOpen, usablePickerCategories, type PickerMode } from "@/lib/bindingSpotlight";
 import type { CustomUIMenuItem } from "@/types/keyboard.types";
 
 import { getPanelTitle, PanelContent } from "../PanelContent";
@@ -46,7 +46,7 @@ const AlternativeHeader = ({ onBack, menus }: AlternativeHeaderProps) => {
     const { activePanel, handleCloseEditor, itemToEdit } = usePanels();
     const editing = isBindingEditorOpen(activePanel, itemToEdit);
 
-    const title = `Add Keys to ${getPanelTitle(activePanel, menus)}`;
+    const title = editing ? bindingEditorHeading(activePanel, itemToEdit) : `Add Keys to ${getPanelTitle(activePanel, menus)}`;
     const back = () => onBack ? onBack() : handleCloseEditor();
 
     return (
@@ -204,7 +204,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
         <aside
             ref={panelRef}
             tabIndex={-1}
-            aria-label={getPanelTitle(activePanel, keyboard?.menus)}
+            aria-label={showPicker ? bindingEditorHeading(activePanel, itemToEdit) : getPanelTitle(activePanel, keyboard?.menus)}
             aria-hidden={state !== "expanded"}
             inert={state !== "expanded"}
             data-binding-open={showPicker ? "true" : undefined}

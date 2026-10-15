@@ -53,7 +53,7 @@ describe('shared panel placement', () => {
   const view = render(<SecondarySidebar comboPlacement="dock" />);
   const workspace = () => screen.getByLabelText('Binding editor');
   expect(workspace()).toHaveAttribute('data-combo-placement', 'dock');
-  expect(screen.getByLabelText('Combos')).toHaveAttribute('data-combo-placement', 'dock');
+  expect(screen.getByLabelText('Editing Combo 0')).toHaveAttribute('data-combo-placement', 'dock');
   fireEvent.change(screen.getByLabelText('Binding draft'), {target: {value: 'Half-made combo'}});
   for (const [placement, bottom] of [['anchored', false], ['float', true], ['dock', true], [undefined, false]] as const) {
    view.rerender(<SecondarySidebar comboPlacement={placement} bottom={bottom} />);

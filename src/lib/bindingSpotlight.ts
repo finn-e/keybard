@@ -72,7 +72,11 @@ export function bindingEditorTitle(
     }
 }
 
-/** The open editor's kind and number, for the back-arrow callout ("Combo 0", "Tap Dance 2"). */
+/**
+ * The open editor's kind and number ("Combo 0", "Tap Dance 2"). The one
+ * owner of how the picker header and the back-arrow callout name the editor,
+ * so the two always agree. Numbers only, never a custom name.
+ */
 export function bindingEditorKind(editor: string | null | undefined, index: number | null): string {
     if (index === null || !editor) return "this editor";
     switch (editor) {
@@ -85,6 +89,10 @@ export function bindingEditorKind(editor: string | null | undefined, index: numb
         default: return "this editor";
     }
 }
+
+/** The picker panel's header while a binding editor is open ("Editing Tap Dance 3"). */
+export const bindingEditorHeading = (editor: string | null | undefined, index: number | null): string =>
+    `Editing ${bindingEditorKind(editor, index)}`;
 
 /** The callout at the back arrow when something under the spotlight scrim is clicked. */
 export const spotlightHint = (kind: string) => `Done with ${kind}? Go back to use the rest.`;

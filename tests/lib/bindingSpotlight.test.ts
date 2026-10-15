@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-    backPulseStyle, BINDING_EDITOR_PANELS, bindingEditorKind, effectivePickerMode, spotlightHint, isBindingEditorOpen, pickerCategoryForRail, usablePickerCategories,
+    backPulseStyle, BINDING_EDITOR_PANELS, bindingEditorHeading, bindingEditorKind, effectivePickerMode, spotlightHint, isBindingEditorOpen, pickerCategoryForRail, usablePickerCategories,
 } from '@/lib/bindingSpotlight';
 
 const ALL = ['keyboard', 'pointing', 'special', 'layers', 'mouse', 'tapdances', 'macros'];
@@ -45,6 +45,15 @@ describe('back arrow callout', () => {
         expect(bindingEditorKind('overrides', 4)).toBe('Override 4');
         expect(bindingEditorKind('altrepeat', 5)).toBe('Alt-Repeat 5');
         expect(bindingEditorKind('leaders', 6)).toBe('Leader 6');
+    });
+
+    it('shares the kind and number with the picker header', () => {
+        for (const editor of BINDING_EDITOR_PANELS) {
+            const kind = bindingEditorKind(editor, 3);
+            expect(bindingEditorHeading(editor, 3)).toBe(`Editing ${kind}`);
+            expect(spotlightHint(kind)).toBe(`Done with ${kind}? Go back to use the rest.`);
+        }
+        expect(bindingEditorHeading('tapdances', 3)).toBe('Editing Tap Dance 3');
     });
 
     it('picks the pulse style from ?backPulse, ring by default', () => {
