@@ -8,8 +8,6 @@ import {
     type PickerShape, type SurfaceGeometry, type TrayState,
 } from "@/lib/pickerShape";
 
-/** The CSS variable the panel (Lfull) reads to sit on top of the tray. */
-export const TRAY_HEIGHT_VAR = "--picker-tray-h";
 const EASE_OUT = (t: number) => 1 - Math.pow(1 - t, 3);
 
 /** The tray's shown height, eased toward the target; instant with reduced motion. */
@@ -95,13 +93,6 @@ export default function PickerTray({ shape, state, height, fills, panelOpen, onT
     const shown = useTrayHeight(trayVisibleHeight(state, height), reducedMotion);
     const box = usePanelBox(panelOpen);
 
-    React.useLayoutEffect(() => {
-        document.documentElement.style.setProperty(TRAY_HEIGHT_VAR, `${Math.round(shown)}px`);
-    }, [shown]);
-    React.useEffect(() => () => {
-        document.documentElement.style.removeProperty(TRAY_HEIGHT_VAR);
-    }, []);
-
     // The body's height with the keyboard in it. An empty body (another
     // category) keeps the last height, so the tray reopens at its size.
     const [bodyEl, setBodyEl] = React.useState<HTMLElement | null>(null);
@@ -130,7 +121,7 @@ export default function PickerTray({ shape, state, height, fills, panelOpen, onT
         left: box.left + 0.5, inner: box.right - 0.5, right: right - 0.5,
         top: box.top + 0.5, trayTop: bottom - shown + 0.5, bottom: bottom - 0.5,
     };
-    const trayLeft = shape === "Lfull" ? box.left : box.right;
+    const trayLeft = box.right;
     const collapsed = state === "handle";
     const visible = shown > 0.5;
 
@@ -166,7 +157,6 @@ export default function PickerTray({ shape, state, height, fills, panelOpen, onT
                     </button>
                     <span ref={headerRef} className={cn("flex items-center", collapsed && "hidden")} />
                 </div>
-                {shape === "Lfull" && <div aria-hidden="true" className="absolute top-0 h-px bg-border" style={{ left: 16, width: Math.max(0, box.right - box.left - 32) }} />}
                 <div ref={setBody} className={cn("px-4 pb-3 pt-1", fills ? "flex min-h-0 flex-1 flex-col justify-center" : "shrink-0")} data-picker-tray-body="" />
             </section>
         </>

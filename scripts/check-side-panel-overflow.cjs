@@ -6,7 +6,7 @@
  * Needs a running dev server and playwright-core with a Chromium build:
  *   npm run dev -- --port 5247
  *   node scripts/check-side-panel-overflow.cjs 5247
- * Options: [check|shots] [shapes=panel,L,Lfull] [widths=1440,1280] [themes=light,dark]
+ * Options: [check|shots] [shapes=panel,L] [widths=1440,1280] [themes=light,dark]
  * Set PLAYWRIGHT_CORE to playwright-core's path if it is not installed here,
  * CHROME_PATH to a Chrome binary, and SHOTS_DIR to save bar screenshots.
  * Exits 1 when any element overflows or an editor fails to open.
@@ -25,7 +25,7 @@ function chromePath() {
 }
 const port = process.argv[2] || "5247";
 const mode = process.argv[3] || "check";
-const shapes = (process.argv[4] || "panel,L,Lfull").split(",");
+const shapes = (process.argv[4] || "panel,L").split(",");
 const widths = (process.argv[5] || "1440,1280").split(",").map(Number);
 const themes = (process.argv[6] || "light,dark").split(",");
 const shotDir = process.env.SHOTS_DIR || path.resolve(__dirname, "../.side-panel-shots");

@@ -58,6 +58,10 @@ interface KeyboardViewInstanceProps {
     baseBadgeOffsetY?: number | null;
     onBaseBadgeOffsetY?: (offset: number | null) => void;
     isLayerDragActive?: boolean;
+    /** Scale of the keyboard so the whole layout fits the canvas width (1 when it fits). */
+    fitScale?: number;
+    /** Tighter rows above the keyboard (the L picker gives the height to its tray). */
+    compact?: boolean;
     hoveredDropLayer?: number | null;
     onLayerDropHover?: (layer: number | null) => void;
     onLayerDrop?: (layer: number) => void;
@@ -110,6 +114,8 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
     isRevealing = false,
     isHiding = false,
     stackIndex = 0,
+    fitScale = 1,
+    compact = false,
     baseBadgeOffsetY = null,
     onBaseBadgeOffsetY,
     isLayerDragActive = false,
@@ -655,7 +661,7 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
             {/* Layer Controls Row: Hide-blank-layers toggle + layer tabs + (optional) remove button */}
             {!hideLayerTabs && !isOverviewSceneActive && !show3DScene && (
                 <div
-                    className="flex items-center gap-2 pl-5 pb-2 whitespace-nowrap pointer-events-auto overflow-x-auto overscroll-x-contain [&>*]:shrink-0"
+                    className={cn("flex items-center gap-2 pl-5 whitespace-nowrap pointer-events-auto overflow-x-auto overscroll-x-contain [&>*]:shrink-0", !compact && "pb-2")}
                     style={isPrimary && multiLayerHeaderOffset > 0 ? { marginTop: -multiLayerHeaderOffset } : undefined}
                 >
                     <div className="flex items-center gap-1">
@@ -777,7 +783,7 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
                 {/* Layer Name Badge Row */}
                 <div
                     ref={badgeRowRef}
-                    className="relative z-20 pl-5 pt-[7px] pb-2 flex items-center gap-2 pointer-events-auto"
+                    className={cn("relative z-20 pl-5 flex items-center gap-2 pointer-events-auto", compact ? "pt-0 pb-0" : "pt-[7px] pb-2")}
                     style={{
                         transform: `translateY(${effectiveBadgeOffsetY}px)`,
                         transition: effectiveBadgeTransition,
@@ -853,7 +859,10 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
                                 ? `rotateX(${scenePose.rotateX}deg) rotateZ(${scenePose.rotateZ}deg) translateZ(${effectiveKeyboardTranslateZ}px)`
                                 : "rotateX(0deg) rotateZ(0deg) translateZ(0px)",
                             transition: effectiveKeyboardTransition,
+                            // The whole layout always fits the canvas width: scaled down when it would not.
+                            zoom: !show3DScene && fitScale < 1 ? fitScale : undefined,
                         }}
+                        data-layout-fit-scale={!show3DScene && fitScale < 1 ? fitScale : undefined}
                     >
                         <Keyboard
                             keyboard={keyboard}

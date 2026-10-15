@@ -1,5 +1,5 @@
 /**
- * The L-shaped picker (design fork, owner review: ?pickerShape=L|Lfull).
+ * The L-shaped picker (design fork, owner review: ?pickerShape=L).
  *
  * Only the Standard Keys keyboard needs real width; every other picker is a
  * set of small items that reflows at any width. With an L shape, the side
@@ -7,15 +7,13 @@
  * keyboard moves into a tray under the layout that is the same surface as
  * the panel, joined at the bottom-left corner.
  *
- * - "L": the tray spans under the layout only; the panel keeps full height.
- * - "Lfull": the tray spans under the panel and the layout; the panel sits
- *   above it, shorter.
+ * The tray spans under the layout only; the panel keeps full height.
  *
  * The side-panel layout only. In the bottom bar the param has no effect.
  * This module is the one owner of the shape, the tray's state and its sizes.
  */
 
-export const PICKER_SHAPES = ["rect", "L", "Lfull"] as const;
+export const PICKER_SHAPES = ["rect", "L"] as const;
 export type PickerShape = typeof PICKER_SHAPES[number];
 export const PICKER_SHAPE_PARAM = "pickerShape";
 
@@ -27,7 +25,7 @@ export function pickerShapeFromSearch(search: string): PickerShape {
     } catch {
         value = null;
     }
-    return value === "L" || value === "Lfull" ? value : "rect";
+    return value === "L" ? value : "rect";
 }
 
 /** The shape in effect: the bottom bar keeps its own tray, so the param does nothing there. */
@@ -35,7 +33,7 @@ export function effectivePickerShape(shape: PickerShape, layoutMode: string): Pi
     return layoutMode === "sidebar" ? shape : "rect";
 }
 
-export const isLShape = (shape: PickerShape): boolean => shape === "L" || shape === "Lfull";
+export const isLShape = (shape: PickerShape): boolean => shape === "L";
 
 /**
  * The tray's state.
@@ -105,9 +103,9 @@ export const TRAY_MIN_KEY_PX = 24;
 export const TRAY_MAX_KEY_PX = 64;
 export const TRAY_MAX_SCALE = TRAY_MAX_KEY_PX / QWERTY_KEY_PX;
 /** Room the layout keeps under its content, so nothing touches the tray. */
-export const LAYOUT_MARGIN_PX = 8;
-/** The canvas's size controls sit this far above its bottom edge (bottom-4). */
-export const CANVAS_CONTROLS_INSET_PX = 16;
+export const LAYOUT_MARGIN_PX = 4;
+/** With L, the canvas's size controls sit this far above its bottom edge (bottom-1). */
+export const CANVAS_CONTROLS_INSET_PX = 4;
 
 /** The tray's height for a window this tall. */
 export function trayHeightFor(viewportHeight: number): number {
@@ -215,8 +213,7 @@ const n = (v: number) => Number(v.toFixed(2));
  * The outline of the L: the panel (left..inner, top..bottom) and the tray
  * (inner..right, trayTop..bottom) as one shape, with rounded outer corners
  * and a concave fillet where the tray meets the panel. With no tray, the
- * panel's rounded rectangle. Lfull has the same outline: its panel is the
- * upper part of the vertical bar and the tray runs under it to the left edge.
+ * panel's rounded rectangle.
  */
 export function lSurfacePath(g: SurfaceGeometry, radius = SURFACE_RADIUS_PX): string {
     const { left: x0, inner: x1, right: x2, top: y0, trayTop: yT, bottom: y1 } = g;
@@ -241,4 +238,31 @@ export function lSurfacePath(g: SurfaceGeometry, radius = SURFACE_RADIUS_PX): st
         `H${n(x0 + r)}`, `A${n(r)},${n(r)} 0 0 1 ${n(x0)},${n(y1 - r)}`,
         `V${n(y0 + r)}`, `A${n(r)},${n(r)} 0 0 1 ${n(x0 + r)},${n(y0)}`, "Z",
     ].join(" ");
+}
+
+/**
+ * The layout always shows its full width: it is never cropped at the side
+ * and never scrolls sideways. These are its widths and the scale that fits it.
+ */
+export type LayoutKeySize = "default" | "medium" | "small";
+/** Largest first. */
+export const LAYOUT_KEY_SIZES: readonly LayoutKeySize[] = ["default", "medium", "small"];
+
+/**
+ * With L, Auto picks the largest key size whose layout fits the canvas width
+ * (height is not a limit: the layout keeps what it needs and the tray takes
+ * the rest). When none fits, Small, scaled down to fit (layoutFitScale).
+ */
+export function autoKeySizeForWidth(canvasWidth: number, widths: Record<LayoutKeySize, number>): LayoutKeySize {
+    for (const size of LAYOUT_KEY_SIZES) if (canvasWidth >= widths[size]) return size;
+    return "small";
+}
+
+/**
+ * The layout's scale: 1 when its laid-out width fits the canvas, otherwise
+ * exactly what fits it, continuously. Never more than 1.
+ */
+export function layoutFitScale(canvasWidth: number, layoutWidth: number): number {
+    if (!(canvasWidth > 0) || !(layoutWidth > 0) || layoutWidth <= canvasWidth) return 1;
+    return Math.floor((canvasWidth / layoutWidth) * 1000) / 1000;
 }

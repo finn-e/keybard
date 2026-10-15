@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
     CANVAS_CONTROLS_INSET_PX, effectivePickerShape, fittedTrayHeight, isLShape, LAYOUT_MARGIN_PX, layoutCanvasNeed, lSurfacePath,
     openTraySizing, pickerShapeFromSearch, standardKeysInPlay, TRAY_EDGE_PX, TRAY_HANDLE_PX, TRAY_MAX_KEY_PX, TRAY_MIN_KEY_PX,
-    QWERTY_KEY_PX, trayHeightFor, trayKeyboardHeight, trayKeyboardScale, trayReserve, trayState, trayVisibleHeight,
+    QWERTY_KEY_PX, trayHeightFor, PICKER_SHAPES, trayKeyboardHeight, trayKeyboardScale, trayReserve, trayState, trayVisibleHeight,
     type TrayInputs,
 } from "../../src/lib/pickerShape";
 
@@ -12,9 +12,9 @@ const base: TrayInputs = {
 };
 
 describe("pickerShape param", () => {
-    it("reads L and Lfull and ignores anything else", () => {
+    it("reads L and ignores anything else", () => {
         expect(pickerShapeFromSearch("?pickerShape=L")).toBe("L");
-        expect(pickerShapeFromSearch("?comboEditor=panel&pickerShape=Lfull")).toBe("Lfull");
+        expect(pickerShapeFromSearch("?comboEditor=panel&pickerShape=L")).toBe("L");
         expect(pickerShapeFromSearch("")).toBe("rect");
         expect(pickerShapeFromSearch("?pickerShape=l")).toBe("rect");
         expect(pickerShapeFromSearch("?pickerShape=bogus")).toBe("rect");
@@ -22,15 +22,21 @@ describe("pickerShape param", () => {
 
     it("has no effect in the bottom bar", () => {
         expect(effectivePickerShape("L", "bottombar")).toBe("rect");
-        expect(effectivePickerShape("Lfull", "bottombar")).toBe("rect");
         expect(effectivePickerShape("L", "sidebar")).toBe("L");
         expect(trayState({ ...base, shape: effectivePickerShape("L", "bottombar") })).toBe("hidden");
     });
 
     it("knows which shapes are L", () => {
         expect(isLShape("L")).toBe(true);
-        expect(isLShape("Lfull")).toBe(true);
         expect(isLShape("rect")).toBe(false);
+    });
+});
+
+describe("Lfull is gone", () => {
+    it("is not a shape: the param value falls back to the usual rectangle", () => {
+        expect(PICKER_SHAPES).toEqual(["rect", "L"]);
+        expect(pickerShapeFromSearch("?pickerShape=Lfull")).toBe("rect");
+        expect(trayState({ ...base, shape: pickerShapeFromSearch("?pickerShape=Lfull") })).toBe("hidden");
     });
 });
 
@@ -104,8 +110,8 @@ describe("tray sized from the layout", () => {
     const at1440 = { viewportHeight: 900, canvasTop: 74, contentHeight: 214 };
 
     it("gives the layout its content plus a margin, with the size controls clear of the keyboard", () => {
-        // Keyboard to 370, add-layer row to 414, controls 30px tall.
-        expect(layoutCanvasNeed({ contentBottom: 414, keyboardBottom: 370, controlsHeight: 30 }))
+        // Keyboard to 370, add-layer row to 400, controls 30px tall (beside the row, bottom-1).
+        expect(layoutCanvasNeed({ contentBottom: 400, keyboardBottom: 370, controlsHeight: 30 }))
             .toBe(370 + LAYOUT_MARGIN_PX + 30 + CANVAS_CONTROLS_INSET_PX);
         // Short controls: the content's bottom decides.
         expect(layoutCanvasNeed({ contentBottom: 414, keyboardBottom: 370, controlsHeight: 10 })).toBe(414 + LAYOUT_MARGIN_PX);
@@ -157,7 +163,7 @@ describe("tray key size", () => {
         expect(keyPx(680, 316)).toBeCloseTo(680 / natural.w * QWERTY_KEY_PX);
     });
 
-    it("fills the height when the tray is wide (Lfull)", () => {
+    it("fills the height when the tray is wide", () => {
         expect(keyPx(1192, 316)).toBeCloseTo(316 / natural.h * QWERTY_KEY_PX);
     });
 

@@ -2,7 +2,7 @@ import * as React from "react";
 
 /**
  * Where the Standard Keys keyboard renders with the L-shaped picker
- * (?pickerShape=L|Lfull). The tray under the layout owns two slots: its
+ * (?pickerShape=L). The tray under the layout owns two slots: its
  * header (the layout selector) and its body (the keyboard). With no tray,
  * both are null and the keyboard stays in the side panel as usual.
  */

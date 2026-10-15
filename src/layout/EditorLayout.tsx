@@ -45,7 +45,7 @@ import { EditorControls } from "./EditorControls";
 import BindingSpotlight, { SpotlightScrim, useBindingSpotlight } from "./BindingSpotlight";
 import PickerTray from "./PickerTray";
 import { PickerTrayProvider, type PickerTrayValue } from "@/contexts/PickerTrayContext";
-import { effectivePickerShape, isLShape, layoutCanvasNeed, openTraySizing, pickerShapeFromSearch, standardKeysInPlay, TRAY_MOTION_MS, trayReserve, trayState } from "@/lib/pickerShape";
+import { CANVAS_CONTROLS_INSET_PX, effectivePickerShape, isLShape, layoutCanvasNeed, layoutFitScale, openTraySizing, pickerShapeFromSearch, standardKeysInPlay, TRAY_MOTION_MS, trayReserve, trayState } from "@/lib/pickerShape";
 import { effectivePickerMode, isBindingEditorOpen } from "@/lib/bindingSpotlight";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { getBackdropLayerFromElements } from "@/utils/layer-drop-target";
@@ -924,6 +924,8 @@ const EditorLayoutInner = () => {
 
     // Track container height for dynamic spacing
     const [containerHeight, setContainerHeight] = React.useState(0);
+    // The canvas's width: the layout is scaled to fit it, never cropped.
+    const [canvasWidth, setCanvasWidth] = React.useState(0);
 
 
     // Raw keyboard widths without squeeze (used for squeeze calculation)
@@ -949,39 +951,6 @@ const EditorLayoutInner = () => {
         small: keyboardExtents.maxY * 30 + 80,
     }), [keyboardExtents]);
 
-    // Measure container dimensions and report to context for auto-sizing
-    React.useEffect(() => {
-        const container = contentContainerRef.current;
-        if (!container) return;
-
-        const measureSpace = () => {
-            const canvas = viewsScrollRef.current;
-            const containerWidth = canvas?.clientWidth ?? container.clientWidth;
-            const height = container.clientHeight;
-
-            // Track container height for dynamic spacing
-            setContainerHeight(height);
-
-            // Report measured dimensions to context for auto-sizing
-            setMeasuredDimensions({
-                containerWidth,
-                containerHeight: canvas?.clientHeight ?? height,
-                keyboardWidths,
-                keyboardHeights,
-                rawKeyboardWidths,
-            });
-        };
-
-        // Initial measurement
-        measureSpace();
-
-        // Set up ResizeObserver for dynamic updates
-        const resizeObserver = new ResizeObserver(measureSpace);
-        resizeObserver.observe(container);
-        if (viewsScrollRef.current) resizeObserver.observe(viewsScrollRef.current);
-
-        return () => resizeObserver.disconnect();
-    }, [keyboardWidths, keyboardHeights, rawKeyboardWidths, setMeasuredDimensions]);
 
 
     const { apply: applyClipboardLayer, clipboardError, clearClipboardError } = useLayerClipboardActions();
@@ -1204,12 +1173,19 @@ const EditorLayoutInner = () => {
 
     const bottomPanelHeight = getDetailPanelHeight(activePanel, dynamicBottomPanelHeight);
 
-    // L-shaped picker (design fork, ?pickerShape=L|Lfull): the Standard Keys
+    // L-shaped picker (design fork, ?pickerShape=L): the Standard Keys
     // keyboard sits in a tray under the layout, the same surface as the side
     // panel. Side-panel layout only; the bottom bar keeps its own tray.
     const requestedPickerShape = React.useMemo(() => pickerShapeFromSearch(window.location.search), []);
     const pickerShape = effectivePickerShape(requestedPickerShape, layoutMode);
     const lShape = isLShape(pickerShape) && showDetailsSidebar;
+
+    // The layout always shows its full width. Its laid-out width at the key
+    // size in use (after the finger clusters squeeze in), scaled down
+    // continuously when even that does not fit the canvas. 2D only: the 3D
+    // scene keeps its own framing.
+    const layoutNaturalWidth = rawKeyboardWidths[keyVariant] - 2 * fingerClusterSqueeze * currentUnitSize;
+    const layoutScale = isScene3D ? 1 : layoutFitScale(canvasWidth, layoutNaturalWidth);
     // Single-combo editing keeps the whole keyboard visible: the editor sits
     // below it (or floats clear of it) and reserves the height it needs here.
     const { placement: savedComboEditorPlacement } = useComboEditorPlacement();
@@ -1255,13 +1231,14 @@ const EditorLayoutInner = () => {
         const container = contentContainerRef.current;
         if (!canvas || !container) return;
         const measure = () => {
+            const canvasBox = canvas.getBoundingClientRect();
             let contentBottom = 0;
             let keyboardBottom = 0;
             for (const el of Array.from(canvas.children)) {
                 if (!(el instanceof HTMLElement)) continue;
                 const position = getComputedStyle(el).position;
                 if (position === "absolute" || position === "fixed") continue;
-                const bottom = el.offsetTop + el.offsetHeight;
+                const bottom = el.getBoundingClientRect().bottom - canvasBox.top + canvas.scrollTop;
                 contentBottom = Math.max(contentBottom, bottom);
                 if (el.hasAttribute("data-layout-keyboard")) keyboardBottom = bottom;
             }
@@ -1276,7 +1253,7 @@ const EditorLayoutInner = () => {
         for (const el of Array.from(canvas.children)) observer.observe(el);
         if (canvasControlsRef.current) observer.observe(canvasControlsRef.current);
         return () => observer.disconnect();
-    }, [measureLayout, keyVariant, activePanel, is3DMode]);
+    }, [measureLayout, keyVariant, activePanel, is3DMode, layoutScale]);
     // The tray's keyboard as laid out: the fallback size fits it.
     const [trayContentHeight, setTrayContentHeight] = React.useState(0);
     const traySizing = openTraySizing({
@@ -1296,6 +1273,42 @@ const EditorLayoutInner = () => {
         ? { header: trayHeader, body: trayBody, keyboardHeight: traySizing.keyboardHeight }
         : { header: null, body: null, keyboardHeight: 0 },
     [lShape, trayHeader, trayBody, traySizing.keyboardHeight]);
+
+    // Measure container dimensions and report to context for auto-sizing
+    React.useEffect(() => {
+        const container = contentContainerRef.current;
+        if (!container) return;
+
+        const measureSpace = () => {
+            const canvas = viewsScrollRef.current;
+            const containerWidth = canvas?.clientWidth ?? container.clientWidth;
+            const height = container.clientHeight;
+
+            // Track container height for dynamic spacing
+            setContainerHeight(height);
+            setCanvasWidth(containerWidth);
+
+            // Report measured dimensions to context for auto-sizing
+            setMeasuredDimensions({
+                containerWidth,
+                containerHeight: canvas?.clientHeight ?? height,
+                keyboardWidths,
+                keyboardHeights,
+                rawKeyboardWidths,
+                widthOnly: lShape,
+            });
+        };
+
+        // Initial measurement
+        measureSpace();
+
+        // Set up ResizeObserver for dynamic updates
+        const resizeObserver = new ResizeObserver(measureSpace);
+        resizeObserver.observe(container);
+        if (viewsScrollRef.current) resizeObserver.observe(viewsScrollRef.current);
+
+        return () => resizeObserver.disconnect();
+    }, [keyboardWidths, keyboardHeights, rawKeyboardWidths, setMeasuredDimensions, lShape]);
 
     const getPrimaryKeyboardElement = React.useCallback(
         () => sceneViewRefs.current.get("primary") ?? layerViewRefs.current.get(selectedLayer) ?? null,
@@ -1376,6 +1389,7 @@ const EditorLayoutInner = () => {
                     onToggleLayerOn={handleToggleLayerOn}
                     isAllTransparencyActive={isAllTransparencyActive}
                     onToggleAllTransparency={handleToggleAllTransparency}
+                    compact={lShape}
                 />
                 </div>
 
@@ -1394,6 +1408,12 @@ const EditorLayoutInner = () => {
                     aria-label="Keyboard canvas"
                     tabIndex={0}
                 >
+                    {import.meta.env.DEV && lShape && (
+                        // With L, the dev branch label sits beside the layer name, not in a row of its own.
+                        <div className="absolute top-[46px] right-2 text-[10px] font-medium text-slate-400 dark:text-neutral-400 select-none pointer-events-none">
+                            Branch: {gitBranchLabel}
+                        </div>
+                    )}
                     {threeDTopScrollReservePx > 0 && (
                         <div
                             aria-hidden="true"
@@ -1431,7 +1451,7 @@ const EditorLayoutInner = () => {
                                     <div
                                         data-layout-keyboard=""
                                         className="relative w-full shrink-0 flex flex-col items-center"
-                                        style={{ minWidth: rawKeyboardWidths[keyVariant] - 2 * fingerClusterSqueeze * currentUnitSize, ...(isScene3D ? {
+                                        style={{ minWidth: Math.floor(layoutNaturalWidth * layoutScale), ...(isScene3D ? {
                                             perspective: "1200px",
                                             transformStyle: "preserve-3d",
                                             paddingBottom: isOverviewSceneActive ? `${totalViewShiftY + 50}px` : undefined,
@@ -1517,6 +1537,8 @@ const EditorLayoutInner = () => {
                                                                 baseBadgeOffsetY={baseBadgeOffsetY}
                                                                 onBaseBadgeOffsetY={view.id === "primary" ? handleBaseBadgeOffsetY : undefined}
                                                                 isLayerDragActive={isDraggingLayer}
+                                                                fitScale={layoutScale}
+                                                                compact={lShape}
                                                                 hoveredDropLayer={hoveredDropLayer}
                                                                 onLayerDropHover={handleLayerDropHover}
                                                                 onLayerDrop={handleLayerDrop}
@@ -1535,7 +1557,7 @@ const EditorLayoutInner = () => {
                     {/* Add View Button */}
                     {!isMultiLayersActive && (
                         <div
-                            className="flex items-center pl-5 pb-2 w-full"
+                            className={cn("flex items-center pl-5 w-full", !lShape && "pb-2")}
                             style={{
                                 opacity: hideAddButton ? 0 : 1,
                                 transition: hideAddButton ? 'none' : `opacity 150ms ease-in-out, margin-top ${legacyForwardEntryActive ? LEGACY_FORWARD_ENTRY_MS : SCENE_SPREAD_MS}ms ${legacyForwardEntryActive ? 'ease-in-out' : 'cubic-bezier(0.22, 1, 0.36, 1)'}`,
@@ -1605,7 +1627,7 @@ const EditorLayoutInner = () => {
                 {
                     !useBottomLayout && (
                         <>
-                            <div ref={canvasControlsRef} className={cn("absolute bottom-4 right-2 max-w-[calc(100%-4rem)] flex flex-col items-end gap-1 pointer-events-none", spotlight && "z-[42]")} style={comboEditorReserve + layoutTrayReserve > 0 ? { bottom: `calc(1rem + ${comboEditorReserve + (layoutTrayReserve > 0 ? layoutTrayReserve + 8 : 0)}px)`, transition: lShape && !reducedMotion ? `bottom ${TRAY_MOTION_MS}ms cubic-bezier(0.33, 1, 0.68, 1)` : undefined } : undefined}>
+                            <div ref={canvasControlsRef} className={cn("absolute bottom-4 right-2 max-w-[calc(100%-4rem)] flex flex-col items-end gap-1 pointer-events-none", spotlight && "z-[42]")} style={lShape || comboEditorReserve > 0 ? { bottom: `${(lShape ? CANVAS_CONTROLS_INSET_PX : 16) + comboEditorReserve + (layoutTrayReserve > 0 ? layoutTrayReserve + 8 : 0)}px`, transition: lShape && !reducedMotion ? `bottom ${TRAY_MOTION_MS}ms cubic-bezier(0.33, 1, 0.68, 1)` : undefined } : undefined}>
                                 {/* While editing, the size controls stay in view above the lit canvas but dimmed and out of reach; a click on them nudges the editor. */}
                                 <div className={cn("pointer-events-auto", spotlight && "relative")} data-combo-editor-avoid data-inspector-avoid data-spotlight-dimmed={spotlight ? "" : undefined}>
                                     <div inert={spotlight} className={cn(spotlight && "opacity-40")}>
@@ -1613,7 +1635,7 @@ const EditorLayoutInner = () => {
                                     </div>
                                     {spotlight && <SpotlightScrim className="absolute inset-0 bg-transparent" />}
                                 </div>
-                                {import.meta.env.DEV && (
+                                {import.meta.env.DEV && !lShape && (
                                     <div className="text-[10px] font-medium text-slate-400 dark:text-neutral-400 select-none px-1 pointer-events-auto">
                                         Branch: {gitBranchLabel}
                                     </div>
