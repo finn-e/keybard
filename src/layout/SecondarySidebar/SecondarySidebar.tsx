@@ -21,7 +21,7 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
 import { isPanelEditorPlacement, pinnedEditorTop, type ComboEditorPlacement } from "@/lib/comboEditorPlacement";
-import { bindingEditorHeading, effectivePickerMode, isBindingEditorOpen, usablePickerCategories, type PickerMode } from "@/lib/bindingSpotlight";
+import { bindingEditorHeading, bindingEditorSubtitle, effectivePickerMode, isBindingEditorOpen, usablePickerCategories, type PickerMode } from "@/lib/bindingSpotlight";
 import type { CustomUIMenuItem } from "@/types/keyboard.types";
 
 import { getPanelTitle, PanelContent } from "../PanelContent";
@@ -44,7 +44,10 @@ interface AlternativeHeaderProps {
 
 const AlternativeHeader = ({ onBack, menus }: AlternativeHeaderProps) => {
     const { activePanel, handleCloseEditor, itemToEdit } = usePanels();
+    const { keyboard } = useKeyboard();
     const editing = isBindingEditorOpen(activePanel, itemToEdit);
+    // The item's custom name, if it has one; the header itself stays numbers-only.
+    const subtitle = editing ? bindingEditorSubtitle(activePanel, itemToEdit, keyboard?.cosmetic) : null;
 
     const title = editing ? bindingEditorHeading(activePanel, itemToEdit) : `Add Keys to ${getPanelTitle(activePanel, menus)}`;
     const back = () => onBack ? onBack() : handleCloseEditor();
@@ -65,6 +68,7 @@ const AlternativeHeader = ({ onBack, menus }: AlternativeHeaderProps) => {
                 <h2 className="text-[22px] font-semibold leading-none text-kb-ink">
                     {title}
                 </h2>
+                {subtitle && <p className="mt-1.5 text-sm leading-tight text-muted-foreground truncate max-w-[18rem]" data-binding-editor-subtitle>{subtitle}</p>}
             </div>
         </div>
     );

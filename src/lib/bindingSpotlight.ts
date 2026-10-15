@@ -94,6 +94,21 @@ export function bindingEditorKind(editor: string | null | undefined, index: numb
 export const bindingEditorHeading = (editor: string | null | undefined, index: number | null): string =>
     `Editing ${bindingEditorKind(editor, index)}`;
 
+/**
+ * The open item's custom name, shown under the picker header; null when it
+ * has none. Tap dances and macros are the kinds that store a name.
+ */
+export function bindingEditorSubtitle(
+    editor: string | null | undefined,
+    index: number | null,
+    cosmetic?: { macros?: Record<string, string>; tapdances?: Record<string, string> },
+): string | null {
+    if (index === null || !editor) return null;
+    const names = editor === "macros" ? cosmetic?.macros : editor === "tapdances" ? cosmetic?.tapdances : undefined;
+    const name = names?.[String(index)]?.trim();
+    return name ? name : null;
+}
+
 /** The callout at the back arrow when something under the spotlight scrim is clicked. */
 export const spotlightHint = (kind: string) => `Done with ${kind}? Go back to use the rest.`;
 

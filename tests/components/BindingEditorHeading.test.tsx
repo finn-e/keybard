@@ -9,7 +9,8 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock('@/components/ui/sidebar', () => ({ useSidebar: () => ({ state: 'collapsed' }) }));
 vi.mock('@/contexts/PanelsContext', () => ({ usePanels: () => state }));
-vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ keyboard: null }) }));
+const kb = vi.hoisted(() => ({ keyboard: null as null | { cosmetic?: Record<string, Record<string, string>> } }));
+vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => kb }));
 vi.mock('../../src/layout/SecondarySidebar/components/BindingEditor/BindingEditorContainer', () => ({
     default: ({ shouldClose }: { shouldClose?: boolean }) => <p data-testid="editor" data-should-close={String(!!shouldClose)}>Editor</p>,
 }));
@@ -35,7 +36,7 @@ vi.mock('../../src/layout/SecondarySidebar/Panels/QuickStartPanel', () => ({defa
 vi.mock('../../src/layout/SecondarySidebar/Panels/SpecialKeysPanel/SpecialKeysPanel', () => ({default: () => <p>SpecialKeysPanel/SpecialKeysPanel</p>}));
 
 beforeAll(() => { vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); });
-afterEach(() => { cleanup(); vi.clearAllMocks(); state.activePanel = 'combos'; state.itemToEdit = 2; });
+afterEach(() => { cleanup(); vi.clearAllMocks(); state.activePanel = 'combos'; state.itemToEdit = 2; kb.keyboard = null; });
 
 const visibleHeadings = () => screen.getAllByRole('heading', { level: 2 }).filter(h => !h.closest('[hidden], [inert]')).map(h => h.textContent);
 
@@ -66,5 +67,38 @@ describe('picker header while a binding editor is open', () => {
         render(<TooltipProvider><SecondarySidebar /></TooltipProvider>);
         expect(visibleHeadings()).toEqual(['Tap Dance Keys']);
         expect(screen.getByRole('complementary', { hidden: true })).toHaveAttribute('aria-label', 'Tap Dance Keys');
+    });
+
+    const subtitles = () => [...document.querySelectorAll('[data-binding-editor-subtitle]')].filter(p => !p.closest('[hidden], [inert]')).map(p => p.textContent);
+
+    it.each([
+        ['tapdances', 'tapdances', 'Shift or caps'],
+        ['macros', 'macros', 'Email signature'],
+    ])('%s shows its custom name under the header', (panel, store, name) => {
+        state.activePanel = panel;
+        state.itemToEdit = 3;
+        kb.keyboard = { cosmetic: { [store]: { '3': name } } };
+        for (const placement of ['half', 'panel'] as const) {
+            const { unmount } = render(<TooltipProvider><SecondarySidebar comboPlacement={placement} /></TooltipProvider>);
+            expect(subtitles()).toEqual([name]);
+            expect(visibleHeadings()).toEqual([panel === 'macros' ? 'Editing Macro 3' : 'Editing Tap Dance 3']);
+            unmount();
+        }
+    });
+
+    it.each(['combos', 'tapdances', 'macros', 'overrides', 'altrepeat', 'leaders'])('%s shows no subtitle without a custom name', panel => {
+        state.activePanel = panel;
+        state.itemToEdit = 3;
+        kb.keyboard = { cosmetic: { macros: { '4': 'Other' }, tapdances: { '3': '   ' } } };
+        render(<TooltipProvider><SecondarySidebar comboPlacement="panel" /></TooltipProvider>);
+        expect(subtitles()).toEqual([]);
+    });
+
+    it('shows no subtitle when no editor is open', () => {
+        state.activePanel = 'macros';
+        state.itemToEdit = null;
+        kb.keyboard = { cosmetic: { macros: { '3': 'Email signature' } } };
+        render(<TooltipProvider><SecondarySidebar comboPlacement="panel" /></TooltipProvider>);
+        expect(document.querySelector('[data-binding-editor-subtitle]')).toBeNull();
     });
 });
