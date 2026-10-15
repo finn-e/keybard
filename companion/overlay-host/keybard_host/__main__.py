@@ -514,9 +514,9 @@ class Host(QObject):
         for name, action in self.highlight_actions.items(): action.setChecked(config['effect'] == EFFECTS[name]['effect'])
         for name, action in self.hands_actions.items(): action.setChecked(config['hands'] == name)
         self.held_action.setChecked(config['highlightPressed'])
-        self.pointing_show_action.setChecked(config['showPointing'])
-        self.pointing_pills_action.setChecked(config['pointingPills'])
-        self.cursor_multiplier_action.setChecked(config['cursorMultiplier'])
+        for name, key in (('pointing_show_action', 'showPointing'), ('pointing_pills_action', 'pointingPills'), ('cursor_multiplier_action', 'cursorMultiplier')):
+            action = getattr(self, name, None)
+            if action is not None: action.setChecked(config[key])
 
     def sample_backdrop(self):
         """Adaptive contrast: send the overlay what's on screen under it; tell it to stop when off."""
