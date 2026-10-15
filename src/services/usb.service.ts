@@ -277,13 +277,96 @@ export class SvilUSB {
 
   public onDisconnect?: () => void;
 
+  // The firmware updater (src/services/updater) follows client ID changes and
+  // disconnects without taking over onDisconnect, which KeyboardContext owns.
+  private clientRenewedListeners = new Set<(id: number, old: number) => void>();
+  private disconnectListeners = new Set<() => void>();
+
   private handleDisconnect = (event: HIDConnectionEvent) => {
     if (this.device && event.device === this.device) {
       console.log("Device disconnected:", event.device.productName);
       if (this.onDisconnect) this.onDisconnect();
+      for (const listener of [...this.disconnectListeners]) listener();
       this.close();
     }
   };
+
+  /** Called after every new client ID, with the new and the old ID. Returns an unsubscribe. */
+  onClientRenewed(listener: (id: number, old: number) => void): () => void {
+    this.clientRenewedListeners.add(listener);
+    return () => { this.clientRenewedListeners.delete(listener); };
+  }
+
+  /** Called when the open device goes away. Returns an unsubscribe. */
+  addDisconnectListener(listener: () => void): () => void {
+    this.disconnectListeners.add(listener);
+    return () => { this.disconnectListeners.delete(listener); };
+  }
+
+  /** Whether a device is open. */
+  isOpen(): boolean {
+    return !!this.device;
+  }
+
+  /** The client ID wrapped commands carry now (0 before the first bootstrap). */
+  currentClientId(): number {
+    return this.clientId;
+  }
+
+  /** Bootstrap a client ID if there's none or it's due; returns it. */
+  async ensureClient(): Promise<number> {
+    await this.ensureClientId();
+    return this.clientId;
+  }
+
+  /** Drop the current client ID and take a fresh one now; returns it. */
+  async renewClient(): Promise<number> {
+    if (!this.bootstrapPromise) {
+      this.clientId = 0;
+      this.clientIdExpiry = 0;
+    }
+    await this.ensureClientId();
+    return this.clientId;
+  }
+
+  /**
+   * One wrapped VIA request for the firmware updater, with no retry of any kind:
+   * a rejected client ID throws ClientIdRejectedError, so the updater can take a
+   * new ID and REBIND its session before it sends anything else. Resolves with
+   * the whole reply report, the first one for this client whose bytes 6..
+   * repeat payload[0..echo).
+   */
+  async sendUpdaterReport(payload: number[], echo = 3, timeoutMs = 1000): Promise<Uint8Array> {
+    if (!this.device) throw new Error("USB device not connected");
+    await this.ensureClientId();
+    const clientId = this.clientId;
+    const message = this.buildWrappedMessage(VIA_PREFIX, payload);
+    const operation = this.queue.then(() => new Promise<Uint8Array>((resolve, reject) => {
+      if (!this.device) { reject(new Error("USB device not connected")); return; }
+      const timeoutId = setTimeout(() => reject(new Error("USB Command Timeout")), timeoutMs);
+      this.listener = (data: ArrayBuffer) => {
+        const u8 = new Uint8Array(data);
+        if (u8[0] !== WRAPPER_PREFIX) return;
+        const respClientId = (u8[1] | (u8[2] << 8) | (u8[3] << 16) | (u8[4] << 24)) >>> 0;
+        if (respClientId !== clientId >>> 0) return;
+        if (u8[5] === CLIENT_ERROR_PROTOCOL) {
+          clearTimeout(timeoutId);
+          reject(new ClientIdRejectedError(u8[6]));
+          return;
+        }
+        if (u8[5] !== VIA_PREFIX) return;
+        for (let i = 0; i < echo; i++) if (u8[6 + i] !== payload[i]) return;
+        clearTimeout(timeoutId);
+        resolve(new Uint8Array(u8));
+      };
+      this.device.sendReport(0, message as BufferSource).catch((err) => {
+        clearTimeout(timeoutId);
+        reject(err);
+      });
+    }));
+    this.queue = operation.then(() => undefined).catch(() => undefined);
+    return operation;
+  }
 
   async open(filters: HIDDeviceFilter[]): Promise<boolean> {
     const device = await SvilUSB.requestDevice(filters);
@@ -507,6 +590,7 @@ export class SvilUSB {
           throw new Error(`Bootstrap failed with error code ${errorCode}`);
         }
 
+        const previousClientId = this.clientId;
         this.clientId = newClientId;
         this.clientTtl = ttl;
 
@@ -519,6 +603,9 @@ export class SvilUSB {
 
         this.bootstrapped = true;
         console.log(`Svil client ID bootstrapped: 0x${this.clientId.toString(16)}, TTL: ${this.clientTtl}s`);
+        for (const listener of [...this.clientRenewedListeners]) {
+          try { listener(this.clientId, previousClientId); } catch (e) { console.error("Client ID listener failed:", e); }
+        }
         return true;
       }
     }

@@ -19,13 +19,10 @@ const SVIL_FLAG_DEFAULT_LAYER_STATE = 0x40;
 const SVIL_FLAG2_DEFAULT_LAYER_SET = 0x01;
 
 /**
- * Newest stable Svalboard QMK release this Keybard knows. Firmware releases are
- * vLaunch<N> tags (vLaunch, vLaunch2, ...), shared with Keybard Host and Keybard;
- * vLaunch<N>.<M> tags (vLaunch2.3) are Keybard and Keybard Host releases only, and
- * vNext<N> tags are bleeding-edge firmware prereleases, which identify here as
- * "vLaunch2 or later". Bump this, and teach identifyFirmwareRelease how to tell
- * the new release apart, when a new vLaunch<N> firmware ships. Baked into the
- * build: no network lookup.
+ * The release identifyFirmwareRelease names boards without an updater after: vLaunch2
+ * is the last release told apart by its GET_INFO replies alone.
+ * @deprecated The releases Keybard installs are the carried list in
+ * constants/firmware-releases.ts, and a board with an updater reports its own tag.
  */
 export const LATEST_FIRMWARE_RELEASE = "vLaunch2";
 
@@ -61,21 +58,6 @@ export function identifyFirmwareRelease(kb: Pick<KeyboardInfo, "svil_proto" | "f
     }
     if (((kb.feature_flags2 ?? 0) & SVIL_FLAG2_DEFAULT_LAYER_SET) === 0) return { name: "vLaunch", orLater: false, outdated: true };
     return { name: "vLaunch2", orLater: true, outdated: false };
-}
-
-/**
- * "rc0": vRC0, without context or default layer reporting (the overlay can't follow layers).
- * "rc": vRC1 or vRC2 (the two look identical over HID).
- * "launch": vLaunch, before the storage fixes and default-layer setting of vLaunch2.
- */
-export type FirmwareUpdateNotice = "rc0" | "rc" | "launch";
-
-/** Which "newer firmware available" notice a connected board gets, if any. */
-export function firmwareUpdateNotice(kb: Pick<KeyboardInfo, "svil_proto" | "feature_flags" | "feature_flags2" | "keycode_version_reported">): FirmwareUpdateNotice | null {
-    const release = identifyFirmwareRelease(kb);
-    if (!release?.outdated) return null;
-    if (release.name === "vRC0") return "rc0";
-    return release.name === "vLaunch" ? "launch" : "rc";
 }
 
 /**
