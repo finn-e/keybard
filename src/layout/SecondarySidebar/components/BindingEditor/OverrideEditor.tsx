@@ -9,17 +9,22 @@ import { DragItem } from "@/contexts/DragContext";
 import { cn } from "@/lib/utils";
 
 import OverrideModifierSelector from "./OverrideModifierSelector";
+import { KeyOverrideOptions, prepareOverrideForEdit, setOverrideTriggerMods } from "@/utils/key-override";
+import type { KeyboardInfo, KeyOverrideEntry } from "@/types/keyboard.types";
 
-const TABS = ["Trigger", "Negative", "Suspended"] as const;
+const TABS = ["Trigger", "Negative", "Suppressed"] as const;
 type TabType = typeof TABS[number];
 
+// Bit meanings: QMK ko_option_t (quantum/process_keycode/process_key_override.h).
+// "inverted" options show the opposite of the stored bit, so each label is
+// true when its toggle is on.
 const OPTIONS = [
-    { label: "Active on trigger down", bit: 1 << 0 },
-    { label: "Active on mod down", bit: 1 << 1 },
-    { label: "Active on negative mod down", bit: 1 << 2 },
-    { label: "Active trigger mod activates", bit: 1 << 3 },
-    { label: "Reregister trigger on deactivate", bit: 1 << 4 },
-    { label: "No unregister on other key down", bit: 1 << 5 },
+    { label: "Activate on Trigger Down", bit: KeyOverrideOptions.ACTIVATION_TRIGGER_DOWN, inverted: false },
+    { label: "Activate on Mod Down", bit: KeyOverrideOptions.ACTIVATION_REQUIRED_MOD_DOWN, inverted: false },
+    { label: "Activate on Negative Mod Up", bit: KeyOverrideOptions.ACTIVATION_NEGATIVE_MOD_UP, inverted: false },
+    { label: "Any One Trigger Mod", bit: KeyOverrideOptions.ONE_MOD, inverted: false },
+    { label: "Re-press Trigger Key", bit: KeyOverrideOptions.NO_REREGISTER_TRIGGER, inverted: true },
+    { label: "Stay Active on Other Keys", bit: KeyOverrideOptions.NO_UNREGISTER_ON_OTHER_KEY_DOWN, inverted: false },
 ] as const;
 
 
@@ -58,18 +63,27 @@ const OverrideEditor: FC = () => {
         switch (activeTab) {
             case "Trigger": return override.trigger_mods;
             case "Negative": return override.negative_mod_mask;
-            case "Suspended": return override.suppressed_mods;
+            case "Suppressed": return override.suppressed_mods;
         }
+    };
+
+    // Every edit goes through here, so a blank slot picks up the new
+    // override defaults (on, QMK default activations, all layers) on its
+    // first change, and opening an empty override changes nothing.
+    const cloneForEdit = (): [KeyboardInfo, KeyOverrideEntry] => {
+        const updatedKeyboard = structuredClone(keyboard!);
+        const ovr = updatedKeyboard.key_overrides![overrideIndex];
+        prepareOverrideForEdit(ovr, updatedKeyboard.layers);
+        return [updatedKeyboard, ovr];
     };
 
     const updateMask = async (newMask: number) => {
         if (!keyboard || !override) return;
-        const updatedKeyboard = structuredClone(keyboard);
-        const ovr = updatedKeyboard.key_overrides![overrideIndex];
+        const [updatedKeyboard, ovr] = cloneForEdit();
         switch (activeTab) {
-            case "Trigger": ovr.trigger_mods = newMask; break;
+            case "Trigger": setOverrideTriggerMods(ovr, newMask); break;
             case "Negative": ovr.negative_mod_mask = newMask; break;
-            case "Suspended": ovr.suppressed_mods = newMask; break;
+            case "Suppressed": ovr.suppressed_mods = newMask; break;
         }
         setKeyboard(updatedKeyboard);
         await persistBinding(updatedKeyboard, "override", overrideIndex);
@@ -77,22 +91,18 @@ const OverrideEditor: FC = () => {
 
     const updateOption = async (bit: number, checked: boolean) => {
         if (!keyboard || !override) return;
-        const updatedKeyboard = structuredClone(keyboard);
-        let options = updatedKeyboard.key_overrides![overrideIndex].options;
-        if (checked) options |= bit;
-        else options &= ~bit;
-        updatedKeyboard.key_overrides![overrideIndex].options = options;
+        const [updatedKeyboard, ovr] = cloneForEdit();
+        if (checked) ovr.options |= bit;
+        else ovr.options &= ~bit;
         setKeyboard(updatedKeyboard);
         await persistBinding(updatedKeyboard, "override", overrideIndex);
     };
 
     const updateLayer = async (layer: number, active: boolean) => {
         if (!keyboard || !override) return;
-        const updatedKeyboard = structuredClone(keyboard);
-        let layers = updatedKeyboard.key_overrides![overrideIndex].layers;
-        if (active) layers |= (1 << layer);
-        else layers &= ~(1 << layer);
-        updatedKeyboard.key_overrides![overrideIndex].layers = layers;
+        const [updatedKeyboard, ovr] = cloneForEdit();
+        if (active) ovr.layers = (ovr.layers | (1 << layer)) >>> 0;
+        else ovr.layers = (ovr.layers & ~(1 << layer)) >>> 0;
         setKeyboard(updatedKeyboard);
         await persistBinding(updatedKeyboard, "override", overrideIndex);
     };
@@ -114,8 +124,7 @@ const OverrideEditor: FC = () => {
             if (sourceSlot === targetSlot) return;
 
             if (!keyboard || !override) return;
-            const updatedKeyboard = structuredClone(keyboard);
-            const ovr = updatedKeyboard.key_overrides![overrideIndex];
+            const [updatedKeyboard, ovr] = cloneForEdit();
 
             const sourceVal = sourceSlot === "trigger" ? ovr.trigger : ovr.replacement;
             const targetVal = targetSlot === "trigger" ? ovr.trigger : ovr.replacement;
@@ -135,8 +144,7 @@ const OverrideEditor: FC = () => {
 
     const updateOverrideAssignment = async (slot: "trigger" | "replacement", keycode: string) => {
         if (!keyboard || !override) return;
-        const updatedKeyboard = structuredClone(keyboard);
-        const ovr = updatedKeyboard.key_overrides![overrideIndex];
+        const [updatedKeyboard, ovr] = cloneForEdit();
         if (slot === "trigger") ovr.trigger = keycode;
         else ovr.replacement = keycode;
         setKeyboard(updatedKeyboard);
@@ -245,8 +253,9 @@ const OverrideEditor: FC = () => {
                             <span className="text-sm font-medium text-slate-700 dark:text-neutral-200">{opt.label}</span>
                         </div>
                         <OnOffToggle
-                            value={(override.options & opt.bit) !== 0}
-                            onToggle={(val) => updateOption(opt.bit, val)}
+                            label={opt.label}
+                            value={((override.options & opt.bit) !== 0) !== opt.inverted}
+                            onToggle={(val) => updateOption(opt.bit, val !== opt.inverted)}
                         />
                     </div>
                 ))}
