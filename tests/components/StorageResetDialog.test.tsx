@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act } from 'react';
 import { StorageResetDialog, OPEN_BACKUPS_EVENT } from '../../src/components/StorageResetDialog';
+import { noteResetNoticeCleared, sessionFlowStore } from '../../src/services/updater/flow';
 
-const keyboardContext = vi.hoisted(() => ({ isConnected: true, keyboard: { kbid: 'abc', storage_reset: true } as Record<string, unknown>, setKeyboard: vi.fn() }));
+const keyboardContext = vi.hoisted(() => ({ isConnected: true, connectionSessionId: 1, keyboard: { kbid: 'abc', storage_reset: true } as Record<string, unknown>, setKeyboard: vi.fn() }));
 vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => keyboardContext }));
 const svc = vi.hoisted(() => ({ clearStorageReset: vi.fn() }));
 vi.mock('@/services/keyboard.service', () => ({ keyboardService: svc }));
@@ -25,6 +27,8 @@ describe('StorageResetDialog', () => {
         backups.snapshots = [];
         backups.board = { key: 'sval:1', name: 'Kip' };
         sessionStorage.clear();
+        keyboardContext.connectionSessionId = 1;
+        noteResetNoticeCleared(Symbol('no connection'));
     });
 
     it('tells the user to reload their layout file when there is no backup, and clears the board notice on OK', async () => {
@@ -109,6 +113,48 @@ describe('StorageResetDialog', () => {
             sessionStorage.setItem('keybard:firmware-update', JSON.stringify({ phase: 'running' }));
             render(<StorageResetDialog />);
             expect(screen.queryByText('New firmware reset your settings')).toBeNull();
+        });
+
+        it("stays out of the way while the update's dialog shows its result or a failure", () => {
+            keyboardContext.keyboard = { kbid: 'abc', storage_build_reset: true };
+            backups.snapshots = [snap('new', 2000)];
+            for (const phase of ['result', 'failed']) {
+                sessionStorage.setItem('keybard:firmware-update', JSON.stringify({ phase }));
+                const { unmount } = render(<StorageResetDialog />);
+                expect(screen.queryByText('New firmware reset your settings')).toBeNull();
+                unmount();
+            }
+        });
+
+        it('never asks after the update cleared the notice (0x2A) on this connection, though the loaded layout still shows it', async () => {
+            keyboardContext.keyboard = { kbid: 'abc', storage_build_reset: true };
+            keyboardContext.connectionSessionId = 7;
+            backups.snapshots = [snap('new', 2000)];
+            sessionStorage.setItem('keybard:firmware-update', JSON.stringify({ phase: 'result' }));
+            render(<StorageResetDialog />);
+            act(() => noteResetNoticeCleared(7));
+            // Done closes the update's dialog.
+            act(() => sessionFlowStore().clear());
+            expect(screen.queryByText('New firmware reset your settings')).toBeNull();
+            expect(svc.clearStorageReset).not.toHaveBeenCalled();
+        });
+
+        it("asks once the update's dialog is closed when the notice is still set (the update stopped before 0x2A)", async () => {
+            keyboardContext.keyboard = { kbid: 'abc', storage_build_reset: true };
+            backups.snapshots = [snap('new', 2000)];
+            sessionStorage.setItem('keybard:firmware-update', JSON.stringify({ phase: 'failed' }));
+            render(<StorageResetDialog />);
+            expect(screen.queryByText('New firmware reset your settings')).toBeNull();
+            act(() => sessionFlowStore().clear());
+            await waitFor(() => expect(screen.getByText('New firmware reset your settings')).toBeTruthy());
+        });
+
+        it('a reset on a later connection asks again', () => {
+            keyboardContext.keyboard = { kbid: 'abc', storage_build_reset: true };
+            keyboardContext.connectionSessionId = 8;
+            noteResetNoticeCleared(7);
+            render(<StorageResetDialog />);
+            expect(screen.getByText('New firmware reset your settings')).toBeTruthy();
         });
 
         it('bit 0 keeps its own dialog and gains the same button', () => {

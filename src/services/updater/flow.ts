@@ -132,6 +132,13 @@ export interface FlowStore {
 
 const KEY = "keybard:firmware-update";
 
+/** Sent on window when this tab's saved update changes, or the flow clears the reset notice. */
+export const FLOW_STATE_EVENT = "keybard:firmware-update-state";
+
+function announce() {
+    try { if (typeof window !== "undefined") window.dispatchEvent(new Event(FLOW_STATE_EVENT)); } catch { /* nothing listens */ }
+}
+
 function toB64(bytes: Uint8Array): string {
     let s = "";
     for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
@@ -162,7 +169,14 @@ export function sessionFlowStore(storage: Storage | null = typeof sessionStorage
                 return { state, files, backupSvil: get(`${KEY}:backup`) };
             } catch { return null; }
         },
-        save(state) { set(KEY, JSON.stringify(state)); },
+        save(state) {
+            const before = get(KEY);
+            set(KEY, JSON.stringify(state));
+            // Only a change of update or phase matters to listeners, not each progress step.
+            let prev: Pick<FlowState, "id" | "phase"> | null = null;
+            try { prev = before ? JSON.parse(before) as FlowState : null; } catch { prev = null; }
+            if (prev?.id !== state.id || prev?.phase !== state.phase) announce();
+        },
         saveFiles(files, backupSvil) {
             const raw: Partial<Record<Hand, string>> = {};
             // The backup first: it's small, and a full storage must not cost the restore.
@@ -170,14 +184,42 @@ export function sessionFlowStore(storage: Storage | null = typeof sessionStorage
             for (const h of [0, 1] as Hand[]) if (files[h]) raw[h] = toB64(files[h]!);
             set(`${KEY}:files`, JSON.stringify(raw));
         },
-        clear() { del(KEY); del(`${KEY}:files`); del(`${KEY}:backup`); },
+        clear() { del(KEY); del(`${KEY}:files`); del(`${KEY}:backup`); announce(); },
     };
 }
 
-/** Whether this tab has an update in flight (the flow owns any reset notice then). */
+/** Whether this tab has an update in flight. */
 export function updateInFlight(store: FlowStore = sessionFlowStore()): boolean {
     const saved = store.load();
     return !!saved && saved.state.phase === "running";
+}
+
+/**
+ * Whether this tab's update owns the board's reset notice: while it runs, and while its
+ * dialog shows the result or the failure. The flow acts on the notice itself (the restore,
+ * the defaults or the wipe, then 0x2A), so the reset dialog must not ask as well.
+ */
+export function updateOwnsResetNotice(storage: Storage | null = typeof sessionStorage === "undefined" ? null : sessionStorage): boolean {
+    let raw: string | null = null;
+    try { raw = storage?.getItem(KEY) ?? null; } catch { return false; }
+    if (!raw) return false;
+    try {
+        const phase = (JSON.parse(raw) as FlowState).phase;
+        return phase === "running" || phase === "result" || phase === "failed";
+    } catch { return false; }
+}
+
+let clearedSession: { session: unknown } | null = null;
+
+/** The update sent 0x2A on this connection: the layout loaded before it still shows the notice. */
+export function noteResetNoticeCleared(session: unknown): void {
+    clearedSession = { session };
+    announce();
+}
+
+/** Whether an update cleared the reset notice on this connection. */
+export function resetNoticeClearedOn(session: unknown): boolean {
+    return !!clearedSession && clearedSession.session === session;
 }
 
 export function memoryFlowStore(): FlowStore & { snapshot: string | null } {
@@ -201,6 +243,12 @@ class Stop extends Error {
     constructor(readonly failure: Failure) {
         super(failure.id);
     }
+}
+
+/** Development builds log the flow's steps, so a hardware run shows where it went. */
+const TRACE = !!import.meta.env?.DEV && import.meta.env?.MODE !== "test";
+function trace(...args: unknown[]) {
+    if (TRACE) console.info("[firmware]", ...args);
 }
 
 const POLL_MS = 250;
@@ -310,6 +358,8 @@ export class UpdateFlow {
     }
 
     private update(patch: Partial<FlowState>) {
+        if (patch.step && patch.step !== this.state.step) trace(`step ${patch.step}`);
+        if (patch.phase && patch.phase !== this.state.phase) trace(`phase ${patch.phase}`, patch.failure ?? patch.result ?? "");
         this.state = { ...this.state, ...patch };
         this.store.save(this.state);
         for (const l of [...this.listeners]) l(this.state);
@@ -356,6 +406,7 @@ export class UpdateFlow {
         const release = await this.host.holdLocks?.().catch(() => undefined);
         try {
             if (this.state.phase !== "running") return this.state;
+            trace(this.state.step === "start" ? "start" : `resume at ${this.state.step}`, { target: this.state.target, afterwards: this.state.afterwards, toTag: this.state.toTag });
             if (this.state.step === "start") await this.install();
             else await this.resume();
             await this.after();
@@ -367,6 +418,7 @@ export class UpdateFlow {
                 return this.state;
             }
             const failure = error instanceof Stop ? error.failure : this.unexpected(error);
+            trace(`stopped at ${this.state.step}`, failure);
             await this.abortQuietly();
             this.update({ phase: "failed", step: "failed", failure, finishedAt: this.now(), rows: this.state.rows.map((r) => (r.stage === "done" ? r : { ...r, stage: "stopped", progress: null })) });
         } finally {
@@ -576,7 +628,9 @@ export class UpdateFlow {
         const gone = this.now() + 5000;
         while (this.host.transport()?.connected() && this.now() < gone) await this.host.clock.sleep(POLL_MS);
         const t0 = this.now();
+        trace("waiting for the keyboard to come back");
         const t = await this.host.waitForDevice(RECONNECT_MS);
+        trace(t ? `keyboard back after ${this.now() - t0} ms` : "keyboard didn't come back");
         if (!t) throw new Stop({ id: "F14", hand: usbHand });
         this.update({ measurements: { ...this.state.measurements, reconnect_ms: this.now() - t0 } });
         this.row(usbHand, { stage: "reconnecting", progress: null });
@@ -637,6 +691,7 @@ export class UpdateFlow {
 
         // Afterwards, as chosen on the sheet, with no prompt.
         let flags = await this.host.readStorageFlags();
+        trace(`storage flags 0x${flags.toString(16)}`, { tags });
         if (flags & 0x02) throw new Stop({ id: "F17" });
         let trimmed: string[] = [];
         // "Put my layout back" with the backup lost (a reload with storage full): never reset
@@ -658,6 +713,7 @@ export class UpdateFlow {
                 this.step("settings-reset");
                 this.row(usbHand, { stage: "restarting", progress: null });
                 const r = await c.settingsReset(usbHand, SETTINGS_RESET_BOTH, SETTINGS_RESET_BLANK);
+                trace(`SETTINGS_RESET blank: status ${r.status}`);
                 if (r.status !== Status.OK) {
                     const why = r.status === Status.INVALID ? "the keyboard refused the request"
                         : r.status === Status.UNAVAILABLE ? "the other half didn't answer, or its firmware can't wipe to a blank board" : "the keyboard was busy";
@@ -667,9 +723,12 @@ export class UpdateFlow {
                 await this.reconnect();
                 c = this.connection();
                 flags = await this.host.readStorageFlags();
+                trace(`storage flags after the wipe 0x${flags.toString(16)}`);
                 if (!(flags & 0x04)) console.warn("[firmware] blank wipe, but the reset notice isn't set");
             }
-            if (this.host.keymapBlank && !(await this.host.keymapBlank())) {
+            const blank = this.host.keymapBlank ? await this.host.keymapBlank() : true;
+            trace(`keymap blank: ${blank}`);
+            if (!blank) {
                 // A half with USB on a build from before D44 ignores the mode and resets to defaults.
                 throw new Stop({ id: "F20", detail: "The new firmware is installed, but the keyboard came back with keys still set. Its firmware may not wipe to a blank board." });
             }
@@ -678,6 +737,7 @@ export class UpdateFlow {
             this.step("settings-reset");
             this.row(usbHand, { stage: "restarting", progress: null });
             const r = await c.settingsReset(usbHand, SETTINGS_RESET_BOTH);
+            trace(`SETTINGS_RESET defaults: status ${r.status}`);
             if (r.status !== Status.OK) throw new Stop({ id: "F16", detail: `The keyboard couldn't reset its settings (${r.status === Status.UNAVAILABLE ? "the other half didn't answer" : "busy"}).` });
             this.update({ settingsResetSent: true });
             await this.reconnect();
@@ -687,6 +747,7 @@ export class UpdateFlow {
         }
         // Last: tell the board the reset was acted on.
         await this.host.clearStorageReset();
+        trace("0x2A sent: reset notice cleared");
         this.update({ sent2A: true });
         for (const r of this.state.rows) this.row(r.hand, { stage: "done", progress: 1 });
         this.update({

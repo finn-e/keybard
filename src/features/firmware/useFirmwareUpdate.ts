@@ -47,36 +47,73 @@ export interface UseFirmwareUpdateOptions {
     maxSvalProtocol?: number;
 }
 
+/** The tab's own store: one per tab, so a remounted controller finds the same update. */
+let tabStore: FlowStore | null = null;
+
+/**
+ * The flow running in this page, per store. The editor unmounts while the keyboard
+ * reconnects (it shows the connect screen until the layout loads), so the controller
+ * remounts mid-update, twice for a wipe. The remounted one shows this flow; it never
+ * starts a second copy from the saved state, which would act on the board alongside it.
+ */
+const liveFlows = new WeakMap<FlowStore, UpdateFlow>();
+/** What the last sheet installed, per store, for Try again and Finish update after a remount. */
+const lastSources = new WeakMap<FlowStore, { source: InstallSource; onlyHand?: Hand }>();
+
 export function useFirmwareUpdate(host: FirmwareUiHost | null, o: UseFirmwareUpdateOptions = {}) {
     const [ui, setUi] = useState<UpdateUi>({ kind: "idle" });
-    const storeRef = useRef<FlowStore>(o.store ?? sessionFlowStore());
+    const storeRef = useRef<FlowStore>(o.store ?? (tabStore ??= sessionFlowStore()));
     const flowRef = useRef<UpdateFlow | null>(null);
+    const unsubscribeRef = useRef<(() => void) | null>(null);
     const hostRef = useRef(host);
     hostRef.current = host;
-    const lastSource = useRef<{ source: InstallSource; onlyHand?: Hand } | null>(null);
+    const lastSource = useRef<{ source: InstallSource; onlyHand?: Hand } | null>(lastSources.get(storeRef.current) ?? null);
     const releases = o.releases ?? CARRIED_RELEASES;
 
-    const runFlow = useCallback((flow: UpdateFlow) => {
+    const attach = useCallback((flow: UpdateFlow) => {
+        unsubscribeRef.current?.();
         flowRef.current = flow;
+        liveFlows.set(storeRef.current, flow);
         setUi({ kind: "flow", state: flow.state });
-        flow.subscribe((state) => setUi({ kind: "flow", state }));
-        void flow.run();
+        unsubscribeRef.current = flow.subscribe((state) => setUi({ kind: "flow", state }));
     }, []);
 
-    // A reload mid-update picks the flow back up from sessionStorage.
+    const runFlow = useCallback((flow: UpdateFlow) => {
+        attach(flow);
+        void flow.run();
+    }, [attach]);
+
+    const forget = useCallback(() => {
+        unsubscribeRef.current?.();
+        unsubscribeRef.current = null;
+        flowRef.current?.dismiss();
+        if (flowRef.current && liveFlows.get(storeRef.current) === flowRef.current) liveFlows.delete(storeRef.current);
+        flowRef.current = null;
+    }, []);
+
+    // Remounted mid-update: show the flow that is still running. After a reload: pick the
+    // flow back up from sessionStorage.
     useEffect(() => {
         if (!host || flowRef.current) return;
+        const live = liveFlows.get(storeRef.current);
+        if (live && live.state.phase !== "cancelled" && storeRef.current.load()?.state.id === live.state.id) {
+            attach(live);
+            return;
+        }
         let cancelled = false;
         void UpdateFlow.restore(host, storeRef.current).then((flow) => {
             if (!cancelled && flow && !flowRef.current) runFlow(flow);
         }).catch((error) => console.warn("[firmware] couldn't resume the update", error));
         return () => { cancelled = true; };
-    }, [host, runFlow]);
+    }, [host, attach, runFlow]);
+
+    useEffect(() => () => { unsubscribeRef.current?.(); unsubscribeRef.current = null; }, []);
 
     const openSheet = useCallback(async (source: InstallSource, onlyHand?: Hand) => {
         const h = hostRef.current;
         if (!h) return;
         lastSource.current = { source, onlyHand };
+        lastSources.set(storeRef.current, lastSource.current);
         setUi({ kind: "sheet", source, onlyHand, plan: null, preFailure: null, backup: { state: "pending" }, afterwards: "restore", error: null });
         const t = h.transport();
         if (!t) {
@@ -118,18 +155,16 @@ export function useFirmwareUpdate(host: FirmwareUiHost | null, o: UseFirmwareUpd
 
     const close = useCallback(() => {
         if (ui.kind === "flow" && ui.state.phase === "running") return; // nothing closes a running update
-        flowRef.current?.dismiss();
-        flowRef.current = null;
+        forget();
         setUi({ kind: "idle" });
-    }, [ui]);
+    }, [ui, forget]);
 
     const retry = useCallback(() => {
         const last = lastSource.current;
-        flowRef.current?.dismiss();
-        flowRef.current = null;
+        forget();
         if (last) void openSheet(last.source, last.onlyHand);
         else setUi({ kind: "idle" });
-    }, [openSheet]);
+    }, [openSheet, forget]);
 
     /** F9: a one-half update of the half that didn't get the new release, with its own sheet and chord. */
     const finish = useCallback(() => {
@@ -137,10 +172,9 @@ export function useFirmwareUpdate(host: FirmwareUiHost | null, o: UseFirmwareUpd
         if (ui.kind !== "flow" || !last) return;
         const s = ui.state;
         const stale = ([0, 1] as Hand[]).find((h) => !s.committed.includes(h) && s.files[h]) ?? otherHand(s.usbHand);
-        flowRef.current?.dismiss();
-        flowRef.current = null;
+        forget();
         void openSheet(last.source, stale);
-    }, [ui, openSheet]);
+    }, [ui, openSheet, forget]);
 
     return { ui, openSheet, setAfterwards, start, close, retry, finish, flow: flowRef.current };
 }

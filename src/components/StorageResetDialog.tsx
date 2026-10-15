@@ -16,7 +16,7 @@ import { restoreLayoutToBoard } from "@/features/firmware/restore";
 import { fingerprintSvil } from "@/services/backup/codec";
 import { getBackupService, type SnapshotMeta } from "@/services/backup/backup.service";
 import { keyboardService } from "@/services/keyboard.service";
-import { updateInFlight } from "@/services/updater/flow";
+import { FLOW_STATE_EVENT, resetNoticeClearedOn, updateOwnsResetNotice } from "@/services/updater/flow";
 import type { KeyboardInfo } from "@/types/keyboard.types";
 
 /** Ask the app to show Backups (Settings wires the listener). */
@@ -71,20 +71,42 @@ export function ResetNoticeView({ firmware, backupLine, busy, error, onDefaults,
 /**
  * Shown once per connection when the board reports a storage problem:
  * - it can't save changes right now, so they'll be lost when it restarts;
- * - new firmware reset its settings (bit 2) with no update in flight (A4): a .uf2
- *   installed by hand, or a tab closed mid-update. The one place a restore is asked afterwards;
+ * - new firmware reset its settings (bit 2) with no update of this tab on screen (A4): a
+ *   .uf2 installed by hand, or a tab closed mid-update. The one place a restore is asked
+ *   afterwards. An update's own reset never asks: the update acts on it and clears it;
  * - it reset its settings because its storage could not be read (bit 0).
  * Both resets offer "Put my layout back" from the newest backup of this board.
  * Acknowledging a reset clears the board's flag (0x2A), after the restore when there is one.
  */
+/** The update's hold on the reset notice, kept current as the update starts, ends and is closed. */
+function readUpdateNotice(session: unknown) {
+    return { owned: updateOwnsResetNotice(), cleared: resetNoticeClearedOn(session) };
+}
+
+function useUpdateNotice(session: unknown): { owned: boolean; cleared: boolean } {
+    const [notice, setNotice] = useState(() => readUpdateNotice(session));
+    useEffect(() => {
+        const sync = () => setNotice((prev) => {
+            const next = readUpdateNotice(session);
+            return prev.owned === next.owned && prev.cleared === next.cleared ? prev : next;
+        });
+        sync();
+        window.addEventListener(FLOW_STATE_EVENT, sync);
+        return () => window.removeEventListener(FLOW_STATE_EVENT, sync);
+    }, [session]);
+    return notice;
+}
+
 export const StorageResetDialog: FC = () => {
-    const { keyboard, isConnected } = useKeyboard();
+    const { keyboard, isConnected, connectionSessionId } = useKeyboard();
     const [acknowledgedReset, setAcknowledgedReset] = useState<string | null>(null);
     const [acknowledgedWriteFailure, setAcknowledgedWriteFailure] = useState<string | null>(null);
+    const update = useUpdateNotice(connectionSessionId);
     const kbid = keyboard?.kbid ?? "";
-    const buildReset = !!keyboard?.storage_build_reset && !updateInFlight();
+    // An update in this tab acts on a new build's reset itself, and clears it (0x2A) last.
+    const buildReset = !!keyboard?.storage_build_reset && !update.owned && !update.cleared;
     const showWriteFailure = Boolean(isConnected && keyboard?.storage_write_failed && acknowledgedWriteFailure !== kbid);
-    const showReset = Boolean(isConnected && (keyboard?.storage_reset || buildReset) && acknowledgedReset !== kbid && !showWriteFailure);
+    const showReset = Boolean(isConnected && ((keyboard?.storage_reset && !update.cleared) || buildReset) && acknowledgedReset !== kbid && !showWriteFailure);
 
     // The board clears this itself when it restarts, so there's nothing to send.
     const acknowledgeWriteFailure = () => setAcknowledgedWriteFailure(kbid);
