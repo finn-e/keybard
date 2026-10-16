@@ -101,11 +101,12 @@ describe('side-panel editor bar', () => {
         });
     });
 
-    it('keeps a combo to one row: four keys, the output and the controls, wrapping only between slots', () => {
+    it('keeps a combo to one row that never wraps: four keys, the output and the controls', () => {
         state.panels.bindingTypeToEdit = 'combos';
         const { container } = render(<BindingEditorContainer inline bar />);
         const [row] = rows(container);
-        expect(row).toHaveClass('flex-wrap');
+        expect(row).toHaveClass('flex-nowrap');
+        expect(row).not.toHaveClass('flex-wrap');
         expect(slotLabels(row)).toEqual(['Key 1', 'Key 2', 'Key 3', 'Key 4', 'Output']);
         // Nothing but slots, separators and the controls: no title row above.
         expect(bar(container).querySelectorAll('h3')).toHaveLength(0);

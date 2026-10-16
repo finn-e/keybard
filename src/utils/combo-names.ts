@@ -13,7 +13,7 @@ export function comboName(cosmetic: Cosmetic | undefined, index: number): string
 }
 
 /** What a combo does, for comparing two versions of it: its four slots, output and on/off. */
-function comboShape(combo: ComboEntry | undefined): string | null {
+export function comboShape(combo: ComboEntry | undefined): string | null {
     if (!combo) return null;
     const code = (k: string | number | undefined) => {
         const n = Number(keyService.parse(k ?? "KC_NO"));

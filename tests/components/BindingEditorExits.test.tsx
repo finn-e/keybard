@@ -83,7 +83,8 @@ describe('?railMode=modal: the panel while the rail is the selector and the way 
         expect(document.querySelector('[data-picker-strip]')).toBeNull();
         expect(screen.queryAllByRole('button', { name: 'Go back' })).toHaveLength(0);
         expect(document.querySelector('[data-binding-editor-back]')).toBeNull();
-        expect(screen.getAllByRole('heading', { name: 'Editing Combo 2' }).length).toBeGreaterThan(0);
+        // A combo's heading is its name, or its number while it has none.
+        expect(screen.getAllByRole('heading', { name: 'Combo 2' }).length).toBeGreaterThan(0);
     });
 
     it('keeps both without the param', () => {

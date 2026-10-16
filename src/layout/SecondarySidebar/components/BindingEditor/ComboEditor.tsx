@@ -164,7 +164,7 @@ const ComboEditor: FC<ComboEditorProps> = ({ strip = false, bar = false, barEnd 
     // Bar: [k1] + [k2] + [k3] + [k4] -> output, labeled, controls at the end.
     if (bar) {
         return (
-            <BarRow label="Combo keys">
+            <BarRow label="Combo keys" oneLine>
                 {[0, 1, 2, 3].map((slotIdx) => [
                     slotIdx > 0 && <BarSep key={`sep${slotIdx}`}><Plus /></BarSep>,
                     <BarSlot key={slotIdx} label={`Key ${slotIdx + 1}`}>{renderComboKey(currCombo.keys[slotIdx], slotIdx)}</BarSlot>,

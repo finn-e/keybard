@@ -5,6 +5,7 @@ import { ArrowLeft, Pin, X } from "lucide-react";
 
 import BindingEditorContainer from "./components/BindingEditor/BindingEditorContainer";
 import EditorSidePanel from "./components/EditorSidePanel";
+import { ComboEditorTitle } from "./components/ComboEditorTitle";
 import BasicKeyboards from "./Panels/BasicKeyboards";
 import LayersPanel from "./Panels/LayersPanel";
 import MacrosPanel from "./Panels/MacrosPanel";
@@ -62,12 +63,15 @@ const AlternativeHeader = ({ onBack, menus, holdEditorTitle = false, showBack = 
     const current = {
         title: editing ? bindingEditorHeading(activePanel, itemToEdit) : `Add Keys to ${getPanelTitle(activePanel, menus)}`,
         subtitle,
+        // A combo's title is its name, renamed in place (ComboEditorTitle).
+        combo: editing && activePanel === "combos" ? itemToEdit : null,
     };
     // The overlay leaving with the editor keeps the editor's title, so the old
     // "Add Keys to ..." title never shows on its way out.
     const lastEditing = React.useRef<typeof current | null>(null);
     if (editing) lastEditing.current = current;
-    const { title, subtitle: shownSubtitle } = !editing && holdEditorTitle && lastEditing.current ? lastEditing.current : current;
+    const holding = !editing && holdEditorTitle && !!lastEditing.current;
+    const { title, subtitle: shownSubtitle, combo } = holding ? lastEditing.current! : current;
     const back = () => onBack ? onBack() : handleCloseEditor();
 
     return (
@@ -82,12 +86,12 @@ const AlternativeHeader = ({ onBack, menus, holdEditorTitle = false, showBack = 
             >
                 <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-neutral-400" />
             </button>}
-            <div>
+            {combo !== null ? <ComboEditorTitle index={combo} readOnly={holding} /> : <div>
                 <h2 className="text-[22px] font-semibold leading-none text-kb-ink">
                     {title}
                 </h2>
                 {shownSubtitle && <p className="mt-1.5 text-sm leading-tight text-muted-foreground truncate max-w-[18rem]" data-binding-editor-subtitle>{shownSubtitle}</p>}
-            </div>
+            </div>}
         </div>
     );
 };
