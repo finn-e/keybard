@@ -10,6 +10,7 @@ import { customValueService } from "../services/custom-value.service";
 import { getClosestPresetColor } from "../utils/color-conversion";
 import type { KeyboardInfo } from "../types/keyboard.types";
 import { seedComboNames } from "../utils/combo-names";
+import { recallComboNames, rememberComboNames } from "../utils/combo-name-memory";
 import type { KeyBlockWriter } from "../services/changes.service";
 import { PARANOID, userIsLooking } from "../lib/paranoid";
 import { LinuxHidAccessError } from "../utils/linux-hid-access";
@@ -111,6 +112,16 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setConnectionFix(null);
         setConnectionFirmware(null);
     }, []);
+    // The layout as last loaded (file, demo or board), and the version the
+    // combo name memory last saw: edits after a load are compared to it.
+    const loadedLayoutRef = useRef<KeyboardInfo | null>(null);
+    const rememberedRef = useRef<KeyboardInfo | null>(null);
+    useEffect(() => {
+        if (!keyboard) return;
+        const previous = keyboard === loadedLayoutRef.current ? null : rememberedRef.current;
+        rememberedRef.current = keyboard;
+        rememberComboNames(previous, keyboard);
+    }, [keyboard]);
     const [connectionSessionId, setConnectionSessionId] = useState(0);
     const sessionRef = useRef(0);
     // Keymap dimensions as the connected board reported them, for the session that read them.
@@ -334,6 +345,9 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     const names = seedComboNames(keyboardRef.current, loadedInfo);
                     if (names) loadedInfo.cosmetic = { ...loadedInfo.cosmetic, combos: names };
                 }
+                // Names remembered in this browser fill in the combos that have none.
+                loadedInfo.cosmetic = recallComboNames(loadedInfo).cosmetic;
+                loadedLayoutRef.current = loadedInfo;
                 setKeyboard(loadedInfo);
                 setConnectionState("connected");
                 setConnectionError(null);
@@ -373,14 +387,17 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         let release: ((discardPending?: boolean) => void) | undefined;
         let changed = false;
         try {
-            const kbinfo = await fileService.loadFile(file);
+            const loaded = await fileService.loadFile(file);
 
             // Offline files own their metadata. Never borrow capabilities or layout
             // structure from a previously connected, possibly unrelated board.
             if (!confirmTargetChange()) return false;
             release = await beginTargetChange();
-            svalService.setupCosmeticLayerNames(kbinfo);
-            keyService.generateAllKeycodes(kbinfo);
+            svalService.setupCosmeticLayerNames(loaded);
+            keyService.generateAllKeycodes(loaded);
+            // Names remembered in this browser come back; the demo's example names give way to them.
+            const kbinfo = recallComboNames(loaded, { replace: source === "demo" });
+            loadedLayoutRef.current = kbinfo;
             if (KeyboardService.isWebHIDSupported()) await usbInstance.close();
             nextSession();
             changed = true;

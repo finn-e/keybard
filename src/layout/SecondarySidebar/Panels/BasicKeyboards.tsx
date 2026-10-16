@@ -525,13 +525,14 @@ const BasicKeyboards = ({ isPicker, trayPortal = false }: Props) => {
                     <span className="font-semibold text-lg text-kb-ink">Modifiers</span>
                     <ModifierSideToggle side={modifierSide} onChange={setModifierSide} />
                 </div>
-                <div className="flex flex-wrap items-center gap-1">
+                {/* One line at any panel width: the five buttons share it equally. */}
+                <div className="grid grid-cols-5 gap-1" data-modifier-buttons="">
                     <Button
                         type="button"
                         variant={activeModifiers.length === 0 ? "default" : "secondary"}
                         size="sm"
                         className={cn(
-                            "rounded-md h-8 transition-all text-sm font-bold border-none w-[84px]",
+                            "rounded-md h-8 min-w-0 px-1 transition-all text-sm font-bold border-none",
                             activeModifiers.length === 0 ? "bg-kb-active text-kb-active-fg shadow-sm" : "bg-kb-gray-medium text-slate-700 dark:text-neutral-200 hover:bg-kb-surface dark:hover:bg-neutral-700"
                         )}
                         onClick={handleClearModifiers}
@@ -548,7 +549,7 @@ const BasicKeyboards = ({ isPicker, trayPortal = false }: Props) => {
                                 variant={isActive ? "default" : "secondary"}
                                 size="sm"
                                 className={cn(
-                                    "rounded-md h-8 transition-all text-sm font-bold border-none w-[84px]",
+                                    "rounded-md h-8 min-w-0 px-1 transition-all text-sm font-bold border-none",
                                     isActive ? "bg-kb-active text-kb-active-fg shadow-sm" : "bg-kb-gray-medium text-slate-700 dark:text-neutral-200 hover:bg-kb-surface dark:hover:bg-neutral-700"
                                 )}
                                 onClick={() => handleModifierToggle(modifier)}

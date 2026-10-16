@@ -33,14 +33,15 @@ const board = () => ({
 afterEach(() => { cleanup(); state.layoutMode = 'sidebar'; });
 
 describe('combo names in the Combos list', () => {
-    it.each(['sidebar', 'bottombar'])('%s: a named row shows its name as a second line; others show none', mode => {
+    it.each(['sidebar', 'bottombar'])('%s: a named row shows its name as its title line, over its keys; others show none', mode => {
         state.layoutMode = mode;
         state.keyboard = board();
         render(<CombosPanel />);
         const names = [...document.querySelectorAll('[data-combo-row-name]')];
         expect(names.map(n => n.textContent)).toEqual(['Zoom mute']);
         expect(names[0].closest('[data-combo-row]')!.getAttribute('data-combo-row')).toBe('1');
-        expect(names[0].className).toContain('text-muted-foreground');
+        expect(names[0].className).toContain('text-kb-ink');
+        expect(names[0].className).toContain('font-semibold');
         expect(screen.getByRole('button', { name: 'Zoom mute (Combo 1): D plus F gives Enter' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Combo 0: J plus K gives Esc' })).toBeTruthy();
     });

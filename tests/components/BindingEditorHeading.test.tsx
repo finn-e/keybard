@@ -42,20 +42,20 @@ const visibleHeadings = () => screen.getAllByRole('heading', { level: 2 }).filte
 
 describe('picker header while a binding editor is open', () => {
     it.each([
-        ['combos', 'Editing Combo 3'],
-        ['tapdances', 'Editing Tap Dance 3'],
-        ['macros', 'Editing Macro 3'],
-        ['overrides', 'Editing Override 3'],
-        ['altrepeat', 'Editing Alt-Repeat 3'],
-        ['leaders', 'Editing Leader 3'],
-    ])('%s reads "%s" in every placement', (panel, heading) => {
+        ['combos', 'Editing Combo 3', 'Combo 3'],
+        ['tapdances', 'Editing Tap Dance 3', 'Editing Tap Dance 3'],
+        ['macros', 'Editing Macro 3', 'Editing Macro 3'],
+        ['overrides', 'Editing Override 3', 'Editing Override 3'],
+        ['altrepeat', 'Editing Alt-Repeat 3', 'Editing Alt-Repeat 3'],
+        ['leaders', 'Editing Leader 3', 'Editing Leader 3'],
+    ])('%s reads "%s" in every placement (its heading: "%s")', (panel, label, heading) => {
         state.activePanel = panel;
         state.itemToEdit = 3;
         for (const placement of ['half', 'dock', 'anchored', 'float', 'panel'] as const) {
             for (const bottom of [false, true]) {
                 const { unmount } = render(<TooltipProvider><SecondarySidebar bottom={bottom} comboPlacement={placement} /></TooltipProvider>);
                 expect(visibleHeadings()).toEqual([heading]);
-                expect(screen.getByRole('complementary', { hidden: true })).toHaveAttribute('aria-label', heading);
+                expect(screen.getByRole('complementary', { hidden: true })).toHaveAttribute('aria-label', label);
                 unmount();
             }
         }
@@ -66,10 +66,10 @@ describe('picker header while a binding editor is open', () => {
         state.itemToEdit = 2;
         const view = render(<TooltipProvider><SecondarySidebar comboPlacement="half" /></TooltipProvider>);
         const overlayTitle = () => document.querySelector('[data-picker-overlay] h2')?.textContent;
-        expect(overlayTitle()).toBe('Editing Combo 2');
+        expect(overlayTitle()).toBe('Combo 2');
         state.itemToEdit = null;
         view.rerender(<TooltipProvider><SecondarySidebar comboPlacement="half" /></TooltipProvider>);
-        expect(overlayTitle()).toBe('Editing Combo 2');
+        expect(overlayTitle()).toBe('Combo 2');
         expect(visibleHeadings()).toEqual(['Combos']);
     });
 
@@ -86,7 +86,6 @@ describe('picker header while a binding editor is open', () => {
     it.each([
         ['tapdances', 'tapdances', 'Shift or caps'],
         ['macros', 'macros', 'Email signature'],
-        ['combos', 'combos', 'Dictation'],
     ])('%s shows its custom name under the header', (panel, store, name) => {
         state.activePanel = panel;
         state.itemToEdit = 3;
@@ -94,9 +93,32 @@ describe('picker header while a binding editor is open', () => {
         for (const placement of ['half', 'panel'] as const) {
             const { unmount } = render(<TooltipProvider><SecondarySidebar comboPlacement={placement} /></TooltipProvider>);
             expect(subtitles()).toEqual([name]);
-            expect(visibleHeadings()).toEqual([panel === 'macros' ? 'Editing Macro 3' : panel === 'combos' ? 'Editing Combo 3' : 'Editing Tap Dance 3']);
+            expect(visibleHeadings()).toEqual([panel === 'macros' ? 'Editing Macro 3' : 'Editing Tap Dance 3']);
             unmount();
         }
+    });
+
+    it('titles a named combo with its name, "Combo N" the small label under it', () => {
+        state.activePanel = 'combos';
+        state.itemToEdit = 3;
+        kb.keyboard = { cosmetic: { combos: { '3': 'Dictation' } } };
+        for (const placement of ['half', 'panel'] as const) {
+            const { unmount } = render(<TooltipProvider><SecondarySidebar comboPlacement={placement} /></TooltipProvider>);
+            expect(visibleHeadings()).toEqual(['Dictation']);
+            expect(screen.getByRole('button', { name: 'Dictation, rename Combo 3' })).toBeVisible();
+            expect(document.querySelector('[data-combo-number]')).toHaveTextContent('Combo 3');
+            expect(document.querySelector('[data-combo-name-prompt]')).toBeNull();
+            unmount();
+        }
+    });
+
+    it('offers "Name this combo" under the number of an unnamed combo', () => {
+        state.activePanel = 'combos';
+        state.itemToEdit = 3;
+        kb.keyboard = { cosmetic: {} };
+        render(<TooltipProvider><SecondarySidebar comboPlacement="panel" /></TooltipProvider>);
+        expect(visibleHeadings()).toEqual(['Combo 3']);
+        expect(screen.getByRole('button', { name: 'Name this combo' })).toBeVisible();
     });
 
     it.each(['combos', 'tapdances', 'macros', 'overrides', 'altrepeat', 'leaders'])('%s shows no subtitle without a custom name', panel => {

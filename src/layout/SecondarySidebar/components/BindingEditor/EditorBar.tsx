@@ -31,16 +31,23 @@ export const BarSep: FC<{ children: ReactNode }> = ({ children }) => (
     <div aria-hidden="true" className="h-10 flex items-center text-kb-ink [&>svg]:w-3 [&>svg]:h-3 shrink-0">{children}</div>
 );
 
-/** The row of slots. It wraps between slots when the content is longer than the panel is wide. */
-export const BarRow: FC<{ children: ReactNode; label: string }> = ({ children, label }) => (
-    <div role="group" aria-label={label} data-editor-bar-row="" className="flex flex-row flex-wrap items-start gap-x-1 gap-y-2 min-w-0">
+/**
+ * The row of slots. It wraps between slots when the content is longer than the
+ * panel is wide; a `oneLine` row (a fixed set of slots that fits the side
+ * panel, scroll bar included) never wraps, and spaces its slots tighter.
+ */
+export const BarRow: FC<{ children: ReactNode; label: string; oneLine?: boolean }> = ({ children, label, oneLine = false }) => (
+    <div role="group" aria-label={label} data-editor-bar-row="" className={cn(
+        "flex flex-row items-start min-w-0",
+        oneLine ? "flex-nowrap gap-x-0.5" : "flex-wrap gap-x-1 gap-y-2",
+    )}>
         {children}
     </div>
 );
 
 /** Controls at the row's end: on/off, a time field, options, delete. */
 export const BarEnd: FC<{ children: ReactNode }> = ({ children }) => (
-    <div className="ml-auto pl-1 flex flex-row items-start gap-1.5 shrink-0" data-editor-bar-end="">
+    <div className="ml-auto pl-1 flex flex-row items-start gap-1 shrink-0" data-editor-bar-end="">
         {children}
     </div>
 );
@@ -64,7 +71,7 @@ export const BarDelete: FC<{ label: string; enabled: boolean; onClick: () => voi
             title={label}
             disabled={!enabled}
             onClick={onClick}
-            className="rounded-full p-1.5 text-kb-gray-border dark:text-neutral-400 transition-colors enabled:hover:bg-red-500 enabled:hover:text-white enabled:cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="rounded-full p-1 text-kb-gray-border dark:text-neutral-400 transition-colors enabled:hover:bg-red-500 enabled:hover:text-white enabled:cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2"
         >
             <Trash2 className="h-4 w-4" />
         </button>
