@@ -103,6 +103,27 @@ def pointing_kinds(definition, hardware):
     return out
 
 
+def unsettled_pointing(definition, hardware):
+    """Indices of pointing instances whose 0x18 byte is still 255 (unknown).
+
+    The firmware reports the other half's pointing module as 255 until that half
+    has said what it has, a second or two after power-up; a read that early must
+    be repeated, or that hand's device never shows."""
+    fragments = definition.get("fragments") if isinstance(definition, dict) else None
+    instances = ((definition.get("composition") or {}).get("instances") if isinstance(definition, dict) else None)
+    if not isinstance(fragments, dict) or not isinstance(instances, list):
+        return ()
+    out = []
+    for index, instance in enumerate(instances):
+        if not isinstance(instance, dict) or index >= len(hardware) or hardware[index] != 255:
+            continue
+        options = [instance] if "fragment" in instance else instance.get("fragment_options") or []
+        if any(isinstance(o, dict) and isinstance(fragments.get(o.get("fragment")), dict)
+               and isinstance(fragments[o.get("fragment")].get("widget"), dict) for o in options):
+            out.append(index)
+    return tuple(out)
+
+
 class ProtocolError(Exception):
     pass
 
@@ -211,6 +232,9 @@ class SvalReader:
         self.load_deadline = None
         # The last board definition read: it only changes with new firmware, so a refresh reuses it.
         self.cached_definition = None
+        # The 0x18 hardware bytes of the last profile read, and its pointing instances still unknown.
+        self.profile_hardware = ()
+        self.pointing_unsettled = ()
 
     def checkpoint(self):
         if self.cancelled():
@@ -377,6 +401,13 @@ class SvalReader:
             raise ProtocolError("Invalid fragment state count")
         return tuple(data[1:1 + data[0]])
 
+    def pointing_settled(self):
+        """True once every pointing module unknown at the last profile read is known (one 0x18 read)."""
+        if not self.pointing_unsettled:
+            return False
+        hardware = self.fragment_state(0x18)
+        return any(i < len(hardware) and hardware[i] != 255 for i in self.pointing_unsettled)
+
     def keymap(self):
         count = self._read(0x11, protocol=0xFE)[0]
         if not 1 <= count <= 32:
@@ -488,6 +519,8 @@ class SvalReader:
                         or keyed(selections) != keyed(self.fragment_state(0x19))):
                     raise ProtocolError("Cluster selection changed during loading; reload")
             pointing = tuple(pointing_kinds(definition, hardware).items()) if has_fragments else ()
+            self.profile_hardware = tuple(hardware)
+            self.pointing_unsettled = unsettled_pointing(definition, hardware) if has_fragments else ()
             return replace(profile, keys=keys, layer_names=tuple(layer_names.items()),
                            code_labels=tuple(code_labels.items()), from_board=True, pointing=pointing)
         finally:

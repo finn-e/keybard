@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 
 from keybard_host.device.protocol import (READ_COMMANDS, POINTING_MOTION, POINTING_MOTION_FLAG2, SvalReader,
                                           POINTING_MOTION_READERS_FLAG2, HOST_MOTION_READER,
-                                          parse_pointing_motion, pointing_kinds)
+                                          parse_pointing_motion, pointing_kinds, unsettled_pointing)
 from keybard_host.host_pointing import demo_motion
 from keybard_host.server import REMOTE_ORIGINS, make_server
 from keybard_host.state import DEFAULTS, HostState, serialize_profile, validate_config, validate_pointing_look
@@ -104,6 +104,27 @@ class MotionTests(unittest.TestCase):
         self.assertEqual(pointing_kinds(definition, (7, 9)), {'left': 'touchpad', 'right': 'trackball'})
         self.assertEqual(pointing_kinds(definition, (255, 9)), {'left': None, 'right': 'trackball'})
         self.assertEqual(pointing_kinds({}, ()), {'left': None, 'right': None})
+
+    def test_unsettled_pointing_lists_unknown_modules_only(self):
+        definition = {"fragments": {"tb": {"id": 9, "widget": {"module": "trackball"}}, "key": {"id": 1}},
+                      "composition": {"instances": [{"id": "left_thumb", "fragment_options": [{"fragment": "key"}]},
+                                                    {"id": "left_pointing", "fragment_options": [{"fragment": "tb"}]},
+                                                    {"id": "right_pointing", "fragment_options": [{"fragment": "tb"}]}]}}
+        self.assertEqual(unsettled_pointing(definition, (255, 255, 9)), (1,))
+        self.assertEqual(unsettled_pointing(definition, (255, 9, 9)), ())
+        self.assertEqual(unsettled_pointing({}, ()), ())
+
+    def test_pointing_settled_rereads_the_hardware_bytes(self):
+        # The other half reports its module a second or two after power-up: 255 until then.
+        device = FakeDevice()
+        reader = SvalReader(device)
+        reader.info()
+        self.assertFalse(reader.pointing_settled())  # nothing unknown: no read
+        reader.pointing_unsettled = (0,)
+        device.hardware = (255, 9)
+        self.assertFalse(reader.pointing_settled())
+        device.hardware = (9, 9)
+        self.assertTrue(reader.pointing_settled())
 
     def test_profile_carries_kinds(self):
         from dataclasses import replace
