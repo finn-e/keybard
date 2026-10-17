@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { SETTINGS, SETTINGS_CATEGORIES, POINTING_GLOSS_SETTING, POINTING_SPARKLE_SETTING } from "@/contexts/SettingsContext";
-import { BALLS, bodyAt, coatAt, GLOSS_DEFAULT, LIGHTNESS_DEFAULT, MAT_ORDER, SPARKLE_DEFAULT, spkAt } from "@/components/pointing-viz/webgl/materials";
+import { SETTINGS, SETTINGS_CATEGORIES } from "@/contexts/SettingsContext";
+import { BALL_GLOSS, BALL_SPARKLE, BALLS, bodyAt, coatAt, LIGHTNESS_DEFAULT, MAT_ORDER, SPARKLE_DEFAULT, spkAt } from "@/components/pointing-viz/webgl/materials";
 import { _setWebGLDisabledForTest, drawDevice, rotFromEuler, unpremultiplyFlipped, webglAvailable } from "@/components/pointing-viz/webgl/renderer";
 import { demoReport, pointingDemoFromSearch } from "@/features/pointing-demo";
 import { freeCircle, MM_PER_U, placeDevice, placedKeyRects, type KeyRect } from "@/utils/pointing-geometry";
@@ -23,19 +23,15 @@ const overlaps = (k: KeyRect, cx: number, cy: number, r: number) => {
 };
 
 describe("preferences and defaults", () => {
-    it("Ball gloss and Sparkle density are app sliders, 0..1, defaults 0.25 and 0.75, next to Appearance", () => {
-        const gloss = SETTINGS.find((s) => s.name === POINTING_GLOSS_SETTING)!;
-        const sparkle = SETTINGS.find((s) => s.name === POINTING_SPARKLE_SETTING)!;
-        for (const s of [gloss, sparkle]) {
-            expect(s).toMatchObject({ type: "slider", min: 0, max: 1, step: 0.01 });
-            expect(s.scope).toBeUndefined(); // an app preference, not a board setting
-        }
-        expect(gloss.defaultValue).toBe(0.25);
-        expect(sparkle.defaultValue).toBe(0.75);
-        expect(GLOSS_DEFAULT).toBe(0.25);
+    it("Ball gloss is fixed at 1 and sparkle at its default, with no sliders", () => {
+        expect(BALL_GLOSS).toBe(1);
+        expect(BALL_SPARKLE).toBe(SPARKLE_DEFAULT);
         expect(SPARKLE_DEFAULT).toBe(0.75);
-        const general = SETTINGS_CATEGORIES.find((c) => c.name === "general")!.settings;
-        expect(general.slice(1, 3)).toEqual([POINTING_GLOSS_SETTING, POINTING_SPARKLE_SETTING]);
+        for (const name of ["pointing-ball-gloss", "pointing-sparkle"]) {
+            expect(SETTINGS.find((s) => s.name === name)).toBeUndefined();
+            for (const c of SETTINGS_CATEGORIES) expect(c.settings).not.toContain(name);
+        }
+        expect(SETTINGS.some((s) => s.type === "slider")).toBe(false);
     });
 
     it("Ball lightness is fixed per ball: silver at 1, the others as designed, and no slider", () => {

@@ -1,6 +1,5 @@
 import React, { type ReactNode } from "react";
 import OnOffToggle from "@/components/ui/OnOffToggle";
-import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import type { SettingDefinition } from "@/types/settings.types";
 
@@ -54,18 +53,6 @@ const SettingRow: React.FC<Props> = ({ definition, label, description, value, on
             <div className="flex justify-end min-w-0">
                 {definition.type === "boolean" && (
                     <OnOffToggle label={label} description={description} value={value === true} onToggle={(v) => onChange(v)} />
-                )}
-                {definition.type === "slider" && (
-                    <Slider
-                        aria-label={label}
-                        aria-description={description}
-                        value={[Number(value)]}
-                        onValueChange={(values) => onChange(values[0])}
-                        min={definition.min}
-                        max={definition.max}
-                        step={definition.step}
-                        className="w-full"
-                    />
                 )}
                 {definition.type === "select" && (
                     <select

@@ -55,6 +55,8 @@ export const SPARKLE: Record<"silver" | "black", Sparkle> = {
 /** Sparkle density: one value from 0 to 1. SPARKLE above is silver at SPARKLE_R4. */
 export const SPARKLE_R4 = 0.25;
 export const SPARKLE_DEFAULT = 0.75;
+/** The sparkle density Keybard and Keybard Overlay draw: fixed, not a setting. */
+export const BALL_SPARKLE = SPARKLE_DEFAULT;
 type SparkleEnd = Pick<Sparkle, "F" | "minPx" | "cov" | "gain" | "hue" | "mottle" | "lift">;
 export const SPARKLE_ENDS: { lo: SparkleEnd; hi: SparkleEnd } = {
     lo: { F: [182, 80, 48], minPx: [1.4, 2.4, 4.0], cov: [0.18, 0.45, 0.10], gain: [0.37, 1.40, 2.60], hue: 0.03, mottle: 0.07, lift: 0.65 },
@@ -98,9 +100,10 @@ export function spkAt(mat: BallId, density: number): Sparkle | null {
 
 /* Gloss: one value from 0 to 1 for every ball. It sets the clear coat on top of each ball. At
    GLOSS_PHOTO the coat matches the photographs; at 1 every ball wears the full lacquer; at 0 the
-   coat is a faint satin. In Keybard this is "Ball gloss", an app preference in Settings. */
+   coat is a faint satin. Keybard and Keybard Overlay draw every ball at BALL_GLOSS. */
 export const GLOSS_PHOTO = 0.4;
-export const GLOSS_DEFAULT = 0.25;
+/** The gloss Keybard and Keybard Overlay draw: the full lacquer, fixed, not a setting. */
+export const BALL_GLOSS = 1;
 interface Coat { coat: number; rough: number; rim: number; box: number; sheen: number }
 const GLOSS_LACQUER: Coat = { coat: 1.0, rough: 0.03, rim: 1.0, box: 1.0, sheen: 1.0 };
 const COAT_PHOTO: Record<BallId, Coat> = {

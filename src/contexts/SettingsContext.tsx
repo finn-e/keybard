@@ -7,12 +7,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { SettingsService } from "@/services/settings.service";
 import { DEFAULT_THEME_PREF, THEME_SETTING_NAME } from "@/lib/theme";
 import { DEFAULT_SHOW_ALT_REPEAT, SHOW_ALT_REPEAT_SETTING } from "@/lib/altRepeatVisibility";
-import { COMBO_COLORBLIND_SETTING, COMBO_INDICATOR_SETTING, DEFAULT_COMBO_INDICATOR_MODE } from "@/lib/comboIndicators";
-import { GLOSS_DEFAULT, SPARKLE_DEFAULT } from "@/components/pointing-viz/webgl/materials";
-
-/** Pointing device look: app preferences (this browser), not board settings. */
-export const POINTING_GLOSS_SETTING = "pointing-ball-gloss";
-export const POINTING_SPARKLE_SETTING = "pointing-sparkle";
+import { COMBO_COLORBLIND_SETTING, COMBO_INDICATOR_SETTING, DEFAULT_COMBO_INDICATORS_ON } from "@/lib/comboIndicators";
 
 // Settings definitions - single source of truth
 export const SETTINGS: SettingDefinition[] = [
@@ -26,26 +21,6 @@ export const SETTINGS: SettingDefinition[] = [
             { label: "Dark", value: "dark" },
         ],
         defaultValue: DEFAULT_THEME_PREF,
-    },
-    {
-        name: POINTING_GLOSS_SETTING,
-        label: "Ball Gloss",
-        description: "How glossy the clear coat on trackball balls looks.",
-        type: "slider",
-        defaultValue: GLOSS_DEFAULT,
-        min: 0,
-        max: 1,
-        step: 0.01,
-    },
-    {
-        name: POINTING_SPARKLE_SETTING,
-        label: "Sparkle Density",
-        description: "How much sparkle silver and black trackball balls show.",
-        type: "slider",
-        defaultValue: SPARKLE_DEFAULT,
-        min: 0,
-        max: 1,
-        step: 0.01,
     },
     {
         name: "live-updating",
@@ -64,14 +39,9 @@ export const SETTINGS: SettingDefinition[] = [
     {
         name: COMBO_INDICATOR_SETTING,
         label: "Combo Indicators",
-        description: "Fold the corner of keys in a combo. Small grows while you move over the keyboard.",
-        type: "select",
-        items: [
-            { label: "Off", value: "off" },
-            { label: "Small", value: "small" },
-            { label: "Large", value: "large" },
-        ],
-        defaultValue: DEFAULT_COMBO_INDICATOR_MODE,
+        description: "Fold the corner of keys in a combo. The folds grow while you move over the keyboard.",
+        type: "boolean",
+        defaultValue: DEFAULT_COMBO_INDICATORS_ON,
     },
     {
         name: COMBO_COLORBLIND_SETTING,
@@ -193,7 +163,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         name: "general",
         label: "General",
         icon: SettingsIcon,
-        settings: [THEME_SETTING_NAME, POINTING_GLOSS_SETTING, POINTING_SPARKLE_SETTING, "typing-binds-key", COMBO_INDICATOR_SETTING, COMBO_COLORBLIND_SETTING, SHOW_ALT_REPEAT_SETTING, "serial-assignment", "international-keyboards", "qmk-settings", "print"],
+        settings: [THEME_SETTING_NAME, "typing-binds-key", COMBO_INDICATOR_SETTING, COMBO_COLORBLIND_SETTING, SHOW_ALT_REPEAT_SETTING, "serial-assignment", "international-keyboards", "qmk-settings", "print"],
     },
     {
         name: "fragments",

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { PointingDevice } from '@/components/pointing-viz/PointingDevice';
 import { pillColorsFromTokens } from '@/components/pointing-viz/PointingLayer';
-import { DEFAULT_BALL, GLOSS_DEFAULT, SPARKLE_DEFAULT } from '@/components/pointing-viz/webgl/materials';
+import { BALL_GLOSS, BALL_SPARKLE, DEFAULT_BALL } from '@/components/pointing-viz/webgl/materials';
 import { ReportFeed } from '@/hooks/usePointingDevices';
 import { placeDevice, type KeyRect } from '@/utils/pointing-geometry';
 import { boostLabel, pointingFactors, sniperLabel } from '@/utils/pointing-multiplier';
@@ -92,8 +92,8 @@ export function PointingOverlayLayer({ keys, pointing, config, look, keymap, fee
                         unitPx={frame.unitPx}
                         originPx={{ x: frame.x, y: frame.y }}
                         ball={ball}
-                        gloss={balls.gloss ?? GLOSS_DEFAULT}
-                        sparkle={balls.sparkle ?? SPARKLE_DEFAULT}
+                        gloss={balls.gloss ?? BALL_GLOSS}
+                        sparkle={balls.sparkle ?? BALL_SPARKLE}
                         theme="dark"
                         feed={feed}
                         sniper={cfg.pointingPills && m.sniper}

@@ -62,8 +62,6 @@ export const SETTINGS_PAGE: SettingsGroup[] = [
                     { setting: THEME_SETTING_NAME, label: "Theme", description: "System follows your computer's light or dark mode." },
                     { setting: KEY_SIZE_SETTING },
                     { setting: PANEL_POSITION_SETTING },
-                    { setting: "pointing-ball-gloss", label: "Ball gloss" },
-                    { setting: "pointing-sparkle", label: "Ball sparkle" },
                 ],
             },
             {

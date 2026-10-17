@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { POINTING_GLOSS_SETTING, POINTING_SPARKLE_SETTING, useSettings } from "@/contexts/SettingsContext";
 import { pointingDemo } from "@/features/pointing-demo";
 import { notifyHostPointingLook } from "@/features/trainer/host-pointing";
 import { usePointingKinds, usePointingLive } from "@/hooks/usePointingDevices";
@@ -11,7 +10,7 @@ import { placeDevice, type KeyRect } from "@/utils/pointing-geometry";
 import { boostLabel, pointingFactors, sniperLabel } from "@/utils/pointing-multiplier";
 import { BallMenu } from "./BallMenu";
 import { PointingDevice } from "./PointingDevice";
-import { GLOSS_DEFAULT, SPARKLE_DEFAULT, type BallId } from "./webgl/materials";
+import { BALL_GLOSS, BALL_SPARKLE, type BallId } from "./webgl/materials";
 import type { PillColors } from "./overlay-draw";
 
 
@@ -44,9 +43,9 @@ export function PointingLayer({ keyboard, keys, unitPx }: Props) {
     const any = !!(kinds.left || kinds.right);
     const live = usePointingLive(any);
     const balls = useBalls(keyboard.kbid);
-    const { getSetting } = useSettings();
-    const gloss = Number(getSetting(POINTING_GLOSS_SETTING, GLOSS_DEFAULT));
-    const sparkle = Number(getSetting(POINTING_SPARKLE_SETTING, SPARKLE_DEFAULT));
+    // Fixed looks; saved values from the old sliders are not read.
+    const gloss = BALL_GLOSS;
+    const sparkle = BALL_SPARKLE;
     const dark = useIsDark();
     const factors = useMemo(() => pointingFactors(keyboard.keymap), [keyboard.keymap]);
     const labels = useMemo(() => ({ sniper: sniperLabel(factors.sniperDivisor), boost: boostLabel(factors.boostFactor) }), [factors]);
@@ -66,7 +65,7 @@ export function PointingLayer({ keyboard, keys, unitPx }: Props) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }), [keySig, kinds.left, kinds.right, balls.left, balls.right]);
 
-    // Keybard Host draws the same balls, gloss and sparkle (only when the Host is in use).
+    // Keybard Overlay draws the same balls, gloss and sparkle (only when the overlay app is in use).
     useEffect(() => {
         if (any) notifyHostPointingLook(keyboard.kbid, balls, gloss, sparkle);
     }, [any, keyboard.kbid, balls.left, balls.right, gloss, sparkle]); // eslint-disable-line react-hooks/exhaustive-deps
