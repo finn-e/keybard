@@ -29,7 +29,7 @@ function getGitSha(): string {
 }
 
 // The release tag a release build is built from (v3, x3.1): set by the deploy
-// and Keybard Host workflows. Empty for every other build.
+// and Keybard Overlay workflows. Empty for every other build.
 function getReleaseTag(): string {
     return process.env.RELEASE_TAG?.trim() ?? "";
 }

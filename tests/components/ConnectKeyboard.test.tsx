@@ -129,7 +129,7 @@ describe('ConnectKeyboard landing content', () => {
         try {
             render(<ConnectKeyboard />);
             expect(screen.queryByText(/trainer/i)).not.toBeInTheDocument();
-            expect(screen.queryByText(/Keybard Host|owns the board|device editing/i)).not.toBeInTheDocument();
+            expect(screen.queryByText(/Keybard Overlay|owns the board|device editing/i)).not.toBeInTheDocument();
             expect(screen.getByRole('button', { name: 'QWERTY Example' })).toBeInTheDocument();
         } finally {
             delete document.documentElement.dataset.keybardHost;

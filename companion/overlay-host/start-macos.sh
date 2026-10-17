@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start Keybard Host on macOS from source or from the release ZIP.
+# Start Keybard Overlay on macOS from source or from the release ZIP.
 # Untested on real hardware: see "macOS" in README.md.
 # Usage: bash start-macos.sh [--paranoid] [--port 5179] [other host options]
 set -euo pipefail
@@ -21,7 +21,7 @@ for candidate in python3.13 python3.12 python3.11 python3.10 python3; do
   fi
 done
 if [ -z "$PYTHON" ]; then
-  echo "Keybard Host needs Python 3.10 or later." >&2
+  echo "Keybard Overlay needs Python 3.10 or later." >&2
   echo "Install it from https://www.python.org/downloads/macos/" >&2
   echo "or with Homebrew: brew install python@3.13" >&2
   exit 1

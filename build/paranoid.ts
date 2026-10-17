@@ -42,7 +42,7 @@ export function contentSecurityPolicy(scriptHashes: string[]): string {
         "style-src 'unsafe-inline'",
         "img-src data: blob:",
         "font-src data:",
-        // 'self' is Keybard Host when it serves this page; opened from disk it reaches nothing.
+        // 'self' is Keybard Overlay when it serves this page; opened from disk it reaches nothing.
         "connect-src 'self' data: blob:",
         "media-src 'none'",
         "object-src 'none'",

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Classify a release tag. The same tag names are used on svalboard/keybard
-# (site and Keybard Host) and svalboard/qmk (firmware):
+# (site and Keybard Overlay) and svalboard/qmk (firmware):
 #
 #   v<N>[.<M>...]   full release   (v3, v3.1)  -> keybard.svalboard.com
 #   x<N>[.<M>...]   prerelease     (x3, x3.1)  -> next.keybard.svalboard.com

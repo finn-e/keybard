@@ -325,7 +325,7 @@ class Host(QObject):
         app.styleHints().colorSchemeChanged.connect(lambda _scheme: self.update_icon())
         self.icon_timer = QTimer(self); self.icon_timer.timeout.connect(self.update_icon); self.icon_timer.start(3000)
         menu = QMenu()
-        self.status_action = menu.addAction('Keybard Host · waiting for board'); self.status_action.setEnabled(False)
+        self.status_action = menu.addAction('Keybard Overlay · waiting for board'); self.status_action.setEnabled(False)
         menu.addSeparator(); menu.addAction('Open Keybard', self.open_controls)
         self.show_action = QAction('Show overlay', menu, checkable=True, checked=True)
         self.show_action.triggered.connect(lambda value: self.command(dict(op='show', value=value)))
@@ -336,8 +336,8 @@ class Host(QObject):
         menu.addSeparator()
         menu.addAction('Place at bottom', self.place)
         menu.addSeparator(); menu.addAction('Reload board layout', lambda: self.command(dict(op='reload')))
-        menu.addAction('Quit host', app.quit)
-        self.tray.setContextMenu(menu); info = build_info(); self.tray.setToolTip(f"Keybard Host {info['version']}" + (f" · Keybard {info['keybardCommit']}" if info['keybardCommit'] else ''))
+        menu.addAction('Quit Keybard Overlay', app.quit)
+        self.tray.setContextMenu(menu); info = build_info(); self.tray.setToolTip(f"Keybard Overlay {info['version']}" + (f" · Keybard {info['keybardCommit']}" if info['keybardCommit'] else ''))
         self.tray.activated.connect(lambda reason: self.open_controls() if reason == QSystemTrayIcon.DoubleClick else None)
         self.tray.show()
         # Firmware that reports Shift and Caps Lock (GET_INFO second feature byte,
@@ -677,7 +677,7 @@ def running_mode(url):
 
 def refuse(message):
     from PySide6.QtWidgets import QMessageBox
-    QMessageBox.critical(None, 'Keybard Host (paranoid mode)', message)
+    QMessageBox.critical(None, 'Keybard Overlay (paranoid mode)', message)
 
 
 KEYBARD_URL = 'https://keybard.svalboard.com/#overlay'
@@ -708,6 +708,8 @@ def main():
     if args.paranoid:
         if args.allow_origin: parser.error('--paranoid accepts no extra origins')
         if args.assets == parser.get_default('assets'): args.assets = args.assets.parent / 'web-paranoid'
+    # 'Keybard Host' is the app's earlier name. It names the settings folder and the lock,
+    # so keep it: settings carry over, and an older copy and this one never run at once.
     app = QApplication(sys.argv[:1]); app.setApplicationName('Keybard Host'); app.setQuitOnLastWindowClosed(False)
     hide_dock_icon()  # macOS: a menu bar app, without a Dock icon
     folder = Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation))
@@ -718,7 +720,7 @@ def main():
         if args.paranoid:
             # Never hand a paranoid start over to a normal host that trusts websites.
             if running_mode(url) is not True:
-                return refuse(f'Another Keybard Host is already running and could not be confirmed to be in paranoid mode on port {args.port}. Quit it from the tray icon, then run Start-Paranoid again.')
+                return refuse(f'Another Keybard Overlay is already running and could not be confirmed to be in paranoid mode on port {args.port}. Quit it from the tray icon, then run Start-Paranoid again.')
             return open_paranoid(url)
         # A paranoid host only ever opens in the contained browser profile.
         if running_mode(url) is True: return open_paranoid(url)

@@ -23,21 +23,21 @@ def package():
     if not (DIST / 'index.html').exists(): raise SystemExit('Build Keybard with VITE_BASE_PATH=/ first')
     if not PARANOID.exists(): raise SystemExit('Build Keybard Paranoid first (npm run build:paranoid)')
     web_files = [p for p in DIST.rglob('*') if p.is_file() and p.suffix != '.zip']
-    destination = DIST / 'KeybardHost-Windows.zip'
+    destination = DIST / 'KeybardOverlay-Windows.zip'
     with zipfile.ZipFile(destination, 'w', zipfile.ZIP_DEFLATED) as archive:
         for folder in ('keybard_host', 'scripts', 'tests'):
             for path in (HOST / folder).rglob('*'):
                 if path.is_file() and '__pycache__' not in path.parts:
-                    archive.write(path, Path('KeybardHost') / path.relative_to(HOST))
-        archive.writestr('KeybardHost/keybard_host/build.json', build_json())
+                    archive.write(path, Path('KeybardOverlay') / path.relative_to(HOST))
+        archive.writestr('KeybardOverlay/keybard_host/build.json', build_json())
         for name in ('Start-Windows.cmd', 'Start-Paranoid.cmd', 'Open-Paranoid.cmd', 'README.md', 'RELEASE-NOTES.md', 'requirements.txt', 'start-linux.sh', 'start-macos.sh'):
-            archive.write(HOST / name, Path('KeybardHost') / name)
+            archive.write(HOST / name, Path('KeybardOverlay') / name)
         for path in web_files:
-            archive.write(path, Path('KeybardHost/web') / path.relative_to(DIST))
+            archive.write(path, Path('KeybardOverlay/web') / path.relative_to(DIST))
         # Paranoid mode serves the single-file build; it is also usable on its own.
-        archive.write(PARANOID, Path('KeybardHost/web-paranoid/index.html'))
-        archive.writestr('KeybardHost/web-paranoid/SHA256SUMS.txt', f'{hashlib.sha256(PARANOID.read_bytes()).hexdigest()}  index.html\n')
-        archive.write(PARANOID, Path('KeybardHost') / PARANOID.name)
+        archive.write(PARANOID, Path('KeybardOverlay/web-paranoid/index.html'))
+        archive.writestr('KeybardOverlay/web-paranoid/SHA256SUMS.txt', f'{hashlib.sha256(PARANOID.read_bytes()).hexdigest()}  index.html\n')
+        archive.write(PARANOID, Path('KeybardOverlay') / PARANOID.name)
     print(destination)
 
 if __name__ == '__main__': package()

@@ -136,7 +136,7 @@ void sval_pointing_modes(sval_pointing_modes_t *m);
 
 **Touch fields, phase 1.** The finger count can be reported for the USB half's Azoteq if the driver exposes `number_of_fingers` cheaply. Add a getter in `keyboards/svalboard/azoteq/azoteq.c` and do not add an extra I2C read. Touch valid stays 0.
 
-**Out of scope.** Absolute touch positions (IQS5xx register offsets are unconfirmed). Any finger data from the non-USB half, which would need a new split RPC (KEYBOARD_SYNC_C). Second-finger positions. Keybard Host (Python) support.
+**Out of scope.** Absolute touch positions (IQS5xx register offsets are unconfirmed). Any finger data from the non-USB half, which would need a new split RPC (KEYBOARD_SYNC_C). Second-finger positions. Keybard Overlay (Python) support.
 
 ### B4. Firmware verification
 
