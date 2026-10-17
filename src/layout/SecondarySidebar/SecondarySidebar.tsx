@@ -214,6 +214,10 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
     // ?railMode=modal: the rail is the picker selector and its top-left corner the
     // way out, so the panel drops its category strip and its back arrow while editing.
     const railModal = railMode === "modal";
+    // The panel's own category strip only where the rail cannot switch the
+    // picker: ?railMode=collapse puts the whole rail under the scrim. Otherwise
+    // the rail's picker categories are the one selector.
+    const categoryStrip = railMode === "collapse";
     const railMotion = railMode === "collapse" && !bottom && !reducedMotion
         ? `left ${RAIL_COLLAPSE_MS}ms ${RAIL_COLLAPSE_EASE}, width ${RAIL_COLLAPSE_MS}ms ${RAIL_COLLAPSE_EASE}`
         : undefined;
@@ -507,7 +511,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                 <div hidden={showPicker && motion !== "enter"} inert={motion === "enter"}>
                     <PanelContent panel={activePanel} horizontal={bottom} trayPortal={!showPicker} />
                 </div>
-                {bottom && showPicker && comboActive && (
+                {categoryStrip && bottom && showPicker && comboActive && (
                     <EditorSidePanel horizontal className="pb-2" activeTab={pickerMode} onTabChange={setPickerMode} categories={pickerCategories} />
                 )}
                 {bottom && showPicker && <PanelContent panel={pickerMode} horizontal isPicker />}
@@ -536,11 +540,11 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                     <AlternativeHeader onBack={() => setIsClosingEditor(true)} menus={keyboard?.menus} holdEditorTitle showBack={!railModal} />
                 </div>
 
-                {!railModal && <div ref={railRef} data-picker-rail="" className="absolute top-24 right-0 bottom-0 overflow-y-auto z-30">
+                {categoryStrip && <div ref={railRef} data-picker-rail="" className="absolute top-24 right-0 bottom-0 overflow-y-auto z-30">
                     <EditorSidePanel activeTab={pickerMode} onTabChange={setPickerMode} categories={pickerCategories} />
                 </div>}
 
-                <div ref={pickerScrollRef} onScroll={onPickerScroll} className={cn("flex-1 min-h-0 overflow-auto overscroll-contain pl-4 pb-4", railModal ? "pr-4" : "pr-16")} data-panel-editor-scroll={panelEditor ? "" : undefined}>
+                <div ref={pickerScrollRef} onScroll={onPickerScroll} className={cn("flex-1 min-h-0 overflow-auto overscroll-contain pl-4 pb-4", categoryStrip ? "pr-16" : "pr-4")} data-panel-editor-scroll={panelEditor ? "" : undefined}>
                     {panelEditor && <div
                         ref={bindingRef}
                         tabIndex={-1}
@@ -589,7 +593,7 @@ const SecondarySidebar = ({ bottom = false, leftOffset, height = 230, comboPlace
                 style={comboActive ? (comboGeometry.style ?? { opacity: 0, pointerEvents: "none" }) : undefined}
                 onPointerDown={comboActive ? comboGeometry.onPointerDown : undefined}
             >
-                {bottom && !comboActive && <div className="shrink-0 bg-kb-surface overflow-y-auto">
+                {categoryStrip && bottom && !comboActive && <div className="shrink-0 bg-kb-surface overflow-y-auto">
                     <EditorSidePanel activeTab={pickerMode} onTabChange={setPickerMode} categories={pickerCategories} />
                 </div>}
                 <div className="relative min-w-0 flex-1 overflow-auto overscroll-contain" data-binding-scroll-owner>
