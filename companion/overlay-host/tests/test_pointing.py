@@ -201,3 +201,77 @@ class LookOpTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def late_pointing_device():
+    """A board whose two pointing slots read "no pointing module" (id 4) at first."""
+    import copy
+    from test_board_layout import fragment_definition
+    device = FakeDevice()
+    device.definition = fragment_definition()
+    device.definition['fragments'].update({
+        "pointing_none": {"id": 4, "kle": [], "widget": {"kind": "pointing", "module": "none", "w": 2.5, "h": 2.5}},
+        "pmw3389": {"id": 6, "kle": [], "widget": {"kind": "pointing", "module": "trackball", "sensor": "pmw3389", "w": 2.5, "h": 2.5}},
+    })
+    pointing = {"hardware_detect": True, "fragment_options": [
+        {"fragment": "pointing_none", "matrix_map": [], "default": True},
+        {"fragment": "pmw3389", "matrix_map": []}]}
+    for side in ("left", "right"):
+        device.definition['composition']['instances'].append(dict(copy.deepcopy(pointing), id=f"{side}_pointing"))
+    device.hardware = (255,) * 10 + (4, 4)
+    device.selections = (255,) * 12
+    return device
+
+
+class LatePointingTests(unittest.TestCase):
+    """The firmware probes again until 30 s after power-on: "none" early on can become a module."""
+
+    def setUp(self):
+        self.now = 100.0
+        self.device = late_pointing_device()
+        self.reader = SvalReader(self.device, clock=lambda: self.now)
+        self.reader.info()
+
+    def reads_0x18(self):
+        return sum(1 for p in self.device.writes if bytes(p[6:8]) == bytes((0xDF, 0x18)))
+
+    def test_a_none_slot_that_turns_into_a_trackball_is_drawn(self):
+        profile = self.reader.read_profile(self.device.uid)
+        self.assertEqual(serialize_profile(profile)['pointing'], {'left': None, 'right': None})
+        self.assertTrue(self.reader.pointing_watching())
+        self.now += 2
+        self.assertFalse(self.reader.pointing_settled())
+        # The board's 30 s probe finds the right trackball.
+        self.now += 28
+        self.device.hardware = (255,) * 10 + (4, 6)
+        self.assertTrue(self.reader.pointing_settled())
+        profile = self.reader.read_profile(self.device.uid, reuse_definition=True)
+        self.assertEqual(serialize_profile(profile)['pointing'], {'left': None, 'right': 'trackball'})
+        # The left hand still reads none and the window is still open: watched until 35 s.
+        self.assertTrue(self.reader.pointing_watching())
+        self.now += 6
+        self.assertFalse(self.reader.pointing_watching())
+
+    def test_a_slot_that_stays_none_is_not_read_after_35_s(self):
+        self.reader.read_profile(self.device.uid)
+        self.now += 34.9
+        self.assertTrue(self.reader.pointing_watching())
+        self.assertFalse(self.reader.pointing_settled())
+        self.now += 0.2
+        self.assertFalse(self.reader.pointing_watching())
+        before = self.reads_0x18()
+        self.assertGreater(before, 0)
+        self.assertFalse(self.reader.pointing_settled())
+        self.assertEqual(self.reads_0x18(), before)
+        # A later profile read (a layout refresh) doesn't open the window again.
+        self.reader.read_profile(self.device.uid, reuse_definition=True)
+        self.assertFalse(self.reader.pointing_watching())
+
+    def test_a_module_present_at_the_first_read_causes_no_rereads(self):
+        self.device.hardware = (255,) * 10 + (6, 6)
+        profile = self.reader.read_profile(self.device.uid)
+        self.assertEqual(serialize_profile(profile)['pointing'], {'left': 'trackball', 'right': 'trackball'})
+        self.assertFalse(self.reader.pointing_watching())
+        before = self.reads_0x18()
+        self.assertFalse(self.reader.pointing_settled())
+        self.assertEqual(self.reads_0x18(), before)

@@ -218,6 +218,34 @@ def candidates(hid_module):
     return result
 
 
+def none_pointing(definition, hardware):
+    """Indices of pointing instances whose 0x18 byte says "no pointing module".
+
+    The firmware probes for a module again up to 30 s after power-on, so "none"
+    early on can still turn into a module; see POINTING_NONE_WATCH."""
+    fragments = definition.get("fragments") if isinstance(definition, dict) else None
+    instances = ((definition.get("composition") or {}).get("instances") if isinstance(definition, dict) else None)
+    if not isinstance(fragments, dict) or not isinstance(instances, list):
+        return ()
+    out = []
+    for index, instance in enumerate(instances):
+        if not isinstance(instance, dict) or index >= len(hardware) or hardware[index] == 255:
+            continue
+        options = [instance] if "fragment" in instance else instance.get("fragment_options") or []
+        for option in options:
+            fragment = fragments.get(option.get("fragment")) if isinstance(option, dict) else None
+            widget = fragment.get("widget") if isinstance(fragment, dict) else None
+            if isinstance(widget, dict) and fragment.get("id") == hardware[index] and widget.get("module") == "none":
+                out.append(index)
+                break
+    return tuple(out)
+
+
+# How long after the first profile read a hand that showed "no pointing module"
+# is still re-read: the firmware's last probe is 30 s after power-on.
+POINTING_NONE_WATCH = 35.0
+
+
 class SvalReader:
     def __init__(self, device, clock=time.monotonic, cancelled=lambda: False, report_size=None):
         self.device = device
@@ -235,6 +263,10 @@ class SvalReader:
         # The 0x18 hardware bytes of the last profile read, and its pointing instances still unknown.
         self.profile_hardware = ()
         self.pointing_unsettled = ()
+        # Pointing instances that read "no module", re-read until pointing_none_until
+        # (the clock time POINTING_NONE_WATCH after this connection's first profile read).
+        self.pointing_none = ()
+        self.pointing_none_until = None
 
     def checkpoint(self):
         if self.cancelled():
@@ -401,12 +433,26 @@ class SvalReader:
             raise ProtocolError("Invalid fragment state count")
         return tuple(data[1:1 + data[0]])
 
+    def pointing_none_watched(self):
+        """The "no module" instances still worth re-reading (none after POINTING_NONE_WATCH)."""
+        if not self.pointing_none or self.pointing_none_until is None or self.clock() >= self.pointing_none_until:
+            return ()
+        return self.pointing_none
+
+    def pointing_watching(self):
+        """True while a pointing instance may still change: unknown, or "no module" early on."""
+        return bool(self.pointing_unsettled or self.pointing_none_watched())
+
     def pointing_settled(self):
-        """True once every pointing module unknown at the last profile read is known (one 0x18 read)."""
-        if not self.pointing_unsettled:
+        """True once a pointing module unknown at the last profile read is known, or one that
+        read "no module" now reads something else (one 0x18 read)."""
+        none = self.pointing_none_watched()
+        if not self.pointing_unsettled and not none:
             return False
         hardware = self.fragment_state(0x18)
-        return any(i < len(hardware) and hardware[i] != 255 for i in self.pointing_unsettled)
+        if any(i < len(hardware) and hardware[i] != 255 for i in self.pointing_unsettled):
+            return True
+        return any(i < len(hardware) and hardware[i] not in (255, self.profile_hardware[i]) for i in none)
 
     def keymap(self):
         count = self._read(0x11, protocol=0xFE)[0]
@@ -521,6 +567,9 @@ class SvalReader:
             pointing = tuple(pointing_kinds(definition, hardware).items()) if has_fragments else ()
             self.profile_hardware = tuple(hardware)
             self.pointing_unsettled = unsettled_pointing(definition, hardware) if has_fragments else ()
+            self.pointing_none = none_pointing(definition, hardware) if has_fragments else ()
+            if self.pointing_none_until is None:
+                self.pointing_none_until = self.clock() + POINTING_NONE_WATCH
             return replace(profile, keys=keys, layer_names=tuple(layer_names.items()),
                            code_labels=tuple(code_labels.items()), from_board=True, pointing=pointing)
         finally:

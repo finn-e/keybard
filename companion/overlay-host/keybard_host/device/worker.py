@@ -119,9 +119,10 @@ class DeviceWorker(QThread):
                             unavailable_generation = generation
                         else:
                             self.pressed.emit((generation, positions, time.monotonic()))
-                    # A half that hadn't reported its pointing module at the profile read: look
-                    # again each second, and re-read the profile once it has.
-                    if reader.pointing_unsettled and not self.refresh_event.is_set() and time.monotonic() >= settle_next:
+                    # A half that hadn't reported its pointing module at the profile read, or
+                    # reported none in the first 35 s (the firmware probes again until 30 s after
+                    # power-on): look again each second, and re-read the profile once it changes.
+                    if reader.pointing_watching() and not self.refresh_event.is_set() and time.monotonic() >= settle_next:
                         settle_next = time.monotonic() + self.SETTLE_INTERVAL
                         if reader.pointing_settled():
                             self.refresh_event.set()
