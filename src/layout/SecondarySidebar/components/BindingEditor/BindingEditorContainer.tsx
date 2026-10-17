@@ -30,6 +30,7 @@ import { useKeyboard } from "@/contexts/KeyboardContext";
 import { getKeyContents } from "@/utils/keys";
 import { Key } from "@/components/Key";
 import { KeyContent } from "@/types/keyboard.types";
+import { isOverrideEnabled, KeyOverrideOptions, prepareOverrideForEdit } from "@/utils/key-override";
 
 interface Props {
     shouldClose?: boolean;
@@ -386,13 +387,12 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false }) => {
                     <div className="mt-[20px]">
                         <OnOffToggle
                             label="Override enabled"
-                            value={(keyboard.key_overrides[itemToEdit]?.options & (1 << 7)) !== 0}
+                            value={isOverrideEnabled(keyboard.key_overrides[itemToEdit])}
                             onToggle={async (enabled) => {
                                 const updatedKeyboard = structuredClone(keyboard);
-                                let options = updatedKeyboard.key_overrides![itemToEdit].options;
-                                if (enabled) options |= (1 << 7);
-                                else options &= ~(1 << 7);
-                                updatedKeyboard.key_overrides![itemToEdit].options = options;
+                                const ovr = prepareOverrideForEdit(updatedKeyboard.key_overrides![itemToEdit], updatedKeyboard.layers);
+                                if (enabled) ovr.options |= KeyOverrideOptions.ENABLED;
+                                else ovr.options &= ~KeyOverrideOptions.ENABLED;
                                 setKeyboard(updatedKeyboard);
                                 await persistBinding(updatedKeyboard, "override", itemToEdit);
                             }}
