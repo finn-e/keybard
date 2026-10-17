@@ -19,7 +19,7 @@ npm run dev        # Start development server
 ## Project Structure
 
 ```text
-keybard-ng/
+keybard/
 ├── src/           # Vite + React + TypeScript
 │   ├── constants/      # KeyMap constants
 │   ├── components/     # React components
