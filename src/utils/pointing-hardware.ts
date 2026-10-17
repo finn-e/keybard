@@ -133,7 +133,11 @@ export function findPointingProblems(report: PointingHardwareReport | null | und
     return problems;
 }
 
-/** Both halves have reported and finished checking for a module; the report won't change until a half restarts. */
+/**
+ * Both halves have reported and finished checking for a module. Firmware that
+ * retries its probe can still turn "none" into a module later; the late
+ * detection poller (pointing-detect.service) keeps asking in that case.
+ */
 export function isPointingReportSettled(report: PointingHardwareReport | null | undefined): boolean {
     return !!report && report.halves.length === 2 && report.halves.every((h) => h.detected !== null);
 }
