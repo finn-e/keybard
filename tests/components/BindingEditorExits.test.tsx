@@ -54,22 +54,41 @@ describe('ways out of a binding editor', () => {
         expect(screen.queryAllByRole('button', { name: 'Done' })).toHaveLength(0);
     });
 
-    it('picker tabs and picker keys never close the editor', () => {
+    it('picker keys never close the editor', () => {
         render(<TooltipProvider><SecondarySidebar comboPlacement="half" /></TooltipProvider>);
-        fireEvent.click(screen.getAllByRole('button', { name: 'Pointing Devices' })[0]);
-        expect(state.setPickerMode).toHaveBeenCalledWith('pointing');
         fireEvent.click(screen.getAllByRole('button', { name: 'KC_A' })[0]);
         expect(closing()).toBe(false);
         expect(state.handleCloseEditor).not.toHaveBeenCalled();
         expect(state.setItemToEdit).not.toHaveBeenCalled();
     });
 
+    it.each([false, true])('has no category strip of its own: the rail switches the picker (bottom=%s)', bottom => {
+        render(<TooltipProvider><SecondarySidebar bottom={bottom} comboPlacement="half" /></TooltipProvider>);
+        expect(document.querySelector('[data-picker-rail]')).toBeNull();
+        expect(document.querySelector('[data-picker-strip]')).toBeNull();
+        expect(screen.queryAllByRole('button', { name: 'Pointing Devices' })).toHaveLength(0);
+    });
+});
+
+describe('?railMode=collapse: the rail is under the scrim, so the panel keeps its category strip', () => {
+    afterEach(() => { window.history.replaceState(null, '', '/'); state.activePanel = 'combos'; });
+
+    it('picker tabs switch the picker and never close the editor', () => {
+        window.history.replaceState(null, '', '/?railMode=collapse');
+        render(<TooltipProvider><SecondarySidebar comboPlacement="half" /></TooltipProvider>);
+        expect(document.querySelector('[data-picker-rail] [data-picker-strip]')).not.toBeNull();
+        fireEvent.click(screen.getAllByRole('button', { name: 'Pointing Devices' })[0]);
+        expect(state.setPickerMode).toHaveBeenCalledWith('pointing');
+        expect(closing()).toBe(false);
+        expect(state.handleCloseEditor).not.toHaveBeenCalled();
+    });
+
     it('offers only the categories this editor can use in the picker tabs', () => {
+        window.history.replaceState(null, '', '/?railMode=collapse');
         state.activePanel = 'tapdances';
         render(<TooltipProvider><SecondarySidebar /></TooltipProvider>);
         expect(screen.queryAllByRole('button', { name: 'Tap Dance Keys' })).toHaveLength(0);
         expect(screen.getAllByRole('button', { name: 'Macro Keys' }).length).toBeGreaterThan(0);
-        state.activePanel = 'combos';
     });
 });
 
@@ -87,9 +106,8 @@ describe('?railMode=modal: the panel while the rail is the selector and the way 
         expect(screen.getAllByRole('heading', { name: 'Combo 2' }).length).toBeGreaterThan(0);
     });
 
-    it('keeps both without the param', () => {
+    it('keeps the back arrow without the param', () => {
         render(<TooltipProvider><SecondarySidebar comboPlacement="panel" /></TooltipProvider>);
-        expect(document.querySelector('[data-picker-rail] [data-picker-strip]')).not.toBeNull();
         expect(screen.getAllByRole('button', { name: 'Go back' }).length).toBeGreaterThan(0);
     });
 });
