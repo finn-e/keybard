@@ -41,7 +41,7 @@ export interface ComboFoldProps {
     hues: ReadonlyMap<number, number>;
     /** Combos being previewed, if any. */
     focusSet: ReadonlySet<number> | null;
-    /** "small" scales the fold down at rest; "large" keeps it large. */
+    /** "small" (indicators on) scales the fold down at rest; it grows while the pointer moves. */
     mode?: ComboIndicatorMode;
     palette?: ComboPalette;
     /** Changes whenever the key's legend changes, so the fold re-measures its room. */

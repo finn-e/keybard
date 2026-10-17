@@ -138,16 +138,19 @@ describe("combo folded corner on the layout", () => {
         }
     });
 
-    it("Small scales folds toward the corner at rest; Large keeps them large", () => {
-        const { unmount } = renderAll();
+    it("On scales folds toward the corner at rest; a saved Large or true is the same", () => {
         const restOf = (code: string) => (foldOf(code)!.querySelector("[data-fold-scale]") as SVGGElement).style.getPropertyValue("--kb-fold-rest");
-        const rest = Number(restOf("KC_J"));
-        expect(rest).toBeGreaterThan(0.4);
-        expect(rest).toBeLessThan(1);
+        const { unmount } = renderAll();
+        const rest = restOf("KC_J");
+        expect(Number(rest)).toBeGreaterThan(0.4);
+        expect(Number(rest)).toBeLessThan(1);
         unmount();
-        state.mode = "large";
-        renderAll();
-        expect(restOf("KC_J")).toBe("1.0000");
+        for (const saved of ["large", true] as const) {
+            (state as { mode: unknown }).mode = saved;
+            const r = renderAll();
+            expect(restOf("KC_J")).toBe(rest);
+            r.unmount();
+        }
     });
 
     it("pointer movement over the keyboard marks it active until the idle delay, without re-rendering", () => {
@@ -182,12 +185,12 @@ describe("combo folded corner on the layout", () => {
         expect(big("KC_E")).toBe(false);
     });
 
-    it("Large mode has no motion", () => {
+    it("a saved Large value grows and shrinks like On (Large is gone)", () => {
         state.mode = "large";
         renderAll();
         const layout = document.querySelector(".keyboard-layout") as HTMLElement;
         fireEvent.pointerMove(keyEl("KC_Q"), { pointerType: "mouse" });
-        expect(layout.hasAttribute("data-combo-motion")).toBe(false);
+        expect(layout.getAttribute("data-combo-motion")).toBe("active");
     });
 
     it("gives a combo the same color on every key it is on", () => {
@@ -209,8 +212,8 @@ describe("combo folded corner on the layout", () => {
         expect(stops).toHaveLength(1);
     });
 
-    it("draws no folds and lights nothing when the setting is off, but the inspector still shows", () => {
-        state.mode = "off";
+    it.each([false, "off"] as const)("draws no folds and lights nothing when the setting is off (%s), but the inspector still shows", (off) => {
+        (state as { mode: unknown }).mode = off;
         renderAll();
         expect(document.querySelector("svg[data-combo-fold]")).toBeNull();
         fireEvent.mouseEnter(keyEl("KC_J"));

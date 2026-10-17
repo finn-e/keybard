@@ -75,7 +75,8 @@ describe("settings migration on load", () => {
         await waitFor(() => expect(JSON.parse(appStorage.getItem("keyboard-settings")!).__v).toBe(2));
         const stored = JSON.parse(appStorage.getItem("keyboard-settings")!);
         expect(stored).not.toHaveProperty("left-dpi");
-        expect(stored["combo-indicators"]).toBe("small");
+        // The old select value becomes the switch: "small" is on.
+        expect(stored["combo-indicators"]).toBe(true);
         appStorage.removeItem("keyboard-settings");
     });
 });
