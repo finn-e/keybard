@@ -43,7 +43,10 @@ describe("combo indicator setting", () => {
         const general = SETTINGS_CATEGORIES.find(c => c.name === "general")!.settings;
         const small = new Set(["a", "an", "the", "of", "to", "by", "and", "or"]);
         for (const name of general) {
-            const label = SETTINGS.find(s => s.name === name)!.label;
+            // The deprecated list keeps names whose definitions left with the Settings page (layout.ts).
+            const def = SETTINGS.find(s => s.name === name);
+            if (!def) continue;
+            const label = def.label;
             for (const word of label.replace(/\.\.\.$/, "").split(/[\s-]+/)) {
                 if (small.has(word)) continue;
                 expect(word[0], `${label}`).toBe(word[0].toUpperCase());

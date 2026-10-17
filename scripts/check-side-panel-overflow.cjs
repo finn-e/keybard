@@ -92,7 +92,7 @@ const overflowScan = () => {
     const p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
     // The side panel editor is the default placement: no ?comboEditor= needed.
     const q = shape === "panel" ? "" : `?pickerShape=${shape}`;
-    await p.goto(`http://localhost:${port}/keybard-ng/${q}`);
+    await p.goto(`http://localhost:${port}/keybard/${q}`);
     await p.waitForTimeout(800);
     await p.getByText("QWERTY Example").click();
     await p.waitForTimeout(2000);

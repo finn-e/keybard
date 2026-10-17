@@ -1,6 +1,9 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { LayoutSettingsProvider, useLayoutSettings } from '../../src/contexts/LayoutSettingsContext';
+import { SettingsProvider } from '../../src/contexts/SettingsContext';
+import { appStorage } from '../../src/utils/app-storage';
+import type { ReactNode } from 'react';
 
 const originalWidth = window.innerWidth;
 function resize(width: number) {
@@ -56,5 +59,43 @@ describe('responsive editor placement', () => {
     act(() => result.current.setKeyVariant('small'));
     act(() => resize(390));
     expect(result.current.keyVariant).toBe('small');
+  });
+});
+
+describe('stored key size and panel position', () => {
+  const withSettings = ({ children }: { children: ReactNode }) => (
+    <SettingsProvider><LayoutSettingsProvider>{children}</LayoutSettingsProvider></SettingsProvider>
+  );
+  const stored = () => JSON.parse(appStorage.getItem('keyboard-settings') ?? '{}');
+  afterEach(() => appStorage.removeItem('keyboard-settings'));
+
+  it('defaults both to Auto', () => {
+    resize(1280);
+    const { result } = renderHook(useLayoutSettings, { wrapper: withSettings });
+    expect(result.current.isAutoKeySize).toBe(true);
+    expect(result.current.isAutoLayoutMode).toBe(true);
+    expect(result.current.layoutMode).toBe('sidebar');
+  });
+
+  it('applies the stored choices when the page opens', () => {
+    resize(1280);
+    appStorage.setItem('keyboard-settings', JSON.stringify({ __v: 2, 'key-size': 'small', 'panel-position': 'bottombar' }));
+    const { result } = renderHook(useLayoutSettings, { wrapper: withSettings });
+    expect(result.current.keyVariant).toBe('small');
+    expect(result.current.isAutoKeySize).toBe(false);
+    expect(result.current.layoutMode).toBe('bottombar');
+    expect(result.current.isAutoLayoutMode).toBe(false);
+  });
+
+  it('stores a manual choice and a return to Auto', () => {
+    resize(1280);
+    const { result } = renderHook(useLayoutSettings, { wrapper: withSettings });
+    act(() => result.current.setKeyVariant('medium'));
+    act(() => result.current.setLayoutMode('bottombar'));
+    expect(stored()).toMatchObject({ 'key-size': 'medium', 'panel-position': 'bottombar' });
+    act(() => result.current.setIsAutoKeySize(true));
+    act(() => result.current.setIsAutoLayoutMode(true));
+    expect(stored()).toMatchObject({ 'key-size': 'auto', 'panel-position': 'auto' });
+    expect(result.current.layoutMode).toBe('sidebar');
   });
 });

@@ -21,19 +21,7 @@ import { cn } from "@/lib/utils";
 import { svalService } from "@/services/sval.service";
 import { KEYMAP } from "@/constants/keygen";
 
-import { fileService } from "@/services/file.service";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
+import ExportDialog from "@/components/ExportDialog";
 
 import { FC, useState, useEffect, useRef } from "react";
 import { usePanels } from "@/contexts/PanelsContext";
@@ -104,29 +92,8 @@ const LayerSelector: FC<LayerSelectorProps> = ({
     // Import/Export / Connect state
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isExportOpen, setIsExportOpen] = useState(false);
-    const [exportFormat, setExportFormat] = useState<"svil" | "vil">("svil");
-    const [includeMacros, setIncludeMacros] = useState(true);
 
-    const { handleFileImport, importReview, setFileError } = useLayoutImport();
-
-    const handleExport = async () => {
-        if (!keyboard) {
-            console.error("No keyboard loaded");
-            return;
-        }
-
-        try {
-            if (exportFormat === "svil") {
-                // Custom values are already in keyboard.custom_values (loaded at connect time)
-                await fileService.downloadSvil(keyboard, includeMacros);
-            } else {
-                await fileService.downloadVIL(keyboard, includeMacros);
-            }
-            setIsExportOpen(false);
-        } catch (err) {
-            setFileError(err instanceof Error ? err.message : String(err));
-        }
-    };
+    const { handleFileImport, importReview } = useLayoutImport();
 
     // Track container width for collapsing behavior
     const containerRef = useRef<HTMLDivElement>(null);
@@ -359,43 +326,8 @@ const LayerSelector: FC<LayerSelectorProps> = ({
                                 onChange={handleFileImport}
                             />
 
-                            {/* Export Dialog */}
-                            <Dialog open={isExportOpen} onOpenChange={setIsExportOpen}>
-                                <DialogContent className="sm:max-w-[425px]">
-                                    <DialogHeader>
-                                        <DialogTitle>Export Keyboard Configuration</DialogTitle>
-                                        <DialogDescription>
-                                            Choose the format and options for exporting your keyboard configuration.
-                                        </DialogDescription>
-                                    </DialogHeader>
-                                    <div className="grid gap-4 py-4">
-                                        <div className="grid grid-cols-4 items-center gap-4">
-                                            <Label htmlFor="format" className="text-right">Format</Label>
-                                            <Select value={exportFormat} onValueChange={(v) => setExportFormat(v as "svil" | "vil")}>
-                                                <SelectTrigger aria-label="Export format" className="col-span-3">
-                                                    <SelectValue placeholder="Select format" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="svil">.svil (Recommended)</SelectItem>
-                                                    <SelectItem value="vil">.vil (Vial compatible)</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div className="grid grid-cols-4 items-center gap-4">
-                                            <Label htmlFor="macros" className="text-right">Include Macros</Label>
-                                            <Switch
-                                                id="macros"
-                                                checked={includeMacros}
-                                                onCheckedChange={setIncludeMacros}
-                                            />
-                                        </div>
-                                    </div>
-                                    <DialogFooter>
-                                        <Button variant="outline" onClick={() => setIsExportOpen(false)}>Cancel</Button>
-                                        <Button onClick={handleExport}>Export</Button>
-                                    </DialogFooter>
-                                </DialogContent>
-                            </Dialog>
+                            {/* Export Dialog: the same one Settings opens */}
+                            <ExportDialog open={isExportOpen} onOpenChange={setIsExportOpen} />
 
                             {/* Connect / Update Button Group */}
                             {!isConnected ? (

@@ -11,6 +11,7 @@ import { getKeyContents } from "@/utils/keys";
 import { keyService } from "@/services/key.service";
 import { KeyContent } from "@/types/keyboard.types";
 import DescriptionBlock from "@/layout/SecondarySidebar/components/DescriptionBlock";
+import MouseMovementSection from "./MouseMovementSection";
 
 /**
  * Mouse key definition with keycode and display label
@@ -147,6 +148,7 @@ const MousePanel: React.FC<Props> = ({ isPicker }) => {
                 {renderKeyGroup(mouseWheel, "Wheel")}
                 {renderKeyGroup(mouseAccel, "Accel")}
                 {svalKeys.length > 0 && renderKeyGroup(svalKeys, "Svalboard")}
+                {!isPicker && <MouseMovementSection />}
             </div>
         );
     }
@@ -187,6 +189,7 @@ const MousePanel: React.FC<Props> = ({ isPicker }) => {
                     );
                 })}
                 </div>
+                {!isPicker && <MouseMovementSection />}
             </div>
         </section>
     );

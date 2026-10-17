@@ -1,3 +1,5 @@
+import { migrateSettings, SETTINGS_SCHEMA_VERSION, SETTINGS_VERSION_KEY } from "@/services/settings-migration";
+import { DEFAULT_KEY_SIZE, DEFAULT_PANEL_POSITION, KEY_SIZE_SETTING, PANEL_POSITION_SETTING } from "@/lib/appearance-settings";
 import { SettingDefinition, SettingsCategory, SettingsContextType, SettingsState } from "@/types/settings.types";
 import { SettingsIcon, LayoutGrid, FileJson, History } from "lucide-react";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
@@ -142,19 +144,6 @@ export const SETTINGS: SettingDefinition[] = [
         action: "export-settings",
     },
     {
-        name: "print",
-        label: "Print Layers...",
-        description: "Print all non-empty keyboard layers to PDF",
-        type: "action",
-        action: "print-keymap",
-    },
-    {
-        name: "qmk-settings",
-        label: "QMK Settings...",
-        type: "action",
-        action: "open-qmk-settings",
-    },
-    {
         name: "scan-lab",
         label: "Scan Lab...",
         description: "Measure key scanning and test sensor timing.",
@@ -169,67 +158,36 @@ export const SETTINGS: SettingDefinition[] = [
         action: "open-proof-sheet",
     },
     {
-        name: "left-dpi",
-        label: "Left DPI",
-        description: "Adjust sensitivity for your left pointing device.",
-        type: "slider",
-        defaultValue: 800,
-        min: 100,
-        max: 3200,
-        step: 100,
-        scope: "hardware",
+        name: KEY_SIZE_SETTING,
+        label: "Key size",
+        type: "select",
+        items: [
+            { label: "Auto", value: "auto" },
+            { label: "Normal", value: "default" },
+            { label: "Medium", value: "medium" },
+            { label: "Small", value: "small" },
+        ],
+        defaultValue: DEFAULT_KEY_SIZE,
     },
     {
-        name: "right-dpi",
-        label: "Right DPI",
-        description: "Adjust sensitivity for your right pointing device.",
-        type: "slider",
-        defaultValue: 800,
-        min: 100,
-        max: 3200,
-        step: 100,
-        scope: "hardware",
-    },
-    {
-        name: "scroll-right",
-        label: "Use right device for scrolling",
-        type: "boolean",
-        defaultValue: false,
-        scope: "hardware",
-    },
-    {
-        name: "scroll-left",
-        label: "Use left device for scrolling",
-        type: "boolean",
-        defaultValue: false,
-        scope: "hardware",
-    },
-    {
-        name: "auto-mouse",
-        label: "Automatically switch to mouse layer when using pointing device",
-        type: "boolean",
-        defaultValue: false,
-        scope: "hardware",
-    },
-    {
-        name: "auto-mouse-timeout",
-        label: "Auto-mouse switch timeout (ms)",
-        description: "Time after which the keyboard switches back to the previous layer.",
-        type: "slider",
-        defaultValue: 500,
-        min: 200,
-        max: 2000,
-        step: 100,
-        scope: "hardware",
-    },
-    {
-        name: "fix-drift",
-        label: "Fix pointer drift",
-        description: "Recalibrate the trackpoint module to avoid pointer drift.",
-        type: "action",
+        name: PANEL_POSITION_SETTING,
+        label: "Panel position",
+        type: "select",
+        items: [
+            { label: "Auto", value: "auto" },
+            { label: "Beside the keyboard", value: "sidebar" },
+            { label: "Below the keyboard", value: "bottombar" },
+        ],
+        defaultValue: DEFAULT_PANEL_POSITION,
     },
 ];
 
+/**
+ * The tabbed Settings layout from before Settings became one page. Nothing
+ * renders it any more: the page reads settings/layout.ts. It stays only so
+ * branches that add names here still merge; add new names to layout.ts.
+ * @deprecated
+ */
 export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     {
         name: "general",
@@ -266,7 +224,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     // Load settings from localStorage on mount
     useEffect(() => {
-        const loadedSettings = settingsService.load();
+        const loadedSettings = migrateSettings(settingsService.load());
         setSettings(loadedSettings);
         setLoaded(true);
         refreshHardwareSettings();
@@ -314,7 +272,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const resetSettings = useCallback(() => {
         settingsService.clear();
-        setSettings({});
+        setSettings({ [SETTINGS_VERSION_KEY]: SETTINGS_SCHEMA_VERSION });
     }, []);
 
     const resetSetting = useCallback((name: string) => {
@@ -359,6 +317,9 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 };
+
+/** The settings, or null outside a SettingsProvider (isolated renders and tests). */
+export const useOptionalSettings = (): SettingsContextType | null => useContext(SettingsContext) ?? null;
 
 export const useSettings = (): SettingsContextType => {
     const context = useContext(SettingsContext);

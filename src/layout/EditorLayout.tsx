@@ -27,6 +27,7 @@ import { useLayoutLibrary } from "@/contexts/LayoutLibraryContext";
 import { PasteLayerDialog } from "@/components/PasteLayerDialog";
 import { DragReplaceLayerDialog } from "@/components/DragReplaceLayerDialog";
 import { StorageResetDialog } from "@/components/StorageResetDialog";
+import { AppFirmwareUpdates } from "@/features/firmware/AppFirmwareUpdates";
 import { TrackballMismatchDialog } from "@/components/TrackballMismatchDialog";
 import type { LayerEntry } from "@/types/layer-library";
 
@@ -74,7 +75,9 @@ const EditorLayout = () => {
                     <LayerProvider>
                         <DragProvider onUnhandledDrop={handleUnhandledDrop}>
                             <ComboPreviewProvider>
-                                <EditorLayoutInner />
+                                <AppFirmwareUpdates>
+                                    <EditorLayoutInner />
+                                </AppFirmwareUpdates>
                             </ComboPreviewProvider>
                             <DragOverlay />
                         </DragProvider>

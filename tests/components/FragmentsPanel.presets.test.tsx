@@ -85,3 +85,17 @@ describe('hardware presets', () => {
         for (const label of ['Default', '6-key', 'Fang']) expect(screen.getByText(label)).toBeInTheDocument();
     });
 });
+
+describe('cluster preset control', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('is one group, and marks the preset the board already matches', () => {
+        mocks.current = Object.fromEntries(POSITIONS.map((id) => [id, id.endsWith('thumb') ? 'thumb' : /index|pinky/.test(id) ? 'finger_6' : 'finger_5']));
+        render(<FragmentsPanel />);
+        const group = screen.getByRole('group', { name: 'Cluster presets' });
+        expect(group).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Use 6-key index and pinky clusters, 5-key middle and ring' })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: 'Restore default hardware selections' })).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByRole('button', { name: 'Use 6-key finger clusters' })).toHaveAttribute('aria-pressed', 'false');
+    });
+});

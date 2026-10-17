@@ -1,4 +1,4 @@
-import { ArrowLeft, BookOpen, HelpCircle, Keyboard, ListOrdered, LucideIcon, Mouse, PanelLeftClose, PanelLeftOpen, Piano, Rocket, Settings } from "lucide-react";
+import { ArrowLeft, BookOpen, HelpCircle, Keyboard, LayoutGrid, ListOrdered, LucideIcon, Mouse, PanelLeftClose, PanelLeftOpen, Piano, Rocket, Settings, Timer } from "lucide-react";
 import KeybardLogo from "@/components/icons/KeybardLogo";
 import PointingDeviceBall01Icon from "@/components/icons/PointingDeviceBall01Icon";
 import LayoutLayersIcon from "@/components/icons/LayoutLayersIcon";
@@ -29,6 +29,8 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
 import { PARANOID } from "@/lib/paranoid";
+import { requestSettingsSection } from "@/layout/SecondarySidebar/Panels/settings/anchor";
+import { useFirmwareUpdates } from "@/features/firmware/FirmwareUpdateProvider";
 import { bindingEditorKind, currentRailMode, isBindingEditorOpen, modalRailExitLabel, pickerCategoryForRail, effectivePickerMode, nudgeBindingEditor, reviewChoice, RAIL_BARS, RAIL_BAR_PARAM, usablePickerCategories } from "@/lib/bindingSpotlight";
 import { ALT_REPEAT_PANEL, panelAllowed, SHOW_ALT_REPEAT_SETTING } from "@/lib/altRepeatVisibility";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -79,18 +81,23 @@ export const primarySidebarItems: SidebarItem[] = [
 // Leaders - enable when ready to test
 const SHOW_LEADERS = true;
 
-/** The binding group of the rail. Alt-Repeat comes last, only when its app preference is on. */
+/**
+ * The binding group of the rail, then Typing Behavior. Alt-Repeat is the last binding
+ * item, only when its app preference is on.
+ */
 export function featureSidebarItemsFor(showAltRepeat: boolean): SidebarItem[] {
     return [
         ...(SHOW_LEADERS ? [{ title: "Leaders", url: "leaders", icon: ListOrdered }] : []),
         { title: "Combos", url: "combos", icon: ComboIcon },
         { title: "Overrides", url: "overrides", icon: OverridesIcon },
         ...(showAltRepeat ? [{ title: "Alt-Repeat", url: ALT_REPEAT_PANEL, icon: AltRepeatArrowsIcon }] : []),
+        { title: "Typing Behavior", url: "typing", icon: Timer },
     ];
 }
 
 const layoutSidebarItems: SidebarItem[] = [
     { title: "Layouts", url: "layouts", icon: LayoutLayersIcon },
+    { title: "Clusters", url: "clusters", icon: LayoutGrid },
     { title: "Overlay", url: "trainer", icon: GraduationCapIcon },
 ];
 
@@ -148,6 +155,8 @@ interface SidebarNavItemProps {
     alternativeHeader?: boolean;
     isCollapsed: boolean;
     onClick: (item: SidebarItem) => void;
+    /** A quiet dot on the icon: a firmware update the user hasn't opened yet. */
+    dot?: string;
     /**
      * While a binding editor is open: "lift" keeps a usable picker category
      * above the rail's scrim; "origin" lifts the item the editor was opened
@@ -168,6 +177,7 @@ const SidebarNavItem = ({
     alternativeHeader,
     isCollapsed,
     onClick,
+    dot,
     spotlight,
     current,
 }: SidebarNavItemProps) => (
@@ -199,9 +209,10 @@ const SidebarNavItem = ({
                     </span>
                 </a>
             ) : (
-                <button type="button" aria-label={item.title} aria-pressed={isActive} onClick={() => onClick(item)} className="flex w-full items-center justify-start">
-                    <div className={cn(ICON_GUTTER_CLASSES, "h-full")}>
+                <button type="button" aria-label={dot ? `${item.title}, ${dot}` : item.title} aria-pressed={isActive} onClick={() => onClick(item)} className="flex w-full items-center justify-start">
+                    <div className={cn(ICON_GUTTER_CLASSES, "relative h-full")}>
                         <item.icon className="h-5 w-5 shrink-0" />
+                        {dot && <span aria-hidden="true" data-testid="rail-dot" className="absolute right-[calc(50%-12px)] top-[calc(50%-12px)] h-2 w-2 rounded-full bg-kb-primary ring-2 ring-sidebar" />}
                     </div>
                     <span className={cn("truncate", isCollapsed && "hidden")}>
                         {item.title}
@@ -273,6 +284,7 @@ const AppSidebar = () => {
     }, [railCollapse]);
 
     const { keyboard } = useKeyboard();
+    const firmwareDot = useFirmwareUpdates()?.status.dot ? "firmware update available" : undefined;
     const navCenter = useWholePixelCenter(railModal);
     // Owner review: ?railBar=flush|gap2|kiss (unset is flush).
     const railBar = useMemo(() => reviewChoice(window.location.search, RAIL_BAR_PARAM, RAIL_BARS), []);
@@ -294,7 +306,8 @@ const AppSidebar = () => {
 
 
     const handleItemSelect = useCallback(
-        (item: SidebarItem) => {
+        (selected: SidebarItem) => {
+            let item = selected;
             if (railModal) {
                 const category = pickerCategoryForRail(item.url, activePanel);
                 if (category) setPickerMode(category);
@@ -310,6 +323,15 @@ const AppSidebar = () => {
                 // The editor's own item never leaves it: it points to the way out.
                 else if (item.url === activePanel) nudgeBindingEditor();
                 return;
+            }
+            // About is a section of Settings: open Settings there.
+            if (item.url === "about") {
+                requestSettingsSection("about");
+                if (activePanel === "settings" && open) {
+                    if (window.innerWidth < 900) setNavigationOpen(false);
+                    return;
+                }
+                item = { ...item, url: "settings" };
             }
             // Labels can be expanded to choose a destination; return the narrow
             // viewport to its icon rail so the chosen panel remains usable.
@@ -649,6 +671,7 @@ const AppSidebar = () => {
                                     isActive={markedPanel === item.url}
                                     isCollapsed={isCollapsed}
                                     onClick={handleItemSelect}
+                                    dot={item.url === "settings" ? firmwareDot : undefined}
                                     spotlight={railSpotlight(item.url)}
                                     current={editing && shownPickerMode === item.url}
                                 />

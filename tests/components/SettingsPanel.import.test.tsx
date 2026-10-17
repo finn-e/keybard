@@ -5,7 +5,7 @@ import SettingsPanel from '../../src/layout/SecondarySidebar/Panels/SettingsPane
 const mocks = vi.hoisted(() => ({ connected: true, instant: true, pending: {} as Record<string, unknown>, loadFromFile: vi.fn(), queue: vi.fn(), sync: vi.fn(), commit: vi.fn(), load: vi.fn(), setKeyboard: vi.fn(), keyboard: { rows: 1, cols: 1, layers: 1, keymap: [[4]], name: 'Test keyboard', macros: [], macro_count: 0, settings: {} } }));
 vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ keyboard: mocks.keyboard, setKeyboard: mocks.setKeyboard, isConnected: mocks.connected, loadFromFile: mocks.loadFromFile, setIsImporting: vi.fn() }) }));
 vi.mock('@/contexts/ChangesContext', () => ({ useChanges: () => ({ queue: mocks.queue, todo: mocks.pending, isInstant: mocks.instant, isSaving: false, commit: mocks.commit }) }));
-vi.mock('@/contexts/SettingsContext', () => ({ useSettings: () => ({ getSetting: vi.fn(), updateSetting: vi.fn(), settingsDefinitions: [], settingsCategories: [] }) }));
+vi.mock('@/contexts/SettingsContext', () => ({ useSettings: () => ({ getSetting: vi.fn(), updateSetting: vi.fn(), getSettingDefinition: () => undefined }) }));
 vi.mock('@/contexts/LayoutSettingsContext', () => ({ useLayoutSettings: () => ({ layoutMode: 'sidebar' }) }));
 vi.mock('@/contexts/PanelsContext', () => ({ usePanels: () => ({ setActivePanel: vi.fn() }) }));
 vi.mock('@/App', () => ({ useNavigation: () => ({ navigateTo: vi.fn() }) }));
@@ -13,8 +13,8 @@ vi.mock('@/services/file.service', () => ({ fileService: { uploadFile: mocks.loa
 vi.mock('@/services/import.service', () => ({ importService: { syncWithKeyboard: mocks.sync } }));
 vi.mock('@/services/keyboard.service', () => ({ keyboardService: {} }));
 vi.mock('../../src/layout/SecondarySidebar/Panels/BoardIdentitySection', () => ({ default: () => null }));
-vi.mock('../../src/layout/SecondarySidebar/Panels/FragmentsPanel', () => ({ default: () => null }));
-vi.mock('../../src/layout/SecondarySidebar/Panels/DynamicMenuPanel', () => ({ default: () => null }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/BackupsSection', () => ({ default: () => null }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/settings/FirmwareRow', () => ({ default: () => null }));
 
 beforeEach(() => { vi.clearAllMocks(); mocks.connected = true; mocks.instant = true; mocks.pending = {}; mocks.loadFromFile.mockResolvedValue(true); mocks.load.mockResolvedValue({ ...mocks.keyboard, keymap: [[5]] }); mocks.commit.mockResolvedValue(true); });
 const chooseFile = (container: HTMLElement) => fireEvent.change(container.querySelector('input[type=file]')!, { target: { files: [new File(['{}'], 'layout.svil')] } });

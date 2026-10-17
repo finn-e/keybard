@@ -1,5 +1,5 @@
 import { useChanges } from "@/contexts/ChangesContext";
-import React, { useId, useState } from "react";
+import React, { ReactNode, useId, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 import { Switch } from "@/components/ui/switch";
@@ -11,9 +11,12 @@ import { keyboardService } from "@/services/keyboard.service";
 import { cn } from "@/lib/utils";
 import type { QMKSettingsField } from "@/types/qmk";
 
-// TODO: Remove "Combo" and "Leader Key" sections from this panel after the timing
-// settings are fully tested in their respective feature panels (CombosPanel, LeadersPanel).
-// These duplicates exist temporarily to allow side-by-side comparison during testing.
+// The QMK settings (QSIDs) have no panel of their own. Each group of fields is shown
+// in the editor panel for the feature it tunes:
+//   Typing behavior: Tap-Hold, Auto Shift, One Shot Keys, Magic, Grave Escape
+//   Mouse Keys > Movement: Mouse keys
+//   Combos and Leaders: their own timing inputs (the "Combo" and "Leader Key"
+//   groups are not rendered here).
 
 // Holds what the user types and saves it on Enter or blur. Saving on every keystroke
 // clamped partial values and disabled the field mid-edit, which dropped focus.
@@ -54,36 +57,31 @@ const IntegerSettingInput: React.FC<{
     );
 };
 
-const QMKSettingsPanel: React.FC = () => {
+export interface QmkSettingsSectionsProps {
+    /** QMK_SETTINGS tab names to show, in this order. */
+    sections: string[];
+    /** Sections that start expanded. */
+    openByDefault?: string[];
+    /** Show the fields without accordion headers (for a single section inside another panel). */
+    flat?: boolean;
+    /** Shown when the keyboard reports no QMK settings. */
+    emptyMessage?: ReactNode;
+}
+
+export const QmkSettingsSections: React.FC<QmkSettingsSectionsProps> = ({ sections, openByDefault = [], flat = false, emptyMessage = null }) => {
     const { keyboard, setKeyboard } = useKeyboard();
     const { queue } = useChanges();
     const panelId = useId();
-    const [expanded, setExpanded] = useState<Record<string, boolean>>({
-        "Magic": false,
-        "Grave Escape": false,
-        "Tap-Hold": true,
-        "Auto Shift": false,
-        "Combo": false,
-        "One Shot Keys": false,
-        "Mouse keys": false,
-        "Leader Key": true, // Default open since user needs this for leader sequences
-    });
+    const [expanded, setExpanded] = useState<Record<string, boolean>>(
+        () => Object.fromEntries(sections.map((name) => [name, openByDefault.includes(name)])),
+    );
     const [saving, setSaving] = useState<Record<string, boolean>>({});
 
     if (!keyboard) return null;
 
     // Check if keyboard has QMK settings
     if (!keyboard.settings || Object.keys(keyboard.settings).length === 0) {
-        return (
-            <section className="space-y-3 flex flex-col pt-0">
-                <div className="px-4 text-center text-muted-foreground">
-                    <p className="font-medium">No QMK Settings Available</p>
-                    <p className="text-sm mt-2">
-                        This keyboard does not support QMK settings, or settings have not been loaded yet.
-                    </p>
-                </div>
-            </section>
-        );
+        return <>{emptyMessage}</>;
     }
 
     const toggleSection = (name: string) => {
@@ -265,22 +263,21 @@ const QMKSettingsPanel: React.FC = () => {
         );
     };
 
-    return (
-        <section className="space-y-0 flex flex-col">
-            {/* Header */}
-            <div className="px-3 py-3 border-b border-gray-200 dark:border-neutral-700">
-                <h2 className="font-semibold text-sm">QMK Settings</h2>
-                <p className="text-xs text-muted-foreground mt-1">
-                    Configure firmware behavior. Changes follow your update mode.
-                </p>
-            </div>
+    const tabs = sections
+        .map((name) => QMK_SETTINGS.tabs.find((tab) => tab.name === name))
+        .filter((tab): tab is (typeof QMK_SETTINGS.tabs)[number] => !!tab);
 
-            {/* Scrollable sections */}
-            <div className="flex flex-col">
-                {QMK_SETTINGS.tabs.map(tab => renderSection(tab.name, tab.fields))}
-            </div>
-        </section>
+    if (flat) {
+        const fields = tabs.flatMap((tab) => tab.fields).filter((f) => isSupported(f.qsid));
+        if (fields.length === 0) return null;
+        return <div className="flex flex-col space-y-1">{fields.map((field, index) => renderField(field, index))}</div>;
+    }
+
+    return (
+        <div className="flex flex-col">
+            {tabs.map(tab => renderSection(tab.name, tab.fields))}
+        </div>
     );
 };
 
-export default QMKSettingsPanel;
+export default QmkSettingsSections;
