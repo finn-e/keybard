@@ -14,6 +14,8 @@ Run with `npm run test:e2e:settings`.
      scroll, every section heading visible, Hardware's rows present, Typing
      behavior collapsed. Old links (?panel=typing|clusters|fragments) land in
      Settings at that section.
+  6. Hardware opens on a first visit, then as it was left: collapsed stays
+     collapsed after a reload; an old link opens it for that visit only.
 
 Same server options as combo_editor_e2e.py (E2E_URL, E2E_SKIP_BUILD).
 Exits 1 when a check fails.
@@ -96,6 +98,29 @@ def main() -> int:
             check(page.get_by_role("group", name="Cluster presets").is_visible(), f"{option}: Hardware rows present")
             typing = page.get_by_role("button", name="Typing behavior")
             check(typing.get_attribute("aria-expanded") == "false", f"{option}: Typing behavior starts collapsed")
+            check(not errors, f"{option}: no page errors: {errors}")
+            context.close()
+
+        for option in ["a", "b", "c"]:
+            q = f"?demo=combos&panel=settings&settingsLayout={option}"
+            context, page, errors = open_settings(browser, url, query=q)
+            toggle = page.locator("#settings-section-hardware-title button")
+            check(toggle.get_attribute("aria-expanded") == "true", f"{option}: Hardware open on a first visit")
+            toggle.click()
+            check(toggle.get_attribute("aria-expanded") == "false", f"{option}: Hardware collapses")
+            page.wait_for_timeout(300)
+            page.reload()
+            expect(page.get_by_label("Search settings")).to_be_visible(timeout=20000)
+            check(toggle.get_attribute("aria-expanded") == "false", f"{option}: still collapsed after reload")
+            check(page.get_by_role("group", name="Cluster presets").count() == 0, f"{option}: no Hardware rows while collapsed")
+            page.goto(url + f"?demo=combos&panel=clusters&settingsLayout={option}")
+            expect(page.get_by_label("Search settings")).to_be_visible(timeout=20000)
+            page.wait_for_timeout(300)
+            check(toggle.get_attribute("aria-expanded") == "true", f"{option}: ?panel=clusters opens it for the visit")
+            page.goto(url + q)
+            expect(page.get_by_label("Search settings")).to_be_visible(timeout=20000)
+            page.wait_for_timeout(300)
+            check(toggle.get_attribute("aria-expanded") == "false", f"{option}: and the remembered state stays collapsed")
             check(not errors, f"{option}: no page errors: {errors}")
             context.close()
 

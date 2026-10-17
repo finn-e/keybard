@@ -31,6 +31,11 @@ export interface SettingsSection {
     defaultOpen?: boolean;
     /** Once opened, stays open in this browser (the setting that remembers it). */
     rememberOpen?: string;
+    /**
+     * Opens as it was left in this browser (the setting that remembers it, as
+     * "open" or "collapsed"). Until then it follows `defaultOpen`.
+     */
+    rememberState?: string;
     /** What the section holds, in a few words, shown under a collapsed heading. */
     summary?: string;
 }
@@ -61,7 +66,19 @@ export const TYPING_BEHAVIOR_SECTIONS = ["Tap-Hold", "Auto Shift", "One Shot Key
 
 // --- Sections, shared by the layouts ---
 
-const hardware: SettingsSection = { id: "hardware", title: "Hardware", rows: [{ block: "hardware" }], summary: "Clusters, pointing devices and ball color" };
+/** Whether Hardware was left "open" or "collapsed" in this browser (unset until first toggled). */
+export const HARDWARE_OPEN_SETTING = "settings-hardware-open";
+
+// Set up once, then rarely touched: open on a first visit, then as it was left.
+const hardware: SettingsSection = {
+    id: "hardware",
+    title: "Hardware",
+    rows: [{ block: "hardware" }],
+    collapsible: true,
+    defaultOpen: true,
+    rememberState: HARDWARE_OPEN_SETTING,
+    summary: "Clusters, pointing devices and ball color",
+};
 const importRow: SettingsRow = { setting: "import", label: "Import layout", description: "Open a .svil or .vil file. You review the changes before anything is written." };
 const exportRow: SettingsRow = { setting: "export", label: "Export layout", description: "Save the layout as .svil or .vil, or print it." };
 const firmwareAndBoard: SettingsSection = { id: "firmware", title: "Firmware and board", rows: [{ block: "firmware" }, { block: "board" }] };
@@ -142,7 +159,7 @@ export const SETTINGS_LAYOUTS: Record<SettingsLayoutId, SettingsLayout> = {
             { id: "advanced", label: "Advanced", group: true },
         ],
     },
-    // C. One short list of collapsible cards; Hardware starts open.
+    // C. One short list of collapsible cards; Hardware starts open on a first visit.
     c: {
         id: "c",
         style: "list",
@@ -152,7 +169,7 @@ export const SETTINGS_LAYOUTS: Record<SettingsLayoutId, SettingsLayout> = {
                 title: "Settings",
                 hideTitle: true,
                 sections: [
-                    { ...hardware, collapsible: true, defaultOpen: true },
+                    hardware,
                     {
                         id: "firmware",
                         title: "Firmware and backups",

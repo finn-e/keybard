@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SETTINGS } from '../../src/contexts/SettingsContext';
-import { SETTINGS_LAYOUTS, SETTINGS_PAGE, SETTINGS_SHOWN_ELSEWHERE, blocksOnPage, settingsOnPage } from '../../src/layout/SecondarySidebar/Panels/settings/layout';
+import { HARDWARE_OPEN_SETTING, SETTINGS_LAYOUTS, SETTINGS_PAGE, SETTINGS_SHOWN_ELSEWHERE, blocksOnPage, settingsOnPage } from '../../src/layout/SecondarySidebar/Panels/settings/layout';
 
 describe('Settings page declaration', () => {
     const onPage = settingsOnPage();
@@ -33,10 +33,10 @@ describe('Settings page declaration', () => {
         }
     });
 
-    it('has the two groups of option A, with Typing behavior and Developer collapsible', () => {
+    it('has the two groups of option A, with Hardware, Typing behavior and Developer collapsible', () => {
         expect(SETTINGS_PAGE.map((g) => g.title)).toEqual(['This keyboard', 'Keybard']);
         const collapsible = SETTINGS_PAGE.flatMap((g) => g.sections).filter((s) => s.collapsible).map((s) => s.id);
-        expect(collapsible).toEqual(['typing', 'developer']);
+        expect(collapsible).toEqual(['hardware', 'typing', 'developer']);
     });
 });
 
@@ -55,7 +55,10 @@ describe('each organization under review', () => {
         const sections = groups.flatMap((g) => g.sections);
         expect(sections.length).toBeLessThan(BEFORE_SECTIONS);
         expect(anchors.length).toBeLessThan(BEFORE_CHIPS);
-        expect(sections.find((s) => s.id === 'hardware')).toBeDefined();
+        const hardware = sections.find((s) => s.id === 'hardware')!;
+        expect(hardware.collapsible).toBe(true);
+        expect(hardware.defaultOpen).toBe(true);
+        expect(hardware.rememberState).toBe(HARDWARE_OPEN_SETTING);
         const typing = sections.find((s) => s.id === 'typing')!;
         expect(typing.collapsible).toBe(true);
         expect(typing.defaultOpen).toBeFalsy();

@@ -51,15 +51,41 @@ const SettingsPanel = () => {
     const sections = useMemo(() => page.flatMap((g) => g.sections), [page]);
 
     // Collapsible sections: closed unless they start open, or were opened before
-    // in this browser (Developer).
-    const remembered = (section: SettingsSection) => !!section.rememberOpen && getSetting(section.rememberOpen, false) === true;
+    // in this browser (Developer), or left open or closed last time (Hardware).
+    // Remembering is a convenience: if storage fails, the section starts as declared.
+    const readStored = (name: string): unknown => {
+        try { return getSetting(name); } catch { return undefined; }
+    };
+    const writeStored = (name: string, value: string | boolean) => {
+        try { updateSetting(name, value); } catch { /* not remembered this time */ }
+    };
+    const remembered = (section: SettingsSection) => !!section.rememberOpen && readStored(section.rememberOpen) === true;
+    const initialOpen = (section: SettingsSection): boolean => {
+        // Stored as "open" or "collapsed": anything else (nothing stored yet) means a first visit.
+        const kept = section.rememberState ? readStored(section.rememberState) : undefined;
+        if (kept === "open" || kept === "collapsed") return kept === "open";
+        return !!section.defaultOpen || remembered(section);
+    };
     const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
-        Object.fromEntries(sections.filter((s) => s.collapsible).map((s) => [s.id, !!s.defaultOpen || remembered(s)])));
-    const rememberedNow = sections.filter(remembered).map((s) => s.id).join(" ");
+        Object.fromEntries(sections.filter((s) => s.collapsible).map((s) => [s.id, initialOpen(s)])));
+    // Sections opened for this visit by a link or chip, which a late settings load must not close.
+    const openedThisVisit = useRef(new Set<string>());
+    const storedNow = sections.filter((s) => s.collapsible).map((s) => `${s.id}=${initialOpen(s)}`).join(" ");
     useEffect(() => {
-        if (!rememberedNow) return;
-        setOpenSections((prev) => ({ ...prev, ...Object.fromEntries(rememberedNow.split(" ").map((id) => [id, true])) }));
-    }, [rememberedNow]);
+        const next = Object.fromEntries(storedNow.split(" ").filter(Boolean).map((pair) => {
+            const [id, open] = pair.split("=");
+            return [id, open === "true"];
+        }).filter(([id]) => !openedThisVisit.current.has(id as string)));
+        setOpenSections((prev) => {
+            const merged = { ...prev };
+            for (const [id, open] of Object.entries(next)) {
+                const section = sections.find((s) => s.id === id);
+                // Developer only ever opens from storage; a remembered state applies either way.
+                if (section?.rememberState || open) merged[id] = open === true;
+            }
+            return merged;
+        });
+    }, [storedNow]);
 
     const searchRef = useRef<HTMLInputElement>(null);
     const [query, setQuery] = useState("");
@@ -102,11 +128,17 @@ const SettingsPanel = () => {
     const toggleSection = (section: SettingsSection) => {
         const next = !openSections[section.id];
         setOpenSections((prev) => ({ ...prev, [section.id]: next }));
-        if (next && section.rememberOpen && !remembered(section)) updateSetting(section.rememberOpen, true);
+        openedThisVisit.current.delete(section.id);
+        if (next && section.rememberOpen && !remembered(section)) writeStored(section.rememberOpen, true);
+        if (section.rememberState) writeStored(section.rememberState, next ? "open" : "collapsed");
     };
 
+    // Opens a section for this visit only: the remembered state is left alone.
     const scrollToSection = (id: string, group = false) => {
-        if (!group && sections.some((s) => s.id === id && s.collapsible)) setOpenSections((prev) => ({ ...prev, [id]: true }));
+        if (!group && sections.some((s) => s.id === id && s.collapsible)) {
+            openedThisVisit.current.add(id);
+            setOpenSections((prev) => ({ ...prev, [id]: true }));
+        }
         const jump = () => document.getElementById(group ? groupDomId(id) : sectionDomId(id))?.scrollIntoView?.({ block: "start", behavior: "smooth" });
         // A chip jumps on the whole page: clear a search first, then jump once it renders.
         if (matches) {

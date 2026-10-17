@@ -7,7 +7,7 @@ import { requestSettingsSection } from '../../src/layout/SecondarySidebar/Panels
 
 const state = vi.hoisted(() => ({
     mode: 'sidebar', navigate: vi.fn(), navigateTo: vi.fn(), connected: true,
-    stored: {} as Record<string, string | number | boolean>,
+    stored: {} as Record<string, string | number | boolean>, storageFails: false,
 }));
 vi.mock('../../src/layout/SecondarySidebar/Panels/ClustersPanel', () => ({ default: () => <p>Hardware rows</p> }));
 vi.mock('../../src/layout/SecondarySidebar/Panels/TypingBehaviorPanel', () => ({ default: () => <p>Typing behavior rows</p> }));
@@ -21,8 +21,14 @@ vi.mock('@/contexts/SettingsContext', async (orig) => {
     return {
         ...actual,
         useSettings: () => ({
-            getSetting: (name: string, fallback: unknown) => state.stored[name] ?? fallback,
-            updateSetting: (name: string, value: string | number | boolean) => { state.stored[name] = value; },
+            getSetting: (name: string, fallback: unknown) => {
+                if (state.storageFails && name === 'settings-hardware-open') throw new Error('storage unavailable');
+                return state.stored[name] ?? fallback ?? false;
+            },
+            updateSetting: (name: string, value: string | number | boolean) => {
+                if (state.storageFails && name === 'settings-hardware-open') throw new Error('storage unavailable');
+                state.stored[name] = value;
+            },
             getSettingDefinition: (name: string) => actual.SETTINGS.find((s) => s.name === name),
         }),
     };
@@ -32,7 +38,7 @@ vi.mock('../../src/layout/SecondarySidebar/Panels/BackupsSection', () => ({ defa
 vi.mock('../../src/layout/SecondarySidebar/Panels/settings/FirmwareRow', () => ({ default: () => <p>Firmware status</p> }));
 vi.mock('../../src/components/ExportDialog', () => ({ default: ({ open }: { open: boolean }) => (open ? <p>Export dialog</p> : null) }));
 
-beforeEach(() => { vi.clearAllMocks(); state.stored = {}; state.connected = true; state.mode = 'sidebar'; _setSettingsLayoutForTests(undefined); });
+beforeEach(() => { vi.clearAllMocks(); state.stored = {}; state.connected = true; state.mode = 'sidebar'; state.storageFails = false; _setSettingsLayoutForTests(undefined); });
 afterEach(() => _setSettingsLayoutForTests(undefined));
 
 describe('Settings page', () => {
@@ -151,6 +157,8 @@ describe('Settings page', () => {
     });
 });
 
+const hardwareToggle = () => within(screen.getByRole('heading', { level: 4, name: 'Hardware' })).getByRole('button');
+
 describe('the organizations under review (?settingsLayout=a|b|c)', () => {
     const h3 = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
     const h4 = () => screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent);
@@ -178,7 +186,7 @@ describe('the organizations under review (?settingsLayout=a|b|c)', () => {
         render(<SettingsPanel />);
         expect(h4()).toEqual(['Hardware', 'Firmware and backups', 'Appearance and editing', 'Typing behavior', 'About']);
         expect(screen.queryByRole('navigation', { name: 'Settings sections' })).toBeNull();
-        expect(screen.getByRole('button', { name: 'Hardware' })).toHaveAttribute('aria-expanded', 'true');
+        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByText('Hardware rows')).toBeVisible();
         for (const name of ['Firmware and backups', 'Appearance and editing', 'Typing behavior', 'About']) {
             expect(screen.getByRole('button', { name }), name).toHaveAttribute('aria-expanded', 'false');
@@ -196,5 +204,68 @@ describe('the organizations under review (?settingsLayout=a|b|c)', () => {
         expect(screen.getByRole('button', { name: 'Typing behavior' })).toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByText('Typing behavior rows')).toBeVisible();
         raf.mockRestore();
+    });
+});
+
+describe('Hardware remembers whether it was left open or collapsed', () => {
+    const KEY = 'settings-hardware-open';
+    const raf = () => vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { cb(0); return 0; });
+
+    it.each(['a', 'b', 'c'] as const)('%s: open on a first visit, then as it was left', (id) => {
+        _setSettingsLayoutForTests(id);
+        const view = render(<SettingsPanel />);
+        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByText('Hardware rows')).toBeVisible();
+        fireEvent.click(hardwareToggle());
+        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByText('Hardware rows')).toBeNull();
+        expect(state.stored[KEY]).toBe('collapsed');
+        view.unmount();
+        const again = render(<SettingsPanel />);
+        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.click(hardwareToggle());
+        expect(state.stored[KEY]).toBe('open');
+        again.unmount();
+        render(<SettingsPanel />);
+        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('opens for an old ?panel=clusters link without changing what is remembered', () => {
+        state.stored[KEY] = 'collapsed';
+        Element.prototype.scrollIntoView = vi.fn();
+        const spy = raf();
+        requestSettingsSection('hardware');
+        const view = render(<SettingsPanel />);
+        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'true');
+        expect(state.stored[KEY]).toBe('collapsed');
+        spy.mockRestore();
+        view.unmount();
+        render(<SettingsPanel />);
+        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('opens for a search match without changing what is remembered', () => {
+        state.stored[KEY] = 'collapsed';
+        render(<SettingsPanel />);
+        expect(screen.queryByText('Hardware rows')).toBeNull();
+        fireEvent.change(screen.getByRole('textbox', { name: 'Search settings' }), { target: { value: 'trackball' } });
+        expect(screen.getByText('Hardware rows')).toBeVisible();
+        fireEvent.change(screen.getByRole('textbox', { name: 'Search settings' }), { target: { value: '' } });
+        expect(screen.queryByText('Hardware rows')).toBeNull();
+        expect(state.stored[KEY]).toBe('collapsed');
+    });
+
+    it('falls back to open when storage fails, and still toggles', () => {
+        state.storageFails = true;
+        render(<SettingsPanel />);
+        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'true');
+        fireEvent.click(hardwareToggle());
+        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('treats an unknown stored value, or the app default of false, as a first visit', () => {
+        state.stored[KEY] = false;
+        render(<SettingsPanel />);
+        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'true');
     });
 });
