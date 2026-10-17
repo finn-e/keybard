@@ -44,9 +44,10 @@ class MotionDevice(FakeDevice):
 
 
 class MotionTests(unittest.TestCase):
-    def test_read_only_allowlist_gains_only_the_motion_read(self):
+    def test_read_only_allowlist_gains_only_the_motion_and_contacts_reads(self):
         self.assertEqual(READ_COMMANDS[0xDF][0x2D], 1)  # the reader id
-        self.assertEqual(set(READ_COMMANDS[0xDF]), {0x00, 0x01, 0x0D, 0x0E, 0x16, 0x18, 0x19, 0x1B, 0x2D})
+        self.assertEqual(READ_COMMANDS[0xDF][0x2F], 0)  # contacts: no arguments
+        self.assertEqual(set(READ_COMMANDS[0xDF]), {0x00, 0x01, 0x0D, 0x0E, 0x16, 0x18, 0x19, 0x1B, 0x2D, 0x2F})
         self.assertNotIn(0x1A, READ_COMMANDS[0xDF])  # the fragment write stays out
         self.assertEqual(POINTING_MOTION_FLAG2, 0x08)
 

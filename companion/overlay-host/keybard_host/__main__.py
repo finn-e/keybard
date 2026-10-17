@@ -722,8 +722,9 @@ class Host(QObject):
             for side in ('left', 'right'):
                 for key in ('dx', 'dy'): pending[side][key] += motion[side][key]
                 for key in ('valid', 'touchValid', 'touchX', 'touchY', 'fingers', 'scrolling'): pending[side][key] = motion[side][key]
-                if 'cpi' in motion[side]: pending[side]['cpi'] = motion[side]['cpi']
-                else: pending[side].pop('cpi', None)
+                for key in ('cpi', 'contacts'):  # the newest only: contacts are where the fingers are now
+                    if key in motion[side]: pending[side][key] = motion[side][key]
+                    else: pending[side].pop(key, None)
             pending['sniper'], pending['boost'] = motion['sniper'], motion['boost']
             pending['elapsedMs'] = pending.get('elapsedMs', 0) + motion.get('elapsedMs', 0)
         config = self.state.config

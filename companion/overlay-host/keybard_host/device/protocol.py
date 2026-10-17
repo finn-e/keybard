@@ -31,10 +31,15 @@ POINTING_MOTION = 0x2D
 # without the flag it sends 0, which every firmware treats as the one shared reader.
 POINTING_MOTION_READERS_FLAG2 = 1 << 4
 HOST_MOTION_READER = 2
+# Second feature byte, bit 5: the board answers POINTING_CONTACTS (0x2F), a snapshot
+# of every touch contact on its pad (native touchpad builds). Reading clears nothing.
+POINTING_CONTACTS_FLAG2 = 1 << 5
+POINTING_CONTACTS = 0x2F
+PAD_COUNTS_X, PAD_COUNTS_Y = 2048, 1792
 SHIFT_BITS = 0x22  # left and right Shift in the HID modifier byte
 # Protocol -> command -> exact request argument length. No setter is expressible.
 READ_COMMANDS = {
-    0xDF: {0x00: 0, 0x01: 2, 0x0D: 0, 0x0E: 3, 0x16: 0, 0x18: 0, 0x19: 0, 0x1B: 3, 0x2D: 1},
+    0xDF: {0x00: 0, 0x01: 2, 0x0D: 0, 0x0E: 3, 0x16: 0, 0x18: 0, 0x19: 0, 0x1B: 3, 0x2D: 1, 0x2F: 0},
     0xFE: {0x02: 2, 0x11: 0, 0x12: 3},
 }
 
@@ -76,6 +81,46 @@ def parse_pointing_motion(data):
                 block['cpi'] = cpi
     return dict(sniper=bool(modes & 1), boost=bool(modes & 2), elapsedMs=data[2],
                 left=left, right=right)
+
+
+def pad_unit(count, counts):
+    """A pad count as -1..1: 0 is one edge, counts - 1 the other (as Keybard's padUnit)."""
+    count = max(0, min(counts - 1, count))
+    return count / (counts - 1) * 2 - 1
+
+
+def parse_pointing_contacts(data):
+    """A POINTING_CONTACTS reply's payload (after the command echo) as a dict, or None.
+
+    format(1) flags(1) age_ms(1) n(1), then n x 4 bytes: [0] bits 0-3 contact ID, bit 4
+    tip, bit 5 confidence, bit 6 right pad; [1..3] x | y << 12 little-endian, x 0..2047
+    across that pad, y 0..1791 down it. Contacts lifting (tip clear) are left out; x and y
+    come back as -1..1 from the pad's left and top edges.
+    """
+    data = bytes(data or b"")
+    if len(data) < 24 or data[0] != 1:
+        return None
+    flags = data[1]
+    out = dict(reporting=bool(flags & 1), pads=dict(left=bool(flags & 2), right=bool(flags & 4)), left=[], right=[])
+    for i in range(min(5, data[3])):
+        b = data[4 + 4 * i]
+        if not b & 0x10:
+            continue
+        w = int.from_bytes(data[5 + 4 * i:8 + 4 * i], "little")
+        contact = dict(id=b & 15, x=round(pad_unit(w & 0xFFF, PAD_COUNTS_X), 4),
+                       y=round(pad_unit((w >> 12) & 0xFFF, PAD_COUNTS_Y), 4), confident=bool(b & 0x20))
+        out['right' if b & 0x40 else 'left'].append(contact)
+    return out
+
+
+def with_pad_contacts(motion, contacts):
+    """The motion dict with each touchpad hand's contacts (an empty list when no finger is down)."""
+    if motion is None or not contacts or not contacts['reporting']:
+        return motion
+    for side in ('left', 'right'):
+        if contacts['pads'][side]:
+            motion[side]['contacts'] = contacts[side]
+    return motion
 
 
 def pointing_kinds(definition, hardware):
@@ -397,7 +442,16 @@ class SvalReader:
         if not self.feature_flags2 & POINTING_MOTION_FLAG2:
             return None
         reader = HOST_MOTION_READER if self.feature_flags2 & POINTING_MOTION_READERS_FLAG2 else 0
-        return parse_pointing_motion(self._read(POINTING_MOTION, bytes((reader,))))
+        motion = parse_pointing_motion(self._read(POINTING_MOTION, bytes((reader,))))
+        if motion is not None and self.feature_flags2 & POINTING_CONTACTS_FLAG2:
+            motion = with_pad_contacts(motion, self.pointing_contacts())
+        return motion
+
+    def pointing_contacts(self):
+        """Every touch contact on its pad, or None on firmware without 0x2F (never sent there)."""
+        if not self.feature_flags2 & POINTING_CONTACTS_FLAG2:
+            return None
+        return parse_pointing_contacts(self._read(POINTING_CONTACTS))
 
     def pressed_keys(self):
         # VIA GET_KEYBOARD_VALUE / SWITCH_MATRIX_STATE, row offset zero.

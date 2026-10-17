@@ -7,6 +7,7 @@ import { ballRollRadians } from "./ball-gearing";
 import { BALLS, type BallId } from "./webgl/materials";
 import { drawDevice, roll, rotFromEuler, type Theme } from "./webgl/renderer";
 import { drawContact, drawPadReticle, drawPills, drawReticle, type PillColors } from "./overlay-draw";
+import { padFromRelative, syncFingers, type Finger } from "./pad-contacts";
 
 /** A source of POINTING_MOTION reports: the board, Keybard Host, or the demo script. */
 export interface PointingFeed {
@@ -66,6 +67,8 @@ export function PointingDevice(props: PointingDeviceProps) {
     const sim = useRef({
         M: rotFromEuler(side === "right" ? 1.3 : 0.4, side === "right" ? 0.6 : -0.3, side === "right" ? -0.9 : 0.2),
         contact: { x: 0, y: 0, press: 0, last: -1e9 },
+        /** Every finger the board reports on this pad (POINTING_CONTACTS), by contact ID. */
+        fingers: new Map<number, Finger>(),
         sm: { sniper: 0, boost: 0 },
         dirty: true,
         ovDirty: true,
@@ -101,12 +104,18 @@ export function PointingDevice(props: PointingDeviceProps) {
             s.sm.sniper = ns; s.sm.boost = nb;
             if (ns !== ts || nb !== tb) busy = true;
             if (p.placement.kind === "pad") {
-                const target = now - s.contact.last < PAD_LIFT_MS ? 1 : 0;
-                const before = s.contact.press;
-                s.contact.press = s.reduce ? 0 : before + (target - before) * Math.min(1, dt / 0.06);
-                if (Math.abs(s.contact.press - target) < 0.005) s.contact.press = target;
-                if (s.contact.press !== before) s.ovDirty = true;
-                if (s.contact.press !== target || target === 1) busy = true;
+                const ease = (c: { press: number }, target: number) => {
+                    const before = c.press;
+                    c.press = s.reduce ? 0 : before + (target - before) * Math.min(1, dt / 0.06);
+                    if (Math.abs(c.press - target) < 0.005) c.press = target;
+                    if (c.press !== before) s.ovDirty = true;
+                    if (c.press !== target || target === 1) busy = true;
+                };
+                ease(s.contact, now - s.contact.last < PAD_LIFT_MS ? 1 : 0);
+                for (const [id, f] of s.fingers) {
+                    ease(f, f.down ? 1 : 0);
+                    if (!f.down && f.press === 0) { s.fingers.delete(id); s.ovDirty = true; }
+                }
             }
             if (s.dirty && !p.ghost && deviceRef.current) {
                 const dpr = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2);
@@ -133,8 +142,12 @@ export function PointingDevice(props: PointingDeviceProps) {
             ctx.clearRect(0, 0, pxSize, pxSize);
             const k = pxSize / ovCss;
             ctx.setTransform(k, 0, 0, k, pxSize / 2, pxSize / 2);
-            const c = s.contact;
-            if (p.placement.kind === "pad" && !p.ghost) drawContact(ctx, hw, hh, c.x, c.y, c.press, p.unitPx, k);
+            const first = [...s.fingers.values()].find((f) => f.down);
+            const c = first ?? s.contact;
+            if (p.placement.kind === "pad" && !p.ghost) {
+                drawContact(ctx, hw, hh, s.contact.x, s.contact.y, s.contact.press, p.unitPx, k);
+                for (const f of s.fingers.values()) drawContact(ctx, hw, hh, f.x, f.y, f.press, p.unitPx, k);
+            }
             if (!p.ghost) {
                 if (p.placement.kind === "ball") drawReticle(ctx, ballPx, s.sm.sniper, k);
                 else drawPadReticle(ctx, hw, hh, (p.placement.corner ?? 0.2) * p.unitPx, c.x * hw, c.y * hh, s.sm.sniper, p.unitPx, k);
@@ -163,6 +176,16 @@ export function PointingDevice(props: PointingDeviceProps) {
             const half = report[side];
             if (!half?.valid) return;
             const p = latest.current;
+            if (p.placement.kind === "pad" && half.contacts) {
+                // The board says where every finger is: draw those, never the motion.
+                const changed = syncFingers(s.fingers, half.contacts);
+                if (half.contacts.length > 0) s.contact.last = -1e9;
+                if (!changed) return;
+                s.ovDirty = true;
+                if (half.contacts.length > 0) p.onMoved?.(side);
+                wake.current();
+                return;
+            }
             const moved = half.dx !== 0 || half.dy !== 0 || half.touchValid;
             if (!moved) return;
             if (!s.reduce) {
@@ -174,9 +197,10 @@ export function PointingDevice(props: PointingDeviceProps) {
                     s.dirty = true;
                 } else {
                     const c = s.contact;
-                    if (half.touchValid) { c.x = (half.touchX / 255) * 2 - 1; c.y = (half.touchY / 255) * 2 - 1; }
-                    else { c.x = Math.max(-1, Math.min(1, c.x + half.dx / PAD_COUNTS_PER_HALF)); c.y = Math.max(-1, Math.min(1, c.y + half.dy / PAD_COUNTS_PER_HALF)); }
-                    c.last = typeof performance !== "undefined" ? performance.now() : Date.now();
+                    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+                    const at = padFromRelative(c, half, now - c.last >= PAD_LIFT_MS, PAD_COUNTS_PER_HALF);
+                    c.x = at.x; c.y = at.y;
+                    c.last = now;
                     s.ovDirty = true;
                 }
             }
