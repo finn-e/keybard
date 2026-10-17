@@ -17,6 +17,9 @@ Escape.
      the key); no combo editor opens.
   5. Keyboard: Tab from the focused key reaches its fold; the focused piece is
      highlighted; Enter opens the combo editor (and Space does too).
+  6. With another binding editor open (a macro), the fold is not a button: no
+     highlight, not a Tab stop, and a click on it picks the key for the macro,
+     as a click on the key does; the combo editor does not open.
 
 Same server options as combo_editor_e2e.py (E2E_URL, E2E_SKIP_BUILD).
 SHOTS_DIR, when set, saves review screenshots there.
@@ -237,6 +240,43 @@ def flow_keyboard(browser, url):
         context.close()
 
 
+def macro_slot_text(page: Page):
+    # The open macro's first action slot (A in the demo), in the binding editor.
+    return page.locator("aside.detail-panel").first.inner_text().split(chr(10))[1:3]
+
+
+def flow_editor_open(browser, url):
+    picked = {}
+    for where in ["fold", "key"]:
+        context, page, errors = open_app(browser, url, query="edit=macro:0")
+        panel = page.locator("aside.detail-panel").first
+        expect(panel).to_contain_text("Editing Macro 0")
+        assert macro_slot_text(page) == ["A", "Tap"], macro_slot_text(page)
+        expect(hold_key(page).locator("[data-fold-action]")).to_have_count(0)
+        expect(piece(page)).not_to_have_attribute("tabindex", "0")
+        # Pick the macro's first slot, then click the layout key.
+        page.locator("aside.detail-panel [data-keycap]:visible").filter(has_text="A").first.click()
+        x, y = fold_point(page)
+        if where == "key":
+            box = hold_key(page).bounding_box()
+            x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+        page.mouse.move(x - 30, y - 20)
+        page.mouse.move(x, y, steps=4)
+        page.wait_for_timeout(400)
+        if where == "fold":
+            hl = piece(page).evaluate(HILITE_JS)
+            assert hl["stroke"] == "none" and hl["filter"] == "none", f"fold highlighted with an editor open {hl}"
+            shot(page, "fold-editor-open.png")
+        page.mouse.click(x, y)
+        page.wait_for_timeout(400)
+        expect(panel).to_contain_text("Editing Macro 0")
+        expect(editor_number(page)).to_have_count(0)
+        picked[where] = macro_slot_text(page)
+        assert not errors, errors
+        context.close()
+    assert picked["fold"] == picked["key"] == ["F", "LSFT"], f"the fold click did not pick the key as a key click does: {picked}"
+
+
 def main() -> int:
     flows = [
         ("1. layout: the fold sits in the bottom-right corner of a hold-label key, clear of the label", flow_layout),
@@ -244,6 +284,7 @@ def main() -> int:
         ("3. click on the fold opens that combo's editor", flow_click_opens_editor),
         ("4. click elsewhere on the key pins it as before; no editor", flow_click_elsewhere),
         ("5. keyboard: Tab reaches the fold; Enter and Space open the editor", flow_keyboard),
+        ("6. another editor open: the fold is not a button; a click picks the key", flow_editor_open),
     ]
     failed = 0
     with app_url() as url, sync_playwright() as p:

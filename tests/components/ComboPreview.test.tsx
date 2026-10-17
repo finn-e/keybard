@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
     panels: { activePanel: null as string | null, itemToEdit: null as number | null },
     selectKeyboardKey: vi.fn(),
     openEditor: vi.fn(),
+    assignKeycode: vi.fn(),
 }));
 
 vi.mock("@/contexts/LayoutSettingsContext", () => ({
@@ -29,7 +30,7 @@ vi.mock("@/contexts/SettingsContext", () => ({
     }),
 }));
 vi.mock("@/contexts/KeyBindingContext", () => ({
-    useKeyBinding: () => ({ selectKeyboardKey: state.selectKeyboardKey, selectedTarget: null, clearSelection: vi.fn(), assignKeycode: vi.fn() }),
+    useKeyBinding: () => ({ selectKeyboardKey: state.selectKeyboardKey, selectedTarget: null, clearSelection: vi.fn(), assignKeycode: state.assignKeycode }),
 }));
 vi.mock("@/contexts/PanelsContext", () => ({ usePanels: () => state.panels }));
 vi.mock("@/hooks/useOpenBindingEditor", () => ({ useOpenBindingEditor: () => state.openEditor }));
@@ -71,6 +72,7 @@ beforeEach(() => {
     state.colorblind = false;
     state.panels = { activePanel: null, itemToEdit: null };
     state.openEditor = vi.fn();
+    state.assignKeycode.mockClear();
     state.selectKeyboardKey.mockClear();
 });
 afterEach(() => { vi.useRealTimers(); });
@@ -97,6 +99,18 @@ describe("combo folded corner on the layout", () => {
         fireEvent.click(keyEl("KC_D"));
         expect(keyEl("KC_D").getAttribute("aria-pressed")).toBe("true");
         expect(state.openEditor).toHaveBeenCalledTimes(1);
+    });
+
+    it("while a binding editor is open, a fold is drawing only and a click on it picks the key", () => {
+        state.panels = { activePanel: "macros", itemToEdit: 1 };
+        renderAll();
+        const fold = foldOf("KC_D")!;
+        expect(fold.querySelector("[data-fold-action]")).toBeNull();
+        expect(fold.getAttribute("aria-hidden")).toBe("true");
+        expect([...fold.querySelectorAll("[data-fold-piece]")].some(p => p.hasAttribute("tabindex"))).toBe(false);
+        fireEvent.click(fold.querySelector('[data-fold-piece="3"]')!);
+        expect(state.openEditor).not.toHaveBeenCalled();
+        expect(state.assignKeycode).toHaveBeenCalledWith("KC_D");
     });
 
     it("the Tab-stop key's fold pieces are Tab stops; Enter opens the combo", () => {

@@ -149,6 +149,8 @@
     --kb-combo-fold-crease: rgb(0 0 0 / 0.42);
     --kb-combo-fold-crease-strong: rgb(0 0 0 / 0.7);
     --kb-combo-fold-seam: rgb(0 0 0 / 0.24);
+    /* Outline of the hovered or focused fold piece (white in both themes). */
+    --kb-fold-outline-color: #ffffff;
     /* Texture cue ink (colorblind palette only), picked per piece by its lightness. */
     --kb-combo-fold-cue-dark: rgb(0 0 0 / 0.42);
     --kb-combo-fold-cue-light: rgb(255 255 255 / 0.72);
@@ -222,6 +224,7 @@
     --kb-combo-fold-crease: rgb(0 0 0 / 0.5);
     --kb-combo-fold-crease-strong: rgb(0 0 0 / 0.74);
     --kb-combo-fold-seam: rgb(0 0 0 / 0.28);
+    --kb-fold-outline-color: #ffffff;
     --kb-combo-row-lit: rgb(255 255 255 / 0.06);
     --kb-combo-chip: #2a2c30;
     --kb-combo-chip-border: #3a3d42;
@@ -308,8 +311,9 @@ html.dark {
 }
 
 /* Combo fold pieces are buttons: clicking one opens its combo's editor. The piece under the
-   pointer, or with keyboard focus, lifts a little and takes an ink outline along its fold edge
-   and seams (the key edges clip the rest), so it reads as the combo, not the key. */
+   pointer, or with keyboard focus, lifts a little and takes a white outline along its fold edge
+   and seams (the key edges clip the rest), so it reads as the combo, not the key. While a
+   binding editor is open the pieces are not buttons (no data-fold-action): clicks go to the key. */
 [data-fold-action] {
     pointer-events: visiblePainted;
     cursor: pointer;
@@ -319,7 +323,7 @@ html.dark {
 [data-fold-action]:hover,
 [data-fold-action]:focus-visible {
     filter: brightness(1.06) saturate(1.12);
-    stroke: var(--kb-ink);
+    stroke: var(--kb-fold-outline-color);
     stroke-width: var(--kb-fold-outline, 1.5px);
     stroke-linejoin: round;
 }
