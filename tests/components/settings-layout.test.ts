@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SETTINGS } from '../../src/contexts/SettingsContext';
-import { HARDWARE_OPEN_SETTING, SETTINGS_LAYOUTS, SETTINGS_PAGE, SETTINGS_SHOWN_ELSEWHERE, blocksOnPage, settingsOnPage } from '../../src/layout/SecondarySidebar/Panels/settings/layout';
+import { HARDWARE_OPEN_SETTING, SETTINGS_PAGE, SETTINGS_SHOWN_ELSEWHERE, blocksOnPage, sectionStateSetting, settingsOnPage } from '../../src/layout/SecondarySidebar/Panels/settings/layout';
 
 describe('Settings page declaration', () => {
     const onPage = settingsOnPage();
@@ -33,40 +33,28 @@ describe('Settings page declaration', () => {
         }
     });
 
-    it('has the two groups of option A, with Hardware, Typing behavior and Developer collapsible', () => {
-        expect(SETTINGS_PAGE.map((g) => g.title)).toEqual(['This keyboard', 'Keybard']);
-        const collapsible = SETTINGS_PAGE.flatMap((g) => g.sections).filter((s) => s.collapsible).map((s) => s.id);
-        expect(collapsible).toEqual(['hardware', 'typing', 'developer']);
-    });
-});
-
-describe('each organization under review', () => {
-    // Before: 7 sections and 6 chips, plus Typing Behavior and Hardware on the rail.
-    const BEFORE_SECTIONS = 9;
-    const BEFORE_CHIPS = 6;
-    const all = settingsOnPage();
-
-    it.each(['a', 'b', 'c'] as const)('%s has every setting and block once, in fewer sections and chips', (id) => {
-        const { groups, anchors } = SETTINGS_LAYOUTS[id];
-        const names = settingsOnPage(groups);
-        expect([...names].sort()).toEqual([...all].sort());
-        expect(new Set(names).size).toBe(names.length);
-        expect([...blocksOnPage(groups)].sort()).toEqual(['about', 'backups', 'board', 'firmware', 'hardware', 'typing']);
-        const sections = groups.flatMap((g) => g.sections);
-        expect(sections.length).toBeLessThan(BEFORE_SECTIONS);
-        expect(anchors.length).toBeLessThan(BEFORE_CHIPS);
-        const hardware = sections.find((s) => s.id === 'hardware')!;
-        expect(hardware.collapsible).toBe(true);
-        expect(hardware.defaultOpen).toBe(true);
-        expect(hardware.rememberState).toBe(HARDWARE_OPEN_SETTING);
-        const typing = sections.find((s) => s.id === 'typing')!;
-        expect(typing.collapsible).toBe(true);
-        expect(typing.defaultOpen).toBeFalsy();
-    });
-
-    it.each(['a', 'b', 'c'] as const)('%s uses sentence-case section titles', (id) => {
-        for (const s of SETTINGS_LAYOUTS[id].groups.flatMap((g) => g.sections)) {
+    it('is five cards, each with a chip, a summary and a sentence-case title', () => {
+        expect(SETTINGS_PAGE.map((s) => s.title)).toEqual(['Hardware', 'Firmware and backups', 'Appearance and editing', 'Typing behavior', 'About']);
+        expect(SETTINGS_PAGE.map((s) => s.chip)).toEqual(['Hardware', 'Firmware', 'Appearance', 'Typing', 'About']);
+        for (const s of SETTINGS_PAGE) {
+            expect(s.summary, s.id).not.toBe('');
             expect(s.title.slice(1), s.title).toBe(s.title.slice(1).toLowerCase());
         }
+    });
+
+    it('holds Hardware, Typing behavior and every block once', () => {
+        expect([...blocksOnPage()].sort()).toEqual(['about', 'backups', 'board', 'firmware', 'hardware', 'typing']);
+    });
+
+    it('opens only Hardware on a first visit', () => {
+        expect(SETTINGS_PAGE.filter((s) => s.defaultOpen).map((s) => s.id)).toEqual(['hardware']);
+    });
+
+    it('remembers each card under its own setting, Hardware under the one it already used', () => {
+        expect(sectionStateSetting('hardware')).toBe(HARDWARE_OPEN_SETTING);
+        expect(HARDWARE_OPEN_SETTING).toBe('settings-hardware-open');
+        const keys = SETTINGS_PAGE.map((s) => sectionStateSetting(s.id));
+        expect(new Set(keys).size).toBe(keys.length);
+        for (const key of keys) expect(SETTINGS.find((d) => d.name === key), key).toBeUndefined();
     });
 });

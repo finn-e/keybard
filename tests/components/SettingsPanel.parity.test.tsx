@@ -1,12 +1,12 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsPanel from '../../src/layout/SecondarySidebar/Panels/SettingsPanel';
 import { SETTINGS } from '../../src/contexts/SettingsContext';
-import { _setSettingsLayoutForTests, settingsLayoutFromSearch } from '../../src/layout/SecondarySidebar/Panels/settings/layout';
+import { SETTINGS_PAGE, sectionStateSetting } from '../../src/layout/SecondarySidebar/Panels/settings/layout';
 import { requestSettingsSection } from '../../src/layout/SecondarySidebar/Panels/settings/anchor';
 
 const state = vi.hoisted(() => ({
-    mode: 'sidebar', navigate: vi.fn(), navigateTo: vi.fn(), connected: true,
+    mode: 'sidebar', navigate: vi.fn(), navigateTo: vi.fn(), connected: true, firmwareDot: false,
     stored: {} as Record<string, string | number | boolean>, storageFails: false,
 }));
 vi.mock('../../src/layout/SecondarySidebar/Panels/ClustersPanel', () => ({ default: () => <p>Hardware rows</p> }));
@@ -16,17 +16,20 @@ vi.mock('@/contexts/LayoutSettingsContext', () => ({ useLayoutSettings: () => ({
 vi.mock('@/contexts/PanelsContext', () => ({ usePanels: () => ({ setActivePanel: state.navigate }) }));
 vi.mock('@/App', () => ({ useNavigation: () => ({ navigateTo: state.navigateTo }) }));
 vi.mock('@/hooks/useLayoutImport', () => ({ useLayoutImport: () => ({}) }));
+vi.mock('@/features/firmware/FirmwareUpdateProvider', () => ({ useFirmwareUpdates: () => ({ status: { dot: state.firmwareDot } }) }));
 vi.mock('@/contexts/SettingsContext', async (orig) => {
     const actual = await orig<typeof import('../../src/contexts/SettingsContext')>();
+    const failing = (name: string) => state.storageFails && name.startsWith('settings-') && name.endsWith('-open');
     return {
         ...actual,
         useSettings: () => ({
+            // Like the app: a setting never stored, with no definition, reads as false.
             getSetting: (name: string, fallback: unknown) => {
-                if (state.storageFails && name === 'settings-hardware-open') throw new Error('storage unavailable');
+                if (failing(name)) throw new Error('storage unavailable');
                 return state.stored[name] ?? fallback ?? false;
             },
             updateSetting: (name: string, value: string | number | boolean) => {
-                if (state.storageFails && name === 'settings-hardware-open') throw new Error('storage unavailable');
+                if (failing(name)) throw new Error('storage unavailable');
                 state.stored[name] = value;
             },
             getSettingDefinition: (name: string) => actual.SETTINGS.find((s) => s.name === name),
@@ -38,36 +41,49 @@ vi.mock('../../src/layout/SecondarySidebar/Panels/BackupsSection', () => ({ defa
 vi.mock('../../src/layout/SecondarySidebar/Panels/settings/FirmwareRow', () => ({ default: () => <p>Firmware status</p> }));
 vi.mock('../../src/components/ExportDialog', () => ({ default: ({ open }: { open: boolean }) => (open ? <p>Export dialog</p> : null) }));
 
-beforeEach(() => { vi.clearAllMocks(); state.stored = {}; state.connected = true; state.mode = 'sidebar'; state.storageFails = false; _setSettingsLayoutForTests(undefined); });
-afterEach(() => _setSettingsLayoutForTests(undefined));
+let raf: ReturnType<typeof vi.spyOn>;
+beforeEach(() => {
+    vi.clearAllMocks();
+    state.stored = {}; state.connected = true; state.mode = 'sidebar'; state.storageFails = false; state.firmwareDot = false;
+    Element.prototype.scrollIntoView = vi.fn();
+    raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { cb(0); return 0; });
+});
+afterEach(() => raf.mockRestore());
+
+const TITLES = ['Hardware', 'Firmware and backups', 'Appearance and editing', 'Typing behavior', 'About'];
+const toggle = (title: string) => within(screen.getByRole('heading', { level: 4, name: title })).getByRole('button');
+const expanded = (title: string) => toggle(title).getAttribute('aria-expanded') === 'true';
+const openCard = (title: string) => { if (!expanded(title)) fireEvent.click(toggle(title)); };
+const chips = () => screen.getByRole('navigation', { name: 'Settings sections' });
 
 describe('Settings page', () => {
-    it('is one page in two groups by default (option A), with sections in order', () => {
+    it('is one short list of cards, in order, with a chip for each', () => {
         render(<SettingsPanel />);
-        const groups = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
-        expect(groups).toEqual(['This keyboard', 'Keybard']);
-        const sections = screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent);
-        expect(sections).toEqual(['Hardware', 'Firmware and board', 'Backups and files', 'Typing behavior', 'Appearance and editing', 'About', 'Developer']);
-        const keyboard = screen.getByRole('region', { name: 'This keyboard' });
-        expect(within(keyboard).getByText('Hardware rows')).toBeVisible();
-        expect(within(keyboard).getByText('Firmware status')).toBeVisible();
-        expect(within(keyboard).getByText('Board identity')).toBeVisible();
-        expect(within(keyboard).getByText('Backups')).toBeVisible();
+        expect(screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent)).toEqual(TITLES);
+        expect(within(chips()).getAllByRole('button').map((b) => b.textContent)).toEqual(['Hardware', 'Firmware', 'Appearance', 'Typing', 'About']);
+        expect(screen.queryAllByRole('heading', { level: 3 })).toHaveLength(0);
     });
 
-    it('holds Hardware open and Typing behavior closed until opened, and no layout configuration', () => {
+    it('starts with Hardware open and every other card collapsed on a first visit', () => {
         render(<SettingsPanel />);
+        expect(TITLES.map((t) => [t, expanded(t)])).toEqual([
+            ['Hardware', true], ['Firmware and backups', false], ['Appearance and editing', false], ['Typing behavior', false], ['About', false],
+        ]);
         expect(screen.getByText('Hardware rows')).toBeVisible();
-        const typing = screen.getByRole('button', { name: 'Typing behavior' });
-        expect(typing).toHaveAttribute('aria-expanded', 'false');
         expect(screen.queryByText('Typing behavior rows')).toBeNull();
-        fireEvent.click(typing);
-        expect(screen.getByText('Typing behavior rows')).toBeVisible();
-        fireEvent.click(screen.getByRole('button', { name: 'Developer' }));
-        const text = document.body.textContent ?? '';
+        expect(screen.queryByText('Firmware status')).toBeNull();
+    });
+
+    it('holds the board setup, and no layout configuration', () => {
+        render(<SettingsPanel />);
+        TITLES.forEach(openCard);
+        for (const text of ['Hardware rows', 'Firmware status', 'Board identity', 'Backups', 'Typing behavior rows']) {
+            expect(screen.getByText(text)).toBeVisible();
+        }
+        const body = document.body.textContent ?? '';
         for (const banned of ['QMK Settings', 'DPI', 'Layer color', 'Brightness', 'Live Updating', 'Overlay', 'Combo timeout',
             'Leader', 'Mouse key', 'Print Layers']) {
-            expect(text).not.toContain(banned);
+            expect(body).not.toContain(banned);
         }
         for (const def of SETTINGS.filter((s) => s.scope === 'hardware')) {
             expect(screen.queryByText(def.label)).toBeNull();
@@ -76,196 +92,162 @@ describe('Settings page', () => {
 
     it('shows each Appearance and Editing preference under its page label', () => {
         render(<SettingsPanel />);
-        const appearance = screen.getByRole('region', { name: 'Appearance and editing' });
-        expect(within(appearance).getByRole('combobox', { name: 'Theme' })).toBeVisible();
-        expect(within(appearance).getByRole('combobox', { name: 'Key size' })).toHaveValue('auto');
-        expect(within(appearance).getByRole('combobox', { name: 'Panel position' })).toHaveValue('auto');
-        const editing = appearance;
-        expect(within(editing).getByRole('group', { name: 'Typing binds a key' })).toBeVisible();
-        expect(within(editing).getByRole('combobox', { name: 'Advance after assigning' })).toBeVisible();
-        expect(within(editing).getByRole('combobox', { name: 'Key legends' })).toBeVisible();
+        openCard('Appearance and editing');
+        const card = screen.getByRole('region', { name: 'Appearance and editing' });
+        expect(within(card).getByRole('combobox', { name: 'Theme' })).toBeVisible();
+        expect(within(card).getByRole('combobox', { name: 'Key size' })).toHaveValue('auto');
+        expect(within(card).getByRole('combobox', { name: 'Panel position' })).toHaveValue('auto');
+        expect(within(card).getByRole('group', { name: 'Typing binds a key' })).toBeVisible();
+        expect(within(card).getByRole('combobox', { name: 'Advance after assigning' })).toBeVisible();
+        expect(within(card).getByRole('combobox', { name: 'Key legends' })).toBeVisible();
     });
 
     it('has no Large option, no gloss or sparkle slider, and combo indicators as an on/off switch', () => {
         render(<SettingsPanel />);
+        TITLES.forEach(openCard);
         expect(screen.queryByRole('option', { name: 'Large' })).toBeNull();
         expect(screen.queryAllByRole('slider')).toHaveLength(0);
         expect(screen.queryByText(/gloss|sparkle/i)).toBeNull();
         expect(screen.queryByText(/Binding editor placement/i)).toBeNull();
-        const editing = screen.getByRole('region', { name: 'Appearance and editing' });
-        const combo = within(editing).getByRole('group', { name: 'Combo indicators' });
+        const card = screen.getByRole('region', { name: 'Appearance and editing' });
+        const combo = within(card).getByRole('group', { name: 'Combo indicators' });
         expect(within(combo).getByRole('button', { name: 'ON' })).toHaveAttribute('aria-pressed', 'true');
         fireEvent.click(within(combo).getByRole('button', { name: 'OFF' }));
         expect(state.stored['combo-indicators']).toBe(false);
-        expect(within(editing).getByRole('group', { name: 'Colorblind-friendly combo colors' })).toBeVisible();
+        expect(within(card).getByRole('group', { name: 'Colorblind-friendly combo colors' })).toBeVisible();
     });
 
     it('stores a changed preference', () => {
         render(<SettingsPanel />);
+        openCard('Appearance and editing');
         fireEvent.change(screen.getByRole('combobox', { name: 'Key size' }), { target: { value: 'small' } });
         expect(state.stored['key-size']).toBe('small');
     });
 
-    it('opens the one Export dialog from Backups and files', () => {
+    it('opens the one Export dialog from Firmware and backups', () => {
         render(<SettingsPanel />);
+        openCard('Firmware and backups');
         expect(screen.queryByText('Export dialog')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Export layout' }));
         expect(screen.getByText('Export dialog')).toBeVisible();
         expect(screen.queryByRole('button', { name: /Print/ })).toBeNull();
     });
 
-    it('keeps Developer collapsed until opened, then remembers it in this browser', () => {
-        const view = render(<SettingsPanel />);
-        const toggle = screen.getByRole('button', { name: 'Developer' });
-        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    it('keeps the developer tools in About', () => {
+        render(<SettingsPanel />);
         expect(screen.queryByRole('button', { name: 'Scan Lab' })).toBeNull();
-        fireEvent.click(toggle);
-        expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        expect(state.stored['settings-developer-opened']).toBe(true);
+        openCard('About');
         fireEvent.click(screen.getByRole('button', { name: 'Scan Lab' }));
         expect(state.navigate).toHaveBeenCalledWith('scanlab');
         fireEvent.click(screen.getByRole('button', { name: 'Key proof sheet' }));
         expect(state.navigateTo).toHaveBeenCalledWith('proof-sheet');
-        view.unmount();
-        render(<SettingsPanel />);
-        expect(screen.getByRole('button', { name: 'Developer' })).toHaveAttribute('aria-expanded', 'true');
     });
 
     it.each(['sidebar', 'bottombar'])('renders the same page in %s mode', (mode) => {
         state.mode = mode;
         render(<SettingsPanel />);
-        expect(screen.getAllByRole('heading', { level: 4 })).toHaveLength(7);
-        expect(screen.getByRole('navigation', { name: 'Settings sections' })).toBeVisible();
-    });
-
-    it('jumps to a section from its anchor chip', () => {
-        const scroll = vi.fn();
-        Element.prototype.scrollIntoView = scroll;
-        render(<SettingsPanel />);
-        const nav = screen.getByRole('navigation', { name: 'Settings sections' });
-        expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['Hardware', 'Firmware', 'Backups', 'Appearance']);
-        fireEvent.click(within(nav).getByRole('button', { name: 'Backups' }));
-        expect(scroll).toHaveBeenCalledTimes(1);
-        expect(scroll.mock.contexts[0]).toBe(document.getElementById('settings-section-backups'));
+        expect(screen.getAllByRole('heading', { level: 4 })).toHaveLength(5);
+        expect(chips()).toBeVisible();
     });
 
     it('asks for a connection where the board is needed', () => {
         state.connected = false;
         render(<SettingsPanel />);
+        openCard('Firmware and backups');
         expect(screen.getByText('Connect a keyboard to see its name and serial.')).toBeVisible();
         expect(screen.queryByText('Board identity')).toBeNull();
     });
 });
 
-const hardwareToggle = () => within(screen.getByRole('heading', { level: 4, name: 'Hardware' })).getByRole('button');
-
-describe('the organizations under review (?settingsLayout=a|b|c)', () => {
-    const h3 = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
-    const h4 = () => screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent);
-
-    it('reads the option from the page address, defaulting to A', () => {
-        expect(settingsLayoutFromSearch('?demo=combos&panel=settings&settingsLayout=b')).toBe('b');
-        expect(settingsLayoutFromSearch('?settingsLayout=C')).toBe('c');
-        expect(settingsLayoutFromSearch('?settingsLayout=z')).toBe('a');
-        expect(settingsLayoutFromSearch('')).toBe('a');
+describe('jump chips', () => {
+    it.each(SETTINGS_PAGE.map((s) => [s.chip, s.title, s.id]))('%s opens and scrolls to %s, for this visit only', (chip, title, id) => {
+        const scroll = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
+        state.stored[sectionStateSetting(id)] = 'collapsed';
+        const view = render(<SettingsPanel />);
+        expect(expanded(title)).toBe(false);
+        fireEvent.click(within(chips()).getByRole('button', { name: chip }));
+        expect(expanded(title)).toBe(true);
+        expect(scroll.mock.contexts.at(-1)).toBe(document.getElementById(`settings-section-${id}`));
+        expect(state.stored[sectionStateSetting(id)]).toBe('collapsed');
+        view.unmount();
+        render(<SettingsPanel />);
+        expect(expanded(title)).toBe(false);
     });
 
-    it('B: set up, everyday, advanced, with About at the end', () => {
-        _setSettingsLayoutForTests('b');
+    it('marks Firmware and opens it for this visit when an update is available', () => {
+        state.firmwareDot = true;
         render(<SettingsPanel />);
-        expect(h3()).toEqual(['Set up', 'Everyday', 'Advanced', 'Keybard']);
-        expect(h4()).toEqual(['Hardware', 'Firmware and board', 'Appearance', 'Editing', 'Backups and files', 'Typing behavior', 'Developer', 'About']);
-        const nav = screen.getByRole('navigation', { name: 'Settings sections' });
-        expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['Set up', 'Everyday', 'Advanced']);
-        expect(screen.getByText('Hardware rows')).toBeVisible();
-        expect(screen.getByRole('button', { name: 'Typing behavior' })).toHaveAttribute('aria-expanded', 'false');
-    });
-
-    it('C: five collapsible cards, Hardware open, no chips', () => {
-        _setSettingsLayoutForTests('c');
-        render(<SettingsPanel />);
-        expect(h4()).toEqual(['Hardware', 'Firmware and backups', 'Appearance and editing', 'Typing behavior', 'About']);
-        expect(screen.queryByRole('navigation', { name: 'Settings sections' })).toBeNull();
-        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'true');
-        expect(screen.getByText('Hardware rows')).toBeVisible();
-        for (const name of ['Firmware and backups', 'Appearance and editing', 'Typing behavior', 'About']) {
-            expect(screen.getByRole('button', { name }), name).toHaveAttribute('aria-expanded', 'false');
-        }
-        fireEvent.click(screen.getByRole('button', { name: 'About' }));
-        expect(screen.getByRole('button', { name: 'Scan Lab' })).toBeVisible();
-    });
-
-    it.each(['a', 'b', 'c'] as const)('%s: an old Typing Behavior link opens Settings at Typing behavior, opened', (id) => {
-        _setSettingsLayoutForTests(id);
-        Element.prototype.scrollIntoView = vi.fn();
-        const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { cb(0); return 0; });
-        requestSettingsSection('typing');
-        render(<SettingsPanel />);
-        expect(screen.getByRole('button', { name: 'Typing behavior' })).toHaveAttribute('aria-expanded', 'true');
-        expect(screen.getByText('Typing behavior rows')).toBeVisible();
-        raf.mockRestore();
+        expect(within(chips()).getByRole('button', { name: 'Firmware, update available' })).toBeVisible();
+        expect(expanded('Firmware and backups')).toBe(true);
+        expect(state.stored[sectionStateSetting('firmware')]).toBeUndefined();
     });
 });
 
-describe('Hardware remembers whether it was left open or collapsed', () => {
-    const KEY = 'settings-hardware-open';
-    const raf = () => vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { cb(0); return 0; });
-
-    it.each(['a', 'b', 'c'] as const)('%s: open on a first visit, then as it was left', (id) => {
-        _setSettingsLayoutForTests(id);
+describe('every card remembers whether it was left open or collapsed', () => {
+    it.each(SETTINGS_PAGE.map((s) => [s.title, s.id, s.defaultOpen] as const))('%s: as declared on a first visit, then as it was left', (title, id, defaultOpen) => {
+        const key = sectionStateSetting(id);
         const view = render(<SettingsPanel />);
-        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'true');
-        expect(screen.getByText('Hardware rows')).toBeVisible();
-        fireEvent.click(hardwareToggle());
-        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'false');
-        expect(screen.queryByText('Hardware rows')).toBeNull();
-        expect(state.stored[KEY]).toBe('collapsed');
+        expect(expanded(title)).toBe(defaultOpen);
+        fireEvent.click(toggle(title));
+        expect(expanded(title)).toBe(!defaultOpen);
+        expect(state.stored[key]).toBe(defaultOpen ? 'collapsed' : 'open');
         view.unmount();
         const again = render(<SettingsPanel />);
-        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'false');
-        fireEvent.click(hardwareToggle());
-        expect(state.stored[KEY]).toBe('open');
+        expect(expanded(title)).toBe(!defaultOpen);
+        fireEvent.click(toggle(title));
+        expect(state.stored[key]).toBe(defaultOpen ? 'open' : 'collapsed');
         again.unmount();
         render(<SettingsPanel />);
-        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'true');
+        expect(expanded(title)).toBe(defaultOpen);
     });
 
-    it('opens for an old ?panel=clusters link without changing what is remembered', () => {
-        state.stored[KEY] = 'collapsed';
-        Element.prototype.scrollIntoView = vi.fn();
-        const spy = raf();
-        requestSettingsSection('hardware');
+    it.each([['typing', 'Typing behavior'], ['hardware', 'Hardware']])('an old link to %s opens it for the visit without changing what is remembered', (id, title) => {
+        state.stored[sectionStateSetting(id)] = 'collapsed';
+        requestSettingsSection(id);
         const view = render(<SettingsPanel />);
-        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'true');
-        expect(state.stored[KEY]).toBe('collapsed');
-        spy.mockRestore();
+        expect(expanded(title)).toBe(true);
+        expect(state.stored[sectionStateSetting(id)]).toBe('collapsed');
         view.unmount();
         render(<SettingsPanel />);
-        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'false');
+        expect(expanded(title)).toBe(false);
     });
 
-    it('opens for a search match without changing what is remembered', () => {
-        state.stored[KEY] = 'collapsed';
+    it('a request while Settings is open opens that card', () => {
         render(<SettingsPanel />);
-        expect(screen.queryByText('Hardware rows')).toBeNull();
-        fireEvent.change(screen.getByRole('textbox', { name: 'Search settings' }), { target: { value: 'trackball' } });
-        expect(screen.getByText('Hardware rows')).toBeVisible();
-        fireEvent.change(screen.getByRole('textbox', { name: 'Search settings' }), { target: { value: '' } });
-        expect(screen.queryByText('Hardware rows')).toBeNull();
-        expect(state.stored[KEY]).toBe('collapsed');
+        expect(expanded('About')).toBe(false);
+        act(() => requestSettingsSection('about'));
+        expect(expanded('About')).toBe(true);
+        expect(state.stored[sectionStateSetting('about')]).toBeUndefined();
     });
 
-    it('falls back to open when storage fails, and still toggles', () => {
+    it('a search match opens a card without changing what is remembered', () => {
+        state.stored[sectionStateSetting('hardware')] = 'collapsed';
+        render(<SettingsPanel />);
+        const search = screen.getByRole('textbox', { name: 'Search settings' });
+        expect(screen.queryByText('Hardware rows')).toBeNull();
+        fireEvent.change(search, { target: { value: 'trackball' } });
+        expect(screen.getByText('Hardware rows')).toBeVisible();
+        fireEvent.change(search, { target: { value: '' } });
+        expect(screen.queryByText('Hardware rows')).toBeNull();
+        expect(state.stored[sectionStateSetting('hardware')]).toBe('collapsed');
+    });
+
+    it('follows the defaults when storage fails, and still toggles', () => {
         state.storageFails = true;
         render(<SettingsPanel />);
-        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'true');
-        fireEvent.click(hardwareToggle());
-        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'false');
+        expect(expanded('Hardware')).toBe(true);
+        expect(expanded('Typing behavior')).toBe(false);
+        fireEvent.click(toggle('Hardware'));
+        expect(expanded('Hardware')).toBe(false);
+        fireEvent.click(toggle('Typing behavior'));
+        expect(expanded('Typing behavior')).toBe(true);
     });
 
     it('treats an unknown stored value, or the app default of false, as a first visit', () => {
-        state.stored[KEY] = false;
+        state.stored[sectionStateSetting('hardware')] = false;
+        state.stored[sectionStateSetting('typing')] = 'maybe';
         render(<SettingsPanel />);
-        expect(hardwareToggle()).toHaveAttribute('aria-expanded', 'true');
+        expect(expanded('Hardware')).toBe(true);
+        expect(expanded('Typing behavior')).toBe(false);
     });
 });

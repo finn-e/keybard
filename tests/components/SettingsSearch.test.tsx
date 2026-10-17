@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsPanel from '../../src/layout/SecondarySidebar/Panels/SettingsPanel';
 import { SETTINGS } from '../../src/contexts/SettingsContext';
-import { SETTINGS_LAYOUTS, SETTINGS_PAGE } from '../../src/layout/SecondarySidebar/Panels/settings/layout';
+import { SETTINGS_PAGE } from '../../src/layout/SecondarySidebar/Panels/settings/layout';
 import { highlightParts, searchSettings } from '../../src/layout/SecondarySidebar/Panels/settings/search';
 
 const state = vi.hoisted(() => ({ stored: {} as Record<string, string | number | boolean> }));
@@ -54,15 +54,15 @@ describe('Settings search', () => {
     it('finds Firmware for "update"', () => {
         render(<SettingsPanel />);
         type('update');
-        expect(sectionTitles()).toEqual(['Firmware and board']);
+        expect(sectionTitles()).toEqual(['Firmware and backups']);
         expect(screen.getByText('Firmware status')).toBeVisible();
     });
 
     it('finds Backups for "restore", and opens the backups list', () => {
         render(<SettingsPanel />);
-        expect(screen.getByText('Backups list collapsed')).toBeVisible();
+        expect(screen.queryByText('Backups list collapsed')).toBeNull();
         type('restore');
-        expect(sectionTitles()).toEqual(['Backups and files']);
+        expect(sectionTitles()).toEqual(['Firmware and backups']);
         expect(screen.getByText('Backups list open')).toBeVisible();
         expect(screen.getByRole('button', { name: 'Import layout' })).toBeVisible();
         expect(screen.queryByRole('button', { name: 'Export layout' })).toBeNull();
@@ -71,18 +71,19 @@ describe('Settings search', () => {
     it('shows the whole section when its title matches, with the match marked', () => {
         render(<SettingsPanel />);
         type('backup');
-        expect(sectionTitles()).toEqual(['Backups and files']);
+        expect(sectionTitles()).toEqual(['Firmware and backups']);
         expect(screen.getByRole('button', { name: 'Export layout' })).toBeVisible();
-        expect(screen.getByRole('heading', { level: 4 }).querySelector('mark')?.textContent).toBe('Backup');
+        expect(screen.getByText('Firmware status')).toBeVisible();
+        expect(screen.getByRole('heading', { level: 4 }).querySelector('mark')?.textContent).toBe('backup');
     });
 
     it('opens a collapsed section it finds a match in', () => {
         render(<SettingsPanel />);
         expect(screen.queryByRole('button', { name: 'Scan Lab' })).toBeNull();
         type('scan');
-        expect(sectionTitles()).toEqual(['Developer']);
+        expect(sectionTitles()).toEqual(['About']);
         expect(screen.getByRole('button', { name: 'Scan Lab' })).toBeVisible();
-        expect(state.stored['settings-developer-opened']).toBeUndefined();
+        expect(state.stored['settings-about-open']).toBeUndefined();
     });
 
     it('says when nothing matched, and clears from there', () => {
@@ -92,7 +93,7 @@ describe('Settings search', () => {
         expect(screen.getByRole('status')).toHaveTextContent('Nothing in Settings matches “zzzz”.');
         fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: 'Clear search' }));
         expect(search()).toHaveValue('');
-        expect(sectionTitles()).toHaveLength(7);
+        expect(sectionTitles()).toHaveLength(5);
     });
 
     it('clears on Esc', () => {
@@ -101,7 +102,7 @@ describe('Settings search', () => {
         expect(sectionTitles()).toEqual(['Appearance and editing']);
         fireEvent.keyDown(search(), { key: 'Escape' });
         expect(search()).toHaveValue('');
-        expect(sectionTitles()).toHaveLength(7);
+        expect(sectionTitles()).toHaveLength(5);
     });
 
     it('focuses the field on "/" or Ctrl+F inside Settings, without taking "/" from a text field', () => {
@@ -132,9 +133,9 @@ describe('Settings search', () => {
         const nav = screen.getByRole('navigation', { name: 'Settings sections' });
         expect(within(nav).getByRole('button', { name: 'Firmware' })).toHaveClass('opacity-50');
         expect(within(nav).getByRole('button', { name: 'Appearance' })).not.toHaveClass('opacity-50');
-        fireEvent.click(within(nav).getByRole('button', { name: 'Backups' }));
+        fireEvent.click(within(nav).getByRole('button', { name: 'About' }));
         expect(search()).toHaveValue('');
-        expect(sectionTitles()).toHaveLength(7);
+        expect(sectionTitles()).toHaveLength(5);
     });
 });
 
@@ -172,8 +173,8 @@ describe('Hardware and Typing behavior in search', () => {
         expect(screen.getByText('Typing behavior rows')).toBeVisible();
     });
 
-    it.each(['a', 'b', 'c'] as const)('finds both in option %s', (id) => {
-        const page = SETTINGS_LAYOUTS[id].groups;
+    it('finds each in its own card only', () => {
+        const page = SETTINGS_PAGE;
         expect([...searchSettings(page, 'touchpad', lookup)!.keys()]).toEqual(['hardware']);
         expect([...searchSettings(page, 'tapping term', lookup)!.keys()]).toEqual(['typing']);
     });

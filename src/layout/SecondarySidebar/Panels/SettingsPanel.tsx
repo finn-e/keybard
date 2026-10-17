@@ -16,21 +16,22 @@ import AboutSection from "./settings/AboutSection";
 import FirmwareRow from "./settings/FirmwareRow";
 import SettingRow from "./settings/SettingRow";
 import { onSettingsSectionRequest, takeSettingsSectionRequest } from "./settings/anchor";
-import { SETTINGS_LAYOUTS, settingsLayoutId, type SettingsBlock, type SettingsRow, type SettingsSection } from "./settings/layout";
+import { SETTINGS_PAGE, type SettingsBlock, type SettingsRow, type SettingsSection } from "./settings/layout";
+import { useStickySections } from "./settings/useStickySections";
 import { highlightParts, rowKey, searchSettings } from "./settings/search";
 
 const sectionDomId = (id: string) => `settings-section-${id}`;
-const groupDomId = (id: string) => `settings-group-${id}`;
 
 /** Focus is in a field that takes typed text, where "/" is a character. */
 const isTextField = (target: EventTarget | null) =>
     target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
 
 /**
- * Settings: one scrolling page of the setup a board needs once (hardware,
- * firmware, backups, typing behavior) and app preferences. Its content and
- * the organizations under review (?settingsLayout=a|b|c) are declared in
- * settings/layout.ts. A search field at the top filters it (settings/search.ts).
+ * Settings: a short list of cards for the setup a board needs once
+ * (hardware, firmware, backups, typing behavior) and app preferences, declared
+ * in settings/layout.ts. Every card opens and collapses and is remembered
+ * (settings/useStickySections.ts). Chips jump to a card; a search field
+ * filters the page (settings/search.ts).
  */
 const SettingsPanel = () => {
     const { getSetting, updateSetting, getSettingDefinition } = useSettings();
@@ -40,56 +41,21 @@ const SettingsPanel = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isExportOpen, setIsExportOpen] = useState(false);
     const { handleFileImport, reviewFile, importReview } = useLayoutImport();
-    // The update the rail's dot pointed at: marked on the Firmware chip for this visit
-    // (opening Settings clears the rail dot).
+    // The update the rail's dot pointed at: marked on the Firmware chip, with Firmware
+    // open, for this visit (opening Settings clears the rail dot).
     const firmwareDotNow = !!useFirmwareUpdates()?.status.dot;
     const [firmwareDot] = useState(firmwareDotNow);
 
-    // The organization under review: ?settingsLayout=a|b|c, for this page load only.
-    const layout = SETTINGS_LAYOUTS[settingsLayoutId()];
-    const page = layout.groups;
-    const sections = useMemo(() => page.flatMap((g) => g.sections), [page]);
-
-    // Collapsible sections: closed unless they start open, or were opened before
-    // in this browser (Developer), or left open or closed last time (Hardware).
-    // Remembering is a convenience: if storage fails, the section starts as declared.
-    const readStored = (name: string): unknown => {
-        try { return getSetting(name); } catch { return undefined; }
-    };
-    const writeStored = (name: string, value: string | boolean) => {
-        try { updateSetting(name, value); } catch { /* not remembered this time */ }
-    };
-    const remembered = (section: SettingsSection) => !!section.rememberOpen && readStored(section.rememberOpen) === true;
-    const initialOpen = (section: SettingsSection): boolean => {
-        // Stored as "open" or "collapsed": anything else (nothing stored yet) means a first visit.
-        const kept = section.rememberState ? readStored(section.rememberState) : undefined;
-        if (kept === "open" || kept === "collapsed") return kept === "open";
-        return !!section.defaultOpen || remembered(section);
-    };
-    const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
-        Object.fromEntries(sections.filter((s) => s.collapsible).map((s) => [s.id, initialOpen(s)])));
-    // Sections opened for this visit by a link or chip, which a late settings load must not close.
-    const openedThisVisit = useRef(new Set<string>());
-    const storedNow = sections.filter((s) => s.collapsible).map((s) => `${s.id}=${initialOpen(s)}`).join(" ");
+    // Every card opens and collapses, and opens the way it was left in this browser.
+    const sticky = useStickySections(SETTINGS_PAGE, (name) => getSetting(name), (name, value) => updateSetting(name, value));
+    // An update to install: Firmware opens for this visit.
     useEffect(() => {
-        const next = Object.fromEntries(storedNow.split(" ").filter(Boolean).map((pair) => {
-            const [id, open] = pair.split("=");
-            return [id, open === "true"];
-        }).filter(([id]) => !openedThisVisit.current.has(id as string)));
-        setOpenSections((prev) => {
-            const merged = { ...prev };
-            for (const [id, open] of Object.entries(next)) {
-                const section = sections.find((s) => s.id === id);
-                // Developer only ever opens from storage; a remembered state applies either way.
-                if (section?.rememberState || open) merged[id] = open === true;
-            }
-            return merged;
-        });
-    }, [storedNow]);
+        if (firmwareDot) sticky.openForVisit("firmware");
+    }, [firmwareDot, sticky.openForVisit]);
 
     const searchRef = useRef<HTMLInputElement>(null);
     const [query, setQuery] = useState("");
-    const matches = useMemo(() => searchSettings(page, query, getSettingDefinition), [page, query, getSettingDefinition]);
+    const matches = useMemo(() => searchSettings(SETTINGS_PAGE, query, getSettingDefinition), [query, getSettingDefinition]);
     const searching = matches !== null;
 
     const highlight = useCallback((text: string): ReactNode => {
@@ -125,26 +91,15 @@ const SettingsPanel = () => {
         clearSearch();
     };
 
-    const toggleSection = (section: SettingsSection) => {
-        const next = !openSections[section.id];
-        setOpenSections((prev) => ({ ...prev, [section.id]: next }));
-        openedThisVisit.current.delete(section.id);
-        if (next && section.rememberOpen && !remembered(section)) writeStored(section.rememberOpen, true);
-        if (section.rememberState) writeStored(section.rememberState, next ? "open" : "collapsed");
-    };
-
-    // Opens a section for this visit only: the remembered state is left alone.
-    const scrollToSection = (id: string, group = false) => {
-        if (!group && sections.some((s) => s.id === id && s.collapsible)) {
-            openedThisVisit.current.add(id);
-            setOpenSections((prev) => ({ ...prev, [id]: true }));
-        }
-        const jump = () => document.getElementById(group ? groupDomId(id) : sectionDomId(id))?.scrollIntoView?.({ block: "start", behavior: "smooth" });
-        // A chip jumps on the whole page: clear a search first, then jump once it renders.
+    // A chip, a link or the rail opens a card for this visit only: what is remembered stays.
+    const scrollToSection = (id: string) => {
+        if (SETTINGS_PAGE.some((s) => s.id === id)) sticky.openForVisit(id);
+        const jump = () => document.getElementById(sectionDomId(id))?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+        // Clear a search first, then jump once the whole page renders.
         if (matches) {
             setQuery("");
             requestAnimationFrame(jump);
-        } else jump();
+        } else requestAnimationFrame(jump);
     };
 
     // Opened at a section from elsewhere (the rail's About item, an old ?panel= link).
@@ -173,7 +128,7 @@ const SettingsPanel = () => {
                 return (
                     <BackupsSection
                         onRestore={reviewFile}
-                        forceOpen={!!matches?.get("backups")?.rows.has("block:backups")}
+                        forceOpen={[...(matches?.values() ?? [])].some((m) => m.rows.has("block:backups"))}
                         highlight={highlight}
                     />
                 );
@@ -205,90 +160,44 @@ const SettingsPanel = () => {
         );
     };
 
-    const visibleGroups = page
-        .map((group) => ({ ...group, sections: group.sections.filter((section) => !matches || matches.has(section.id)) }))
-        .filter((group) => group.sections.length > 0);
-
-    // The chip (or, with no chips, the section heading) that carries the update dot.
-    const holdsFirmware = (anchor: { id: string; group?: boolean }) =>
-        anchor.group ? !!page.find((g) => g.id === anchor.id)?.sections.some((s) => s.id === "firmware") : anchor.id === "firmware";
+    const visibleSections = SETTINGS_PAGE.filter((section) => !matches || matches.has(section.id));
 
     const renderSection = (section: SettingsSection) => {
         const match = matches?.get(section.id);
-        const expanded = !section.collapsible || !!match || !!openSections[section.id];
+        const expanded = !!match || sticky.isOpen(section.id);
         const domId = sectionDomId(section.id);
         const bodyId = `${domId}-body`;
         const rows = match ? section.rows.filter((row) => match.rows.has(rowKey(row))) : section.rows;
-        const style = layout.style;
-        const card = style === "cards" || style === "list";
-        const dot = firmwareDot && section.id === "firmware" && layout.anchors.length === 0;
-        const title = (
-            <span className="flex flex-row items-center gap-2">
-                {highlight(section.title)}
-                {dot && <span aria-label="update available" data-testid="firmware-heading-dot" className="h-1.5 w-1.5 rounded-full bg-kb-primary" />}
-            </span>
-        );
-        const headingClass = cn(
-            "text-kb-ink",
-            style === "list" ? "text-base font-semibold" : "text-sm font-semibold",
-            style === "cards" && "border-kb-gray-border bg-muted/60 px-3 py-2",
-            style === "cards" && expanded && "border-b",
-            style === "list" && "px-4",
-            style === "list" && expanded && !section.summary && "border-b border-kb-gray-border",
-            style === "tasks" && section.collapsible && "rounded-lg border border-kb-gray-border px-3 py-1.5",
-            style === "tasks" && section.collapsible && expanded && "mb-2",
-        );
-        const summary = style === "list" && section.summary && (
-            <p
-                id={`${domId}-summary`}
-                onClick={() => toggleSection(section)}
-                className={cn("-mt-1 cursor-pointer px-4 pb-3 text-xs text-muted-foreground", expanded && "border-b border-kb-gray-border")}
-            >
-                {section.summary}
-            </p>
-        );
         return (
             <section
                 key={section.id}
                 id={domId}
                 aria-labelledby={`${domId}-title`}
                 data-settings-section={section.id}
-                className={cn(
-                    "scroll-mt-32 flex flex-col",
-                    card && "overflow-hidden rounded-xl border border-kb-gray-border bg-kb-surface shadow-sm",
-                )}
+                className="scroll-mt-28 flex flex-col overflow-hidden rounded-xl border border-kb-gray-border bg-kb-surface shadow-sm"
             >
-                {section.collapsible ? (
-                    <h4 id={`${domId}-title`} className={headingClass}>
-                        <button
-                            type="button"
-                            aria-expanded={expanded}
-                            aria-controls={bodyId}
-                            aria-describedby={summary ? `${domId}-summary` : undefined}
-                            onClick={() => toggleSection(section)}
-                            className={cn(
-                                "flex w-full flex-row items-center justify-between gap-2 text-left",
-                                style === "list" ? "py-3" : "py-1",
-                            )}
-                        >
-                            {title}
-                            <ChevronDown aria-hidden="true" className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-180")} />
-                        </button>
-                    </h4>
-                ) : (
-                    <h4 id={`${domId}-title`} className={cn(headingClass, style === "tasks" && "py-1", style === "list" && "py-3")}>
-                        {title}
-                    </h4>
-                )}
-                {summary}
-                {expanded && (
-                    <div
-                        id={bodyId}
-                        className={cn(
-                            "flex flex-col divide-y divide-kb-gray-border",
-                            style === "tasks" && "panel-layer-item rounded-lg border border-kb-gray-border",
-                        )}
+                <h4 id={`${domId}-title`} className="px-4 text-base font-semibold text-kb-ink">
+                    <button
+                        type="button"
+                        aria-expanded={expanded}
+                        aria-controls={bodyId}
+                        aria-describedby={`${domId}-summary`}
+                        onClick={() => sticky.toggle(section.id)}
+                        className="flex w-full flex-row items-center justify-between gap-2 pt-3 pb-1 text-left"
                     >
+                        <span>{highlight(section.title)}</span>
+                        <ChevronDown aria-hidden="true" className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-180")} />
+                    </button>
+                </h4>
+                <p
+                    id={`${domId}-summary`}
+                    onClick={() => sticky.toggle(section.id)}
+                    className={cn("cursor-pointer px-4 pb-3 text-xs text-muted-foreground", expanded && "border-b border-kb-gray-border")}
+                >
+                    {section.summary}
+                </p>
+                {expanded && (
+                    <div id={bodyId} className="flex flex-col divide-y divide-kb-gray-border">
                         {rows.map(renderRow)}
                     </div>
                 )}
@@ -297,7 +206,7 @@ const SettingsPanel = () => {
     };
 
     return (
-        <div className="@container flex w-full flex-col gap-5 pb-6" data-settings-layout={layout.id} onKeyDown={onPanelKeyDown}>
+        <div className="@container flex w-full flex-col gap-3 pb-6" onKeyDown={onPanelKeyDown}>
             {importReview}
             <input
                 type="file"
@@ -308,7 +217,7 @@ const SettingsPanel = () => {
             />
             <ExportDialog open={isExportOpen} onOpenChange={setIsExportOpen} />
 
-            <div className="sticky top-0 z-10 -mx-1 flex flex-col gap-2 bg-kb-surface px-1 pt-1.5 pb-1">
+            <div className="sticky top-0 z-10 -mx-1 flex flex-col gap-2 bg-kb-surface px-1 pt-1.5 pb-2">
                 <div role="search" className="relative">
                     <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <input
@@ -337,35 +246,29 @@ const SettingsPanel = () => {
                         </button>
                     )}
                 </div>
-                {layout.anchors.length > 0 && (
-                    <nav aria-label="Settings sections" className="flex flex-row flex-wrap gap-1.5">
-                        {layout.anchors.map((anchor) => {
-                            const { id, label, group } = anchor;
-                            const dotted = firmwareDot && holdsFirmware(anchor);
-                            const dimmed = matches && (group
-                                ? !page.find((g) => g.id === id)?.sections.some((s) => matches.has(s.id))
-                                : !matches.has(id));
-                            return (
-                                <button
-                                    key={id}
-                                    type="button"
-                                    onClick={() => scrollToSection(id, group)}
-                                    aria-label={dotted ? `${label}, update available` : undefined}
-                                    className={cn(
-                                        "inline-flex items-center gap-1.5 rounded-full border border-kb-gray-border bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-kb-ink",
-                                        dimmed && "opacity-50",
-                                    )}
-                                >
-                                    {label}
-                                    {dotted && <span aria-hidden="true" data-testid="firmware-chip-dot" className="h-1.5 w-1.5 rounded-full bg-kb-primary" />}
-                                </button>
-                            );
-                        })}
-                    </nav>
-                )}
+                <nav aria-label="Settings sections" className="flex flex-row flex-wrap gap-1.5">
+                    {SETTINGS_PAGE.map(({ id, chip }) => {
+                        const dotted = firmwareDot && id === "firmware";
+                        return (
+                            <button
+                                key={id}
+                                type="button"
+                                onClick={() => scrollToSection(id)}
+                                aria-label={dotted ? `${chip}, update available` : undefined}
+                                className={cn(
+                                    "inline-flex items-center gap-1.5 rounded-full border border-kb-gray-border bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-kb-ink",
+                                    matches && !matches.has(id) && "opacity-50",
+                                )}
+                            >
+                                {chip}
+                                {dotted && <span aria-hidden="true" data-testid="firmware-chip-dot" className="h-1.5 w-1.5 rounded-full bg-kb-primary" />}
+                            </button>
+                        );
+                    })}
+                </nav>
             </div>
 
-            {searching && visibleGroups.length === 0 && (
+            {searching && visibleSections.length === 0 && (
                 <div role="status" className="panel-layer-item flex flex-col items-start gap-1.5 rounded-lg px-3 py-4">
                     <p className="text-sm text-kb-ink">Nothing in Settings matches &ldquo;{query.trim()}&rdquo;.</p>
                     <p className="text-xs text-muted-foreground">Layers, combos and the other parts of a layout live in their own panels on the rail.</p>
@@ -379,33 +282,7 @@ const SettingsPanel = () => {
                 </div>
             )}
 
-            {visibleGroups.map((group, index) => (
-                <section
-                    key={group.id}
-                    aria-labelledby={groupDomId(group.id)}
-                    className={cn(
-                        "flex flex-col",
-                        layout.style === "tasks" ? "gap-4" : "gap-3",
-                        layout.style === "cards" && index > 0 && "mt-3",
-                        layout.style === "tasks" && index > 0 && !group.footer && "border-t-2 border-kb-gray-border pt-5",
-                        group.footer && "mt-2 border-t border-kb-gray-border pt-4",
-                    )}
-                >
-                    <h3
-                        id={groupDomId(group.id)}
-                        className={cn(
-                            "scroll-mt-32",
-                            group.hideTitle && "sr-only",
-                            layout.style === "tasks" && !group.footer
-                                ? "text-lg font-semibold text-kb-ink"
-                                : "text-xs font-semibold uppercase tracking-wide text-muted-foreground",
-                        )}
-                    >
-                        {group.title}
-                    </h3>
-                    {group.sections.map(renderSection)}
-                </section>
-            ))}
+            {visibleSections.map(renderSection)}
         </div>
     );
 };
