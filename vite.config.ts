@@ -66,7 +66,7 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), "VITE_");
     const paranoid = mode === "paranoid";
     return {
-    base: env.VITE_BASE_PATH || "/keybard-ng/",
+    base: env.VITE_BASE_PATH || "/keybard/",
     plugins: [
         react(),
         tailwindcss(),

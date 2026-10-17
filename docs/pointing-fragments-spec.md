@@ -291,7 +291,7 @@ Add a helper `isWidgetInstance(kbinfo, instance)` in `src/services/fragment-comp
 - Viz builders write `tests/components/pointing-viz/<Component>.test.tsx`. Each test renders with a fake `PointingSampleSource` built from `simulateSample` under jsdom, where `getContext` returns null, and asserts: no throw; the aria-label contains the side and the module name; the unsubscribe and cancelAnimationFrame run on unmount; reduced motion schedules no RAF. Pure math helpers kept inside the component file (for example the particle step or the arrow geometry) are exported, prefixed `_test`, and unit-tested for each mode.
 - keybard-slot owns `tests/services/fragment-composer.widgets.test.ts`, `tests/utils/pointing-motion.test.ts`, `tests/hooks/usePointingSlots.test.tsx`, `tests/components/pointing-viz/PointingSlot.test.tsx`, and updates to `tests/fixtures/fragments.fixture.ts`, `tests/components/PointingPanel.test.tsx` and FragmentsPanel tests.
 - Every Keybard builder runs `npx tsc --noEmit -p .` and the tests it touched. keybard-slot also runs `npm run build` and the full `npm test`.
-- The dev server already running on http://localhost:5173/keybard-ng/ must not be restarted or killed. Check the result visually at `?pointingDemo=trackball,touchpad` and `?pointingDemo=trackpoint,trackball&pointingDemoMode=scroll`.
+- The dev server already running on http://localhost:5173/keybard/ must not be restarted or killed. Check the result visually at `?pointingDemo=trackball,touchpad` and `?pointingDemo=trackpoint,trackball&pointingDemoMode=scroll`.
 
 ---
 
