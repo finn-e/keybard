@@ -5,9 +5,10 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { pointingDemo } from "@/features/pointing-demo";
 
 /**
- * ?panel=settings (with ?category=general|fragments) opens Settings once a
- * layout is loaded, so a pointing review link lands on the Ball gloss and
- * Sparkle density sliders or the Fragments ball choice. Once per page load.
+ * ?panel=settings opens Settings once a layout is loaded (with ?demo, the
+ * QWERTY Example), so a review link lands on the Settings page;
+ * ?panel=fragments opens Clusters, where the fragment and ball choices now
+ * live. Once per page load.
  */
 export default function PointingDeepLink() {
     const { keyboard } = useKeyboard();
@@ -17,7 +18,7 @@ export default function PointingDeepLink() {
         const panel = pointingDemo()?.panel;
         if (!keyboard || !panel || done.current) return;
         done.current = true;
-        setActivePanel("settings");
+        setActivePanel(panel === "fragments" ? "clusters" : "settings");
         setPanelToGoBack(null);
         setItemToEdit(null);
         openDetails();

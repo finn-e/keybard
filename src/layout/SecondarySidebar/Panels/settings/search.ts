@@ -27,7 +27,6 @@ export const ROW_SYNONYMS: Record<string, string[]> = {
     "typing-binds-key": ["keyboard input", "type to assign", "modifiers"],
     "serial-assignment": ["next key", "order", "sequence", "auto advance"],
     "international-keyboards": ["language", "locale", "layout", "qwertz", "azerty", "colemak", "keymap"],
-    "combo-editor-placement": ["editor position", "popup", "dock", "floating"],
     "combo-indicators": ["corner", "fold", "marker"],
     "colorblind-combo-colors": ["color blind", "accessibility", "texture", "contrast"],
     "show-alt-repeat": ["rail", "repeat"],

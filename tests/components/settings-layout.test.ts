@@ -26,6 +26,13 @@ describe('Settings page declaration', () => {
         }
     });
 
+    it('leaves out the retired settings: binding editor placement, ball gloss and sparkle', () => {
+        for (const name of ['combo-editor-placement', 'pointing-ball-gloss', 'pointing-sparkle']) {
+            expect(onPage).not.toContain(name);
+            expect(SETTINGS.find((s) => s.name === name), name).toBeUndefined();
+        }
+    });
+
     it('has the three groups and only Developer collapsible', () => {
         expect(SETTINGS_PAGE.map((g) => g.title)).toEqual(['This keyboard', 'This browser', 'Keybard']);
         const collapsible = SETTINGS_PAGE.flatMap((g) => g.sections).filter((s) => s.collapsible).map((s) => s.id);

@@ -68,6 +68,20 @@ describe('Settings page', () => {
         expect(within(editing).getByRole('combobox', { name: 'Key legends' })).toBeVisible();
     });
 
+    it('has no Large option, no gloss or sparkle slider, and combo indicators as an on/off switch', () => {
+        render(<SettingsPanel />);
+        expect(screen.queryByRole('option', { name: 'Large' })).toBeNull();
+        expect(screen.queryAllByRole('slider')).toHaveLength(0);
+        expect(screen.queryByText(/gloss|sparkle/i)).toBeNull();
+        expect(screen.queryByText(/Binding editor placement/i)).toBeNull();
+        const editing = screen.getByRole('region', { name: 'Editing' });
+        const combo = within(editing).getByRole('group', { name: 'Combo indicators' });
+        expect(within(combo).getByRole('button', { name: 'ON' })).toHaveAttribute('aria-pressed', 'true');
+        fireEvent.click(within(combo).getByRole('button', { name: 'OFF' }));
+        expect(state.stored['combo-indicators']).toBe(false);
+        expect(within(editing).getByRole('group', { name: 'Colorblind-friendly combo colors' })).toBeVisible();
+    });
+
     it('stores a changed preference', () => {
         render(<SettingsPanel />);
         fireEvent.change(screen.getByRole('combobox', { name: 'Key size' }), { target: { value: 'small' } });
