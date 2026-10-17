@@ -7,7 +7,6 @@ import {
     type PointingDetectDeps,
 } from "@/services/pointing-detect.service";
 import type { KeyboardInfo } from "@/types/keyboard.types";
-import { SVIL_FLAG2_POINTING_HARDWARE } from "@/utils/pointing-hardware";
 
 export const boardPointingDeps: PointingDetectDeps = {
     async readHardwareDetection(kbinfo) {
@@ -15,12 +14,6 @@ export const boardPointingDeps: PointingDetectDeps = {
         if (!fragments.hasFragments(kbinfo)) return null;
         return fragments.readHardwareDetection();
     },
-    async readPointingHardware(kbinfo) {
-        const probe = { ...kbinfo };
-        await keyboardService.getPointingHardware(probe);
-        return probe.pointing_hardware ?? null;
-    },
-    hasPointingHardware: (kbinfo) => ((kbinfo.feature_flags2 ?? 0) & SVIL_FLAG2_POINTING_HARDWARE) !== 0,
 };
 
 export interface PointingDetectionOptions {
@@ -37,8 +30,9 @@ export interface PointingDetectionOptions {
 /**
  * The one owner of late pointing detection, run by KeyboardProvider: after each
  * load from the board, it keeps re-reading while a hand shows "Detecting" or no
- * module, and writes what it finds into the keyboard. Everything else (the
- * Hardware rows, the mismatch dialog, the drawn devices) reads the keyboard.
+ * module, and writes what it finds into fragmentState.hwDetection. The Hardware
+ * rows, the composition and the drawn devices read it from the keyboard. The
+ * mismatch dialog reads pointing_hardware, which stays as read at connect.
  */
 export function usePointingDetection({ connected, boardLoad, getKeyboard, apply, deps = boardPointingDeps }: PointingDetectionOptions) {
     const applyRef = useRef(apply);

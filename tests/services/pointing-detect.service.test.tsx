@@ -14,16 +14,14 @@ import type { KeyboardInfo } from '../../src/types/keyboard.types';
 import { parsePointingHardware, type PointingHardwareReport } from '../../src/utils/pointing-hardware';
 import { createSvalboardPointingKbinfo, POINTING_FRAGMENT_IDS as ID, POINTING_INSTANCE_IDX as IDX } from '../fixtures/fragments.fixture';
 
-// A mocked board: 0x18 and 0x2C answer what `board` says at the time of the read.
+// A mocked board: 0x18 answers what `board` says at the time of the read. The
+// poller never reads 0x2C; `board.report` is what 0x2C would say if it did.
 const board = vi.hoisted(() => ({
     hw: new Map<number, number>(),
     report: null as PointingHardwareReport | null,
-    has2C: true,
 }));
 const deps: PointingDetectDeps = {
     readHardwareDetection: vi.fn(async () => new Map(board.hw)),
-    readPointingHardware: vi.fn(async () => board.report),
-    hasPointingHardware: () => board.has2C,
 };
 const reads = () => (deps.readHardwareDetection as ReturnType<typeof vi.fn>).mock.calls.length;
 
@@ -31,7 +29,9 @@ const reads = () => (deps.readHardwareDetection as ReturnType<typeof vi.fn>).moc
 const LEFT_AUTO = 0x0b, RIGHT_AUTO = 0x09;
 const report2C = (left: number[], right: number[]) => parsePointingHardware(new Uint8Array([0x2c, 1, ...left, ...right]))!;
 const NONE_BOTH = () => report2C([LEFT_AUTO, 0, 3, 0, 0], [RIGHT_AUTO, 0, 3, 0, 0]);
-const LEFT_3389 = () => report2C([LEFT_AUTO | 0x04, 2, 2, 0x47, 0xb8], [RIGHT_AUTO, 0, 3, 0, 0]);
+// The left half's auto build started with nothing and a PMW3389 answers now: the
+// dialog's "not picked up" case, if a late 0x2C read ever reached it.
+const LEFT_3389_NOT_STARTED = () => report2C([LEFT_AUTO, 0, 2, 0x47, 0xb8], [RIGHT_AUTO, 0, 3, 0, 0]);
 
 const mocks = vi.hoisted(() => ({ ctx: { keyboard: null as any, isConnected: true, connectionSessionId: 1 } }));
 vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ ...mocks.ctx, setKeyboard: vi.fn(), getKeyboardSnapshot: () => mocks.ctx.keyboard }) }));
@@ -85,10 +85,8 @@ describe('late pointing detection', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         vi.mocked(deps.readHardwareDetection).mockClear();
-        vi.mocked(deps.readPointingHardware).mockClear();
         board.hw = new Map([[IDX.left, ID.pointing_none], [IDX.right, ID.pointing_none]]);
         board.report = NONE_BOTH();
-        board.has2C = true;
         state = null;
     });
     afterEach(() => {
@@ -105,7 +103,7 @@ describe('late pointing detection', () => {
         expect(row(container, 'left').querySelector('[role="status"]')!.textContent).toBe('No pointing module');
 
         board.hw = new Map([[IDX.left, ID.pointing_trackball_pmw3389], [IDX.right, ID.pointing_none]]);
-        board.report = LEFT_3389();
+        board.report = LEFT_3389_NOT_STARTED();
         await at(2000);
         expect(reads()).toBe(6);
         expect(row(container, 'left').textContent).toContain('Auto-detected');
@@ -113,9 +111,9 @@ describe('late pointing detection', () => {
         expect(getByTestId('drawn').textContent).toBe('trackball/-');
         // Written into the board state once, the same in the draft and the loaded copy: no unsaved edit.
         expect(state!.keyboard.fragmentState!.hwDetection.get(IDX.left)).toBe(ID.pointing_trackball_pmw3389);
-        expect(state!.keyboard.pointing_hardware!.halves.find((h) => h.side === 'left')!.detected).toBe('pmw3389');
+        // pointing_hardware stays as read at connect: the dialog never hears of a late find.
+        expect(state!.keyboard.pointing_hardware).toEqual(NONE_BOTH());
         expect(serialize(state!.keyboard)).toBe(serialize(state!.original));
-        // No dialog: an auto build that picked the module up is fine.
         expect(document.querySelector('[role="dialog"]')).toBeNull();
 
         // The right hand still has none: it keeps polling for that hand, and a
@@ -155,7 +153,6 @@ describe('late pointing detection', () => {
         render(<Harness initial={kb} />);
         await at(60 * 1000);
         expect(reads()).toBe(0);
-        expect(deps.readPointingHardware).not.toHaveBeenCalled();
     });
 
     it('"Detecting" at connect turns into the module; a hand that showed none never goes back to "Detecting"', async () => {
@@ -173,9 +170,10 @@ describe('late pointing detection', () => {
         expect(row(container, 'right').querySelector('[role="status"]')!.textContent).toBe('No pointing module');
     });
 
-    it('older firmware with no pointing slots and no 0x2C: never polls', async () => {
+    it('older firmware with no pointing slots: never polls', async () => {
         const kb = createSvalboardPointingKbinfo({ withPointing: false }) as KeyboardInfo;
-        board.has2C = false;
+        kb.feature_flags2 = 0x02;
+        kb.pointing_hardware = NONE_BOTH();
         const poller = new PointingDetectPoller(deps);
         poller.start(kb, vi.fn());
         expect(poller.isPolling).toBe(false);
@@ -183,20 +181,37 @@ describe('late pointing detection', () => {
         expect(reads()).toBe(0);
     });
 
-    it('a board without pointing slots waits on its 0x2C halves', async () => {
-        const kb = createSvalboardPointingKbinfo({ withPointing: false }) as KeyboardInfo;
-        kb.feature_flags2 = 0x02;
-        kb.pointing_hardware = NONE_BOTH();
-        const onUpdate = vi.fn();
-        const poller = new PointingDetectPoller(deps);
-        poller.start(kb, onUpdate);
-        expect(poller.isPolling).toBe(true);
-        board.report = report2C([LEFT_AUTO | 0x04, 2, 2, 0x47, 0xb8], [RIGHT_AUTO | 0x04, 5, 5, 0, 40]);
+    it('a late find opens no dialog, even when 0x2C would have looked like a problem then', async () => {
+        render(<Harness initial={connectedBoard()} />);
+        board.hw = new Map([[IDX.left, ID.pointing_trackball_pmw3389], [IDX.right, ID.pointing_trackpoint]]);
+        board.report = LEFT_3389_NOT_STARTED();
         await at(STEP);
-        expect(onUpdate).toHaveBeenCalledTimes(1);
-        expect(onUpdate.mock.calls[0][0].pointingHardware.halves.map((h: { detected: string }) => h.detected)).toEqual(['pmw3389', 'azoteq']);
-        expect(poller.isPolling).toBe(false);
-        expect(reads()).toBe(0);
+        expect(state!.keyboard.fragmentState!.hwDetection.get(IDX.left)).toBe(ID.pointing_trackball_pmw3389);
+        await at(POINTING_DETECT_WINDOW_MS);
+        expect(document.querySelector('[role="dialog"]')).toBeNull();
+        expect(document.body.textContent).not.toMatch(/picked up|firmware/i);
+        expect(state!.keyboard.pointing_hardware).toEqual(NONE_BOTH());
+    });
+
+    it('"Auto-detected" only on a real module: not on "Detecting", not on no module', async () => {
+        board.hw = new Map();
+        const { container } = render(<Harness initial={connectedBoard([])} />);
+        const label = (side: string) => row(container, side).textContent!.includes('Auto-detected');
+        expect(label('left')).toBe(false);
+        expect(label('right')).toBe(false);
+        board.hw = new Map([[IDX.left, ID.pointing_none], [IDX.right, ID.pointing_none]]);
+        await at(STEP);
+        expect(row(container, 'left').querySelector('[role="status"]')!.textContent).toBe('No pointing module');
+        expect(label('left')).toBe(false);
+        expect(label('right')).toBe(false);
+        board.hw = new Map([[IDX.left, ID.pointing_touchpad_azoteq], [IDX.right, ID.pointing_none]]);
+        await at(STEP);
+        expect(label('left')).toBe(true);
+        expect(label('right')).toBe(false);
+        // The finger and thumb rows here have no detection, so none says "Detected" either.
+        const others = [...container.querySelectorAll('.panel-layer-item')].filter((el) => !el.hasAttribute('data-pointing-instance'));
+        expect(others.length).toBeGreaterThan(0);
+        for (const el of others) expect(el.textContent).not.toMatch(/Detected/i);
     });
 
     it('a failed read changes nothing', async () => {
