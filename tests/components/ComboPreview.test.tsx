@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
     colorblind: false,
     panels: { activePanel: null as string | null, itemToEdit: null as number | null },
     selectKeyboardKey: vi.fn(),
+    openEditor: vi.fn(),
 }));
 
 vi.mock("@/contexts/LayoutSettingsContext", () => ({
@@ -31,6 +32,7 @@ vi.mock("@/contexts/KeyBindingContext", () => ({
     useKeyBinding: () => ({ selectKeyboardKey: state.selectKeyboardKey, selectedTarget: null, clearSelection: vi.fn(), assignKeycode: vi.fn() }),
 }));
 vi.mock("@/contexts/PanelsContext", () => ({ usePanels: () => state.panels }));
+vi.mock("@/hooks/useOpenBindingEditor", () => ({ useOpenBindingEditor: () => state.openEditor }));
 vi.mock("@/hooks/useChanges", () => ({ useChanges: () => ({ hasPendingChangeForKey: () => false }) }));
 vi.mock("@/hooks/useKeyDrag", () => ({
     useKeyDrag: () => ({
@@ -68,6 +70,8 @@ beforeEach(() => {
     state.mode = "small";
     state.colorblind = false;
     state.panels = { activePanel: null, itemToEdit: null };
+    state.openEditor = vi.fn();
+    state.selectKeyboardKey.mockClear();
 });
 afterEach(() => { vi.useRealTimers(); });
 
@@ -80,6 +84,31 @@ describe("combo folded corner on the layout", () => {
         expect(order("KC_D")).toBe("2,3,4");
         expect(foldOf("KC_D")!.querySelectorAll("[data-fold-piece]")).toHaveLength(3);
         expect(foldOf("KC_Q")).toBeNull();
+    });
+
+    it("a click on a fold piece opens that combo's editor, not the key", () => {
+        renderAll();
+        const piece = foldOf("KC_D")!.querySelector('[data-fold-piece="3"]')!;
+        fireEvent.click(piece);
+        expect(state.openEditor).toHaveBeenCalledWith("combos", 3);
+        expect(state.selectKeyboardKey).not.toHaveBeenCalled();
+        expect(keyEl("KC_D").getAttribute("aria-pressed")).toBe("false");
+        // Elsewhere on the key: as before (pins it), no editor.
+        fireEvent.click(keyEl("KC_D"));
+        expect(keyEl("KC_D").getAttribute("aria-pressed")).toBe("true");
+        expect(state.openEditor).toHaveBeenCalledTimes(1);
+    });
+
+    it("the Tab-stop key's fold pieces are Tab stops; Enter opens the combo", () => {
+        renderAll();
+        const stop = [...document.querySelectorAll<HTMLElement>("[data-inspect-pos]")].find(el => el.getAttribute("tabindex") === "0")!;
+        const other = keyEl("KC_K");
+        expect([...other.querySelectorAll("[data-fold-action]")].every(p => p.getAttribute("tabindex") === "-1")).toBe(true);
+        act(() => { other.focus(); });
+        expect([...other.querySelectorAll("[data-fold-action]")].every(p => p.getAttribute("tabindex") === "0")).toBe(true);
+        expect(stop === other || stop.querySelectorAll('[data-fold-action][tabindex="0"]').length === 0).toBe(true);
+        fireEvent.keyDown(other.querySelector('[data-fold-piece="1"]')!, { key: "Enter" });
+        expect(state.openEditor).toHaveBeenCalledWith("combos", 1);
     });
 
     it("draws no overflow mark on a key with more than three combos", () => {

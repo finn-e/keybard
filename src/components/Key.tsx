@@ -39,6 +39,10 @@ export interface KeyComboProps {
     onToggle: () => void;
     /** False for a key that only draws the fold (the ghost overlay of a transparent key). */
     interactive?: boolean;
+    /** Click, Enter or Space on a fold piece: open that combo's editor. */
+    onOpenCombo?: (index: number) => void;
+    /** Keybard-only combo names, by combo number (the fold pieces' labels). */
+    comboNames?: Readonly<Record<string, string>>;
 }
 
 
@@ -269,6 +273,9 @@ export const Key = React.forwardRef<HTMLDivElement, KeyProps>((props, ref) => {
             mode={combo!.mode}
             palette={combo!.palette}
             measureKey={`${keycode}|${label}|${keyContents?.type ?? ""}`}
+            onOpen={comboInteractive ? combo!.onOpenCombo : undefined}
+            tabbable={comboInteractive && !!combo!.tabStop}
+            names={combo!.comboNames}
         />
     ) : null;
 

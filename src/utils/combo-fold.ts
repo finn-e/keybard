@@ -7,8 +7,11 @@
 //   - one combo fills the whole corner;
 //   - two split it, in order 1, 2;
 //   - three: the first two take the first two spots and the third takes the last spot.
-// Spots run from the key's horizontal edge (bottom, or top when the fold flips to the top
-// corner) toward its vertical right edge.
+// Spots run from the key's bottom edge toward its right edge.
+//
+// Corner rule. The fold always sits in the key's bottom-right corner (FOLD_CORNER). On a key
+// with a hold label band along its bottom edge, the fold lies over the band's right end, and
+// the band's label keeps the same clearance from it as every other legend (see ComboFold).
 //
 // More than three: the lowest three by combo number are drawn and nothing else marks the rest;
 // the preview readout and the Combos list name them all. While a preview is up, a member key
@@ -17,6 +20,9 @@
 import type { ComboMembership } from "./combo-membership";
 
 export const FOLD_CAP = 3;
+
+/** Every fold's corner, on every key: bottom-right. There is no other placement. */
+export const FOLD_CORNER = { bottom: 0, right: 0 } as const;
 
 export type KeySize = "default" | "medium" | "small";
 

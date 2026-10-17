@@ -7,8 +7,13 @@
 // - More than three: the lowest three, and no other mark; the readout lists them all.
 // - A crease in black alpha (the header/footer band vocabulary) edges the fold; on light keys
 //   it is stronger so the fold keeps a crisp edge.
-// - A footer band owns the bottom edge, so on those keys the fold takes the top-right corner
-//   (mirrored, so the spots keep their order from the horizontal edge).
+// - Always the bottom-right corner (FOLD_CORNER). On a key with a label band along its bottom
+//   (a modifier such as LSFT), the band stays full width and the fold lies over its right end;
+//   the band's label moves left inside the band as far as it needs to clear the full-size fold,
+//   then shrinks (down to 80%) if that is not enough; only then does the fold give way, as it
+//   does for any other legend (see clearBand).
+// - Each piece is a button for its combo: click, Enter or Space opens that combo's editor.
+//   Hover and keyboard focus highlight the piece (src/index.css, [data-fold-action]).
 // - Size: the fold is drawn at its large size, which is what keeps clear of legends, so nothing
 //   collides at any point of the animation. In "small" mode it is scaled toward the key corner
 //   at rest and grows while the pointer moves over the keyboard (CSS in src/index.css; the
@@ -23,7 +28,7 @@ import type { ComboMembership } from "@/utils/combo-membership";
 import { cueInk, hexFor, hueToken, layerHexFor, luminance, textureOf, toneFor, type ComboPalette } from "@/utils/combo-hues";
 import type { ComboIndicatorMode } from "@/lib/comboIndicators";
 import {
-    foldGeometry, foldLayout, foldPieces, foldSeams, foldStrip, LARGE_SCALE, LEGEND_STEPS, minRoom,
+    FOLD_CORNER, foldGeometry, foldLayout, foldPieces, foldSeams, foldStrip, LARGE_SCALE, LEGEND_STEPS, minRoom,
     pointsAttr, restScale, texturePeriod, type KeySize,
 } from "@/utils/combo-fold";
 
@@ -41,6 +46,18 @@ export interface ComboFoldProps {
     palette?: ComboPalette;
     /** Changes whenever the key's legend changes, so the fold re-measures its room. */
     measureKey?: string;
+    /** Opens the editor for a combo, and makes each piece a button. Absent: drawing only. */
+    onOpen?: (index: number) => void;
+    /** Pieces are Tab stops (their key is the layout's Tab stop); otherwise tabIndex -1. */
+    tabbable?: boolean;
+    /** Keybard-only combo names, by combo number, for the pieces' labels. */
+    names?: Readonly<Record<string, string>>;
+}
+
+/** "Edit Combo 3, Quick escape" */
+export function pieceLabel(m: ComboMembership, names?: Readonly<Record<string, string>>) {
+    const name = names?.[String(m.index)];
+    return `Edit Combo ${m.index}${name ? `, ${name}` : ""}`;
 }
 
 /** "Combo 3 → KC_ESC; Combo 5 (disabled) → KC_TAB" */
@@ -48,18 +65,30 @@ export function describeMemberships(ms: ComboMembership[]) {
     return ms.map(c => `Combo ${c.index}${c.enabled ? "" : " (disabled)"} → ${c.output}`).join("; ");
 }
 
-// Largest leg (crease included) that keeps clear of every glyph in the key, for a fold in the
-// bottom-right (or top-right) corner. Uses glyph boxes: cap height above the baseline.
-function measureClearance(svg: SVGSVGElement, topCorner: boolean): number {
-    const key = svg.parentElement;
-    if (!key) return Infinity;
+/**
+ * The key's inner box on screen and its scale (screen px per key px). A key scaled to fit the
+ * view (zoom or a uniform scale) is measured through that scale; a key whose box is not a
+ * uniform scale of its own size (the 3D view's projection, a rotation) is not measured.
+ */
+function keyFrame(key: HTMLElement) {
     const kr = key.getBoundingClientRect();
-    // A transformed key (3D view) has a projected box; keep the default size there.
-    if (!kr.width || Math.abs(kr.width - key.offsetWidth) > 1 || Math.abs(kr.height - key.offsetHeight) > 1) return Infinity;
-    const x0 = kr.left + 1, y0 = kr.top + 1, W = kr.width - 2, H = kr.height - 2;
+    if (!kr.width || !key.offsetWidth || !key.offsetHeight) return null;
+    const k = kr.width / key.offsetWidth;
+    if (Math.abs(kr.height / key.offsetHeight - k) > 0.02 || k > 1.02) return null;
+    return { x0: kr.left + k, y0: kr.top + k, W: kr.width - 2 * k, H: kr.height - 2 * k, k };
+}
+
+// Largest leg (crease included, in key px) that keeps clear of every glyph in the key, for a
+// fold in the bottom-right corner. Uses each glyph run's right end at its baseline.
+function measureClearance(svg: SVGSVGElement): number {
+    const key = svg.parentElement;
+    const f = key && keyFrame(key);
+    // Unmeasurable (3D view): keep the default size there.
+    if (!key || !f) return Infinity;
+    const { x0, y0, W, H, k } = f;
     let worst = -Infinity;
-    const consider = (right: number, top: number, bottom: number) => {
-        worst = Math.max(worst, topCorner ? (right - x0) - (top - y0) + H : (right - x0) + (bottom - y0));
+    const consider = (right: number, bottom: number) => {
+        worst = Math.max(worst, (right - x0) + (bottom - y0));
     };
     const walker = document.createTreeWalker(key, NodeFilter.SHOW_TEXT);
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
@@ -68,16 +97,45 @@ function measureClearance(svg: SVGSVGElement, topCorner: boolean): number {
         const range = document.createRange();
         range.selectNodeContents(n);
         for (const rc of Array.from(range.getClientRects?.() ?? [])) {
-            const base = rc.bottom - 0.242 * fs; // Inter descent
-            consider(rc.right - 0.5, base - 0.727 * fs, base); // Inter cap height
+            const base = rc.bottom - 0.242 * fs * k; // Inter descent
+            consider(rc.right - 0.5 * k, base); // the baseline: legends carry no descenders
         }
     }
     key.querySelectorAll("svg :is(path, rect, circle, line, polyline, polygon)").forEach(el => {
         if (svg.contains(el)) return;
         const rc = el.getBoundingClientRect();
-        if (rc.width || rc.height) consider(rc.right + 1, rc.top - 1, rc.bottom + 1);
+        if (rc.width || rc.height) consider(rc.right + k, rc.bottom + k);
     });
-    return worst === -Infinity ? Infinity : W + H - worst;
+    return worst === -Infinity ? Infinity : (W + H - worst) / k;
+}
+
+/** The label band along the key's bottom edge (a modifier such as LSFT), if the key has one. */
+function footerBand(svg: SVGSVGElement): HTMLElement | null {
+    const prev = svg.previousElementSibling;
+    return prev instanceof HTMLElement && prev.tagName === "SPAN" && prev.classList.contains("rounded-b-sm") ? prev : null;
+}
+
+// The band stays full width and the fold lies over its right end. When the band's label would
+// come within `want` px (crease and legend gap included) of the key's corner, the label moves
+// left inside its band (right padding, so it stays centered in what the fold leaves), as far
+// as the band has room for. True when the label is then clear.
+function clearBand(svg: SVGSVGElement, band: HTMLElement, want: number): boolean {
+    const key = svg.parentElement;
+    const f = key && keyFrame(key);
+    if (!f) return true;
+    const { x0, y0, W, H, k } = f;
+    const range = document.createRange();
+    range.selectNodeContents(band);
+    const fs = parseFloat(getComputedStyle(band).fontSize) || 12;
+    let worst = -Infinity;
+    for (const rc of Array.from(range.getClientRects?.() ?? [])) {
+        worst = Math.max(worst, (rc.right - 0.5 * k - x0) + (rc.bottom - 0.242 * fs * k - y0));
+    }
+    const over = (worst - (W + H - want * k)) / k;
+    if (!(over > 0)) return true;
+    const spare = (band.getBoundingClientRect().width - range.getBoundingClientRect().width) / k - 4;
+    if (spare > 0) band.style.paddingRight = Math.min(2 * over, spare).toFixed(2) + "px";
+    return 2 * over <= spare;
 }
 
 /** Text elements of the key outside the fold (its legends). */
@@ -101,26 +159,49 @@ const mixHex = (a: string, b: string, t: number) => {
 
 type Pattern = { id: string; kind: "lines" | "dots"; ink: string };
 
-function ComboFoldInner({ memberships, size, layerColor, hues, focusSet, mode = "small", palette = "default", measureKey }: ComboFoldProps) {
+function ComboFoldInner({ memberships, size, layerColor, hues, focusSet, mode = "small", palette = "default", measureKey, onOpen, tabbable = false, names }: ComboFoldProps) {
     const ref = useRef<SVGSVGElement>(null);
     const uid = "kb-fold-" + useId().replace(/[^a-zA-Z0-9_-]/g, "");
-    const [top, setTop] = useState(false);
     const [room, setRoom] = useState(Infinity);
 
     useLayoutEffect(() => {
         const svg = ref.current;
         if (!svg) return;
-        const prev = svg.previousElementSibling;
-        const footer = !!prev && prev.tagName === "SPAN" && prev.classList.contains("rounded-b-sm");
-        setTop(footer);
         // Legend fit: only when even the smallest large fold would touch a legend.
         let shrunk: Array<{ el: HTMLElement; inline: string }> = [];
-        const restore = () => { shrunk.forEach(o => { o.el.style.fontSize = o.inline; }); shrunk = []; };
+        // A label band keeps the fold at its full size where it can: its label moves left, then
+        // shrinks in the legend steps (the band's label only), before the fold gives way.
+        const band = footerBand(svg);
+        const bandPad = band?.style.paddingRight ?? "";
+        const bandFont = band?.style.fontSize ?? "";
+        const big = foldGeometry(size, Infinity, LARGE_SCALE);
+        const want = big.L + big.crease + big.clear;
+        const shiftBand = () => {
+            if (!band || !ref.current) return true;
+            band.style.paddingRight = bandPad;
+            return clearBand(ref.current, band, want);
+        };
+        const placeBand = () => {
+            if (!band) return;
+            band.style.fontSize = bandFont;
+            if (shiftBand()) return;
+            const px = parseFloat(getComputedStyle(band).fontSize) || 0;
+            for (const f of LEGEND_STEPS) {
+                band.style.fontSize = (px * f).toFixed(2) + "px";
+                if (shiftBand()) return;
+            }
+        };
+        const restore = () => {
+            shrunk.forEach(o => { o.el.style.fontSize = o.inline; });
+            shrunk = [];
+            if (band) { band.style.paddingRight = bandPad; band.style.fontSize = bandFont; }
+        };
         const fit = () => {
             const s = ref.current;
             if (!s) return;
             restore();
-            let r = measureClearance(s, footer);
+            placeBand();
+            let r = measureClearance(s);
             const need = minRoom(size);
             if (Number.isFinite(r) && r < need) {
                 const els = legendElements(s)
@@ -129,7 +210,8 @@ function ComboFoldInner({ memberships, size, layerColor, hues, focusSet, mode = 
                 shrunk = els.map(({ el, inline }) => ({ el, inline }));
                 for (const f of LEGEND_STEPS) {
                     els.forEach(o => { o.el.style.fontSize = (o.px * f).toFixed(2) + "px"; });
-                    r = measureClearance(s, footer);
+                    shiftBand();
+                    r = measureClearance(s);
                     if (r >= need) break;
                 }
             }
@@ -145,7 +227,7 @@ function ComboFoldInner({ memberships, size, layerColor, hues, focusSet, mode = 
             raf = 0;
             const s = ref.current;
             if (!live || !s || ++frames > 40) return;
-            if (Number.isFinite(measureClearance(s, footer))) { fit(); return; }
+            if (Number.isFinite(measureClearance(s))) { fit(); return; }
             raf = requestAnimationFrame(settle);
         };
         raf = requestAnimationFrame(settle);
@@ -198,11 +280,12 @@ function ComboFoldInner({ memberships, size, layerColor, hues, focusSet, mode = 
             ref={ref}
             data-combo-fold=""
             data-combo-order={shown.map(m => m.index).join(",")}
-            aria-hidden="true"
-            className="absolute right-0 z-[4] pointer-events-none"
+            aria-hidden={onOpen ? undefined : "true"}
+            role={onOpen ? "group" : undefined}
+            className="absolute z-[4] pointer-events-none"
             width={box} height={box} viewBox={`0 0 ${box} ${box}`} overflow="visible"
             style={{
-                ...(top ? { top: 0, transform: "scaleY(-1)" } : { bottom: 0 }),
+                ...FOLD_CORNER,
                 opacity: recede ? 0.22 : 1,
                 transition: "opacity 160ms ease",
             }}
@@ -226,7 +309,8 @@ function ComboFoldInner({ memberships, size, layerColor, hues, focusSet, mode = 
                     const tex = pieceTextures[i];
                     return (
                         <React.Fragment key={shown[i].index}>
-                            <polygon data-fold-piece={shown[i].index} points={pointsAttr(pts)} fill={fill(shown[i])} />
+                            <polygon data-fold-piece={shown[i].index} points={pointsAttr(pts)} fill={fill(shown[i])}
+                                {...(onOpen ? pieceAction(shown[i], onOpen, tabbable, names, seam) : {})} />
                             {tex && <polygon data-fold-texture={tex.kind} points={pointsAttr(pts)} fill={`url(#${tex.id})`} />}
                         </React.Fragment>
                     );
@@ -237,6 +321,30 @@ function ComboFoldInner({ memberships, size, layerColor, hues, focusSet, mode = 
             </g>
         </svg>
     );
+}
+
+// A piece as a button. Its pointer and key events stop at the piece, so the key under it does
+// not select, pin, start a drag, or take Enter as "typing binds a key".
+function pieceAction(m: ComboMembership, onOpen: (index: number) => void, tabbable: boolean,
+    names: Readonly<Record<string, string>> | undefined, seam: number) {
+    const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+    return {
+        "data-fold-action": "",
+        role: "button",
+        tabIndex: tabbable ? 0 : -1,
+        "aria-label": pieceLabel(m, names),
+        style: { "--kb-fold-outline": `${(seam * 1.5).toFixed(2)}px` } as React.CSSProperties,
+        onMouseDown: stop,
+        onMouseUp: stop,
+        onDoubleClick: stop,
+        onClick: (e: React.MouseEvent) => { e.stopPropagation(); onOpen(m.index); },
+        onKeyDown: (e: React.KeyboardEvent) => {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            e.stopPropagation();
+            onOpen(m.index);
+        },
+    };
 }
 
 // A failure here renders nothing instead of breaking the key.

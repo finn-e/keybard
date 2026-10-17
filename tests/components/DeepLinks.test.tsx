@@ -41,6 +41,7 @@ const panels = {
     setBindingTypeToEdit: vi.fn(),
     setAlternativeHeader: vi.fn(),
     setPanelToGoBack: vi.fn(),
+    setInitialEditorSlot: vi.fn(),
 };
 vi.mock("@/contexts/PanelsContext", async (importOriginal) => {
     const actual = await importOriginal<typeof import("@/contexts/PanelsContext")>();
