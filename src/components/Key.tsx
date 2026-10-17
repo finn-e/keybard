@@ -39,7 +39,8 @@ export interface KeyComboProps {
     onToggle: () => void;
     /** False for a key that only draws the fold (the ghost overlay of a transparent key). */
     interactive?: boolean;
-    /** Click, Enter or Space on a fold piece: open that combo's editor. */
+    /** Click, Enter or Space on a fold piece: open that combo's editor. Absent (while a binding
+     *  editor is open): the fold is drawing only and clicks on it go to the key. */
     onOpenCombo?: (index: number) => void;
     /** Keybard-only combo names, by combo number (the fold pieces' labels). */
     comboNames?: Readonly<Record<string, string>>;

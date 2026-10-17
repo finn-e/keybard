@@ -25,6 +25,7 @@ import {
 import { svalService } from "@/services/sval.service";
 import { usePanels } from "@/contexts/PanelsContext";
 import { useOpenBindingEditor } from "@/hooks/useOpenBindingEditor";
+import { isBindingEditorOpen } from "@/lib/bindingSpotlight";
 import { useChanges } from "@/hooks/useChanges";
 import { usePreviewedLayerColors } from "@/hooks/useLayerColorPreview";
 import { useIsDark } from "@/lib/theme";
@@ -99,8 +100,11 @@ export const Keyboard: React.FC<KeyboardProps> = ({
 
     const { activePanel, itemToEdit } = usePanels();
     // A click on a fold piece opens that combo's editor, as its row in the Combos list does.
+    // While any binding editor is open, folds are drawing only and a click on one is a click on
+    // its key (it picks the key for the editor).
     const openBindingEditor = useOpenBindingEditor();
     const openComboEditor = useCallback((index: number) => openBindingEditor("combos", index), [openBindingEditor]);
+    const foldOpens = isBindingEditorOpen(activePanel, itemToEdit) ? undefined : openComboEditor;
     const { hasPendingChangeForKey } = useChanges();
     const layerColorNames = usePreviewedLayerColors(keyboard.cosmetic?.layer_colors);
 
@@ -858,7 +862,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                         ariaLabel: memberships.length ? keyComboAriaLabel(keyName, memberships, keyboard.cosmetic?.combos) : keyName,
                         pinned: comboPreview.isPinned(focus.id),
                         tabStop: (tabStopPos ?? firstKeyPos) === pos,
-                        onOpenCombo: openComboEditor,
+                        onOpenCombo: foldOpens,
                         comboNames: keyboard.cosmetic?.combos,
                         onNavigate: (key) => navigateFrom(pos, key),
                         onEnter: () => comboPreview.enter(focus),
