@@ -31,19 +31,19 @@ This applies to all work, no matter how small. Changes only reach `main` through
 
 **Release tags** (`.github/scripts/release-tag.sh` is the rule every workflow uses):
 
-| Tag | Kind | Keybard site | Keybard Host (`keybard-host-release.yml`) |
+| Tag | Kind | Keybard site | Keybard Overlay (`keybard-overlay-release.yml`) |
 |-----|------|--------------|--------------------------------------------|
 | `v<N>`, `v<N>.<M>` (`v3`, `v3.1`) | Full release | keybard.svalboard.com | A draft release; a person tests the Windows ZIP and publishes it |
 | `x<N>`, `x<N>.<M>` (`x3`, `x3.1`) | Prerelease | next.keybard.svalboard.com | A published GitHub prerelease |
 
 - Anything else (`vLaunch2`, `v3-rc1`, `x`, `3`) releases nothing.
 - Both kinds must point at a commit already on `main`; the workflows refuse any other.
-- One name means the same release in every repo: `svalboard/qmk` (firmware), Keybard and Keybard Host. A repo tags only the releases it ships, so a Keybard-only `v3.1` has no firmware tag.
-- Before tagging a full release, set `HOST_RELEASE_TAG` (`src/features/trainer/HostInstall.tsx`) to the same tag; the Host release refuses a `v` tag it doesn't name.
+- One name means the same release in every repo: `svalboard/qmk` (firmware), Keybard and Keybard Overlay. A repo tags only the releases it ships, so a Keybard-only `v3.1` has no firmware tag.
+- Before tagging a full release, set `HOST_RELEASE_TAG` (`src/features/trainer/HostInstall.tsx`) to the same tag; the overlay release refuses a `v` tag it doesn't name.
 - Release builds show their tag as Keybard's version (About panel and the corner badge); other builds show their commit.
 - Releases up to `vLaunch2.3` used the older `vLaunch<N>` and `vNext<N>` tags. Those tags stay as they are; new releases use `v` and `x`.
 
-Keybard Host accepts calls only from exact origins: https://keybard.svalboard.com and https://next.keybard.svalboard.com (`REMOTE_ORIGINS` in `companion/overlay-host/keybard_host/server.py`). Installed Hosts learn a new origin only from a Host update. Never allow a `*.github.io` origin: every Pages site of that account shares it. To try Host features on another site, start the Host with `--allow-origin <origin>`.
+Keybard Overlay accepts calls only from exact origins: https://keybard.svalboard.com and https://next.keybard.svalboard.com (`REMOTE_ORIGINS` in `companion/overlay-host/keybard_host/server.py`). Installed overlay apps learn a new origin only from an overlay app update. Never allow a `*.github.io` origin: every Pages site of that account shares it. To try overlay app features on another site, start the overlay app with `--allow-origin <origin>`.
 
 **ALWAYS run `npm run build` before pushing** to catch TypeScript errors. The CI deploy will fail on TS errors, so catch them locally first. If you touch anything that could reach the network, also run `npm run build:paranoid`.
 

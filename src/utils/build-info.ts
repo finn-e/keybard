@@ -1,6 +1,6 @@
 /**
  * Which Keybard this build is. Release builds carry their tag (v3 is a full
- * release, x3 a prerelease), set by the deploy and Keybard Host workflows
+ * release, x3 a prerelease), set by the deploy and Keybard Overlay workflows
  * through RELEASE_TAG; any other build reports its commit.
  */
 export const RELEASE_TAG = typeof __RELEASE_TAG__ !== "undefined" ? __RELEASE_TAG__ : "";

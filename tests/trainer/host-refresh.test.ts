@@ -4,7 +4,7 @@ import { HOST_ORIGIN, notifyHostLayoutChanged, resetHostRefreshForTests } from '
 
 const json = (status: number, body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
 
-describe('telling Keybard Host the layout changed', () => {
+describe('telling Keybard Overlay the layout changed', () => {
     let fetchMock: ReturnType<typeof vi.fn>;
     const commands = () => fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/api/host/command')).map(([, init]) => JSON.parse(init.body).op);
 

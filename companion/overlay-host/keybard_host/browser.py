@@ -3,7 +3,7 @@
 A page's Content Security Policy cannot stop navigations, prerendering or
 downloads, so paranoid mode also runs the browser behind a dead proxy: every
 non-loopback request fails, while Chromium still bypasses proxies for
-127.0.0.1, so the local Keybard Host keeps working. WebRTC is kept off the
+127.0.0.1, so the local Keybard Overlay keeps working. WebRTC is kept off the
 network, and background services (sync, updates, safe-browsing pings) are off.
 """
 import os
