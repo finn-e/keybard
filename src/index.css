@@ -307,6 +307,36 @@ html.dark {
     }
 }
 
+/* Combo fold pieces are buttons: clicking one opens its combo's editor. The piece under the
+   pointer, or with keyboard focus, lifts a little and takes an ink outline along its fold edge
+   and seams (the key edges clip the rest), so it reads as the combo, not the key. */
+[data-fold-action] {
+    pointer-events: visiblePainted;
+    cursor: pointer;
+    outline: none;
+    transition: filter 120ms ease;
+}
+[data-fold-action]:hover,
+[data-fold-action]:focus-visible {
+    filter: brightness(1.06) saturate(1.12);
+    stroke: var(--kb-ink);
+    stroke-width: var(--kb-fold-outline, 1.5px);
+    stroke-linejoin: round;
+}
+/* While the pointer is on a fold piece, its key drops its own hover ring: the click goes to
+   the combo. A selected key (ring-offset) and a pending one (border-2) keep their marks. */
+[data-keycap]:not(.ring-offset-1):has([data-fold-action]:hover) {
+    box-shadow: none;
+}
+[data-keycap]:not(.ring-offset-1):not(.border-2):has([data-fold-action]:hover) {
+    border-color: var(--kb-key-border);
+}
+@media (prefers-reduced-motion: reduce) {
+    [data-fold-action] {
+        transition: none;
+    }
+}
+
 /* Key inspector: fades in on first show, swaps at once between keys, fades out on leave. */
 @keyframes kb-inspector-in {
     from { opacity: 0; transform: translateY(4px); }

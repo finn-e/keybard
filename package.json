@@ -14,6 +14,7 @@
         "test:coverage": "vitest run --coverage",
         "test:ui": "vitest --ui",
         "test:e2e": "python tests/e2e/combo_editor_e2e.py",
+        "test:e2e:fold": "python tests/e2e/combo_fold_e2e.py",
         "build:sval-preview": "tsc && vite build --mode sval-preview",
         "build:svalboard": "tsc && vite build --mode svalboard",
         "build:next": "tsc && vite build --mode next",

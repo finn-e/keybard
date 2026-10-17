@@ -2,7 +2,7 @@ import "./Keyboard.css";
 import { cn } from "@/lib/utils";
 
 import { getKeyLabel, getKeycodeName } from "@/utils/layers";
-import React, { useMemo, useEffect, useRef, useState } from "react";
+import React, { useCallback, useMemo, useEffect, useRef, useState } from "react";
 import { MATRIX_COLS, SVALBOARD_LAYOUT, UNIT_SIZE } from "../constants/svalboard-layout";
 import { THUMB_OFFSET_U } from "../constants/keyboard-visuals";
 
@@ -24,6 +24,7 @@ import {
 } from "@/utils/colors";
 import { svalService } from "@/services/sval.service";
 import { usePanels } from "@/contexts/PanelsContext";
+import { useOpenBindingEditor } from "@/hooks/useOpenBindingEditor";
 import { useChanges } from "@/hooks/useChanges";
 import { usePreviewedLayerColors } from "@/hooks/useLayerColorPreview";
 import { useIsDark } from "@/lib/theme";
@@ -93,6 +94,9 @@ export const Keyboard: React.FC<KeyboardProps> = ({
     } = useKeyBinding();
 
     const { activePanel, itemToEdit } = usePanels();
+    // A click on a fold piece opens that combo's editor, as its row in the Combos list does.
+    const openBindingEditor = useOpenBindingEditor();
+    const openComboEditor = useCallback((index: number) => openBindingEditor("combos", index), [openBindingEditor]);
     const { hasPendingChangeForKey } = useChanges();
     const layerColorNames = usePreviewedLayerColors(keyboard.cosmetic?.layer_colors);
 
@@ -859,6 +863,8 @@ export const Keyboard: React.FC<KeyboardProps> = ({
                         ariaLabel: memberships.length ? keyComboAriaLabel(keyName, memberships, keyboard.cosmetic?.combos) : keyName,
                         pinned: comboPreview.isPinned(focus.id),
                         tabStop: (tabStopPos ?? firstKeyPos) === pos,
+                        onOpenCombo: openComboEditor,
+                        comboNames: keyboard.cosmetic?.combos,
                         onNavigate: (key) => navigateFrom(pos, key),
                         onEnter: () => comboPreview.enter(focus),
                         onLeave: comboPreview.leave,

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 import { useKeyboard } from "@/contexts/KeyboardContext";
-import { usePanels } from "@/contexts/PanelsContext";
+import { useOpenBindingEditor } from "@/hooks/useOpenBindingEditor";
 import { claimEditStart, EDIT_PANELS, editFromSearch, editTargetExists } from "@/lib/deepLinks";
 
 /**
@@ -11,7 +11,7 @@ import { claimEditStart, EDIT_PANELS, editFromSearch, editTargetExists } from "@
  */
 export default function DeepLinkEditor() {
     const { keyboard } = useKeyboard();
-    const { setActivePanel, setItemToEdit, setBindingTypeToEdit, setAlternativeHeader, setPanelToGoBack } = usePanels();
+    const openEditor = useOpenBindingEditor();
 
     useEffect(() => {
         if (!keyboard) return;
@@ -23,13 +23,8 @@ export default function DeepLinkEditor() {
             macros: keyboard.macros?.length ?? keyboard.macro_count ?? 0,
         };
         if (!editTargetExists(target, counts) || !claimEditStart()) return;
-        const panel = EDIT_PANELS[target.kind];
-        setActivePanel(panel);
-        setPanelToGoBack(panel);
-        setBindingTypeToEdit(panel);
-        setItemToEdit(target.index);
-        setAlternativeHeader(true);
-    }, [keyboard, setActivePanel, setItemToEdit, setBindingTypeToEdit, setAlternativeHeader, setPanelToGoBack]);
+        openEditor(EDIT_PANELS[target.kind], target.index);
+    }, [keyboard, openEditor]);
 
     return null;
 }
