@@ -13,8 +13,9 @@ Run with `npm run test:e2e:settings`.
   4. An old saved "large" value reads as on.
   5. Every card remembers being left open or collapsed across a reload.
   6. Each chip opens its card and scrolls to it, for that visit only.
-  7. Old links (?panel=typing|clusters|fragments) open Settings at that card,
-     for that visit only.
+  7. Old links (?panel=typing|clusters|fragments|about) open Settings at that
+     card, for that visit only. The rail has no About, Hardware or Typing
+     Behavior item.
 
 Same server options as combo_editor_e2e.py (E2E_URL, E2E_SKIP_BUILD).
 Exits 1 when a check fails.
@@ -175,12 +176,14 @@ def main() -> int:
         check(all(closed), f"chips changed nothing remembered {closed}")
 
         # 7. Old links, for this visit only.
-        for old, card_id in [("typing", "typing"), ("clusters", "hardware"), ("fragments", "hardware")]:
+        for gone in ["About", "Hardware", "Typing Behavior"]:
+            check(page.locator(f"[aria-label='{gone}']").count() == 0, f"no {gone} item on the rail")
+        for old, card_id in [("typing", "typing"), ("clusters", "hardware"), ("fragments", "hardware"), ("about", "about")]:
             go(page, url + f"?demo=combos&panel={old}")
             check(page.locator(f"#settings-section-{card_id}-title").is_visible() and is_open(page, card_id),
                   f"?panel={old} opens Settings at {card_id}")
         go(page, url + SETTINGS)
-        check(not is_open(page, "hardware") and not is_open(page, "typing"), "old links changed nothing remembered")
+        check(not any(is_open(page, c) for c in ["hardware", "typing", "about"]), "old links changed nothing remembered")
         check(not errors, f"no page errors: {errors}")
         context.close()
         browser.close()

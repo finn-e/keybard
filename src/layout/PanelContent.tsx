@@ -15,7 +15,6 @@ import MousePanel from "./SecondarySidebar/Panels/MousePanel";
 import ScanLabPanel from "./SecondarySidebar/Panels/ScanLabPanel";
 import SettingsPanel from "./SecondarySidebar/Panels/SettingsPanel";
 import TapdancePanel from "./SecondarySidebar/Panels/TapdancePanel";
-import AboutPanel from "./SecondarySidebar/Panels/AboutPanel";
 import QuickStartPanel from "./SecondarySidebar/Panels/QuickStartPanel";
 import type { CustomUIMenuItem } from "@/types/keyboard.types";
 
@@ -50,7 +49,6 @@ export const getPanelTitle = (panel: string | null | undefined, menus?: CustomUI
         settings: "Settings",
         scanlab: "Scan Lab",
         quickstart: "Quick Start",
-        about: "About",
     };
 
     return titles[panel] ?? "Details";
@@ -73,7 +71,7 @@ export function PanelContent({ panel, horizontal = false, isPicker = false, tray
         layouts: LayoutsPanel, pointing: PointingPanel, qmk: QmkKeyPanel,
         oneshot: OneShotComposerPanel, special: SpecialKeysPanel, mouse: MousePanel,
         scanlab: ScanLabPanel, settings: SettingsPanel,
-        quickstart: QuickStartPanel, about: AboutPanel,
+        quickstart: QuickStartPanel,
     };
     if (panel === "keyboard") return <BasicKeyboards trayPortal={trayPortal} />;
     const Content = panels[panel as keyof typeof panels];

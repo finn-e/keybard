@@ -32,7 +32,6 @@ vi.mock('../../src/layout/SecondarySidebar/Panels/TypingBehaviorPanel', () => ({
 vi.mock('../../src/layout/SecondarySidebar/Panels/ClustersPanel', () => ({default: () => <p>ClustersPanel</p>}));
 vi.mock('../../src/layout/SecondarySidebar/Panels/ScanLabPanel', () => ({default: () => <p>ScanLabPanel</p>}));
 vi.mock('../../src/layout/SecondarySidebar/Panels/TapdancePanel', () => ({default: () => <p>TapdancePanel</p>}));
-vi.mock('../../src/layout/SecondarySidebar/Panels/AboutPanel', () => ({default: () => <p>AboutPanel</p>}));
 vi.mock('../../src/layout/SecondarySidebar/Panels/QuickStartPanel', () => ({default: () => <p>QuickStartPanel</p>}));
 vi.mock('../../src/layout/SecondarySidebar/Panels/SpecialKeysPanel/SpecialKeysPanel', () => ({default: () => <p>SpecialKeysPanel/SpecialKeysPanel</p>}));
 describe('shared panel placement', () => {
@@ -88,15 +87,15 @@ describe('shared panel placement', () => {
   view.rerender(<SecondarySidebar />);
   expect(screen.getByLabelText('Board name draft')).toHaveValue('My board');
  });
- it.each(['quickstart', 'about', 'scanlab'])('provides real %s content in either placement', panel => {
+ it.each(['quickstart', 'scanlab'])('provides real %s content in either placement', panel => {
   state.activePanel = panel;
   const view = render(<SecondarySidebar />);
-  const expected = {quickstart: 'QuickStartPanel', about: 'AboutPanel', scanlab: 'ScanLabPanel'}[panel];
+  const expected = {quickstart: 'QuickStartPanel', scanlab: 'ScanLabPanel'}[panel];
   expect(screen.getByText(expected!)).toBeVisible();
   view.rerender(<SecondarySidebar bottom />);
   expect(screen.getByText(expected!)).toBeVisible();
  });
- it.each(['clusters', 'typing'])('has no panel of its own for %s: it is a section of Settings', panel => {
+ it.each(['clusters', 'typing', 'about'])('has no panel of its own for %s: it is a section of Settings', panel => {
   state.activePanel = panel;
   render(<SecondarySidebar />);
   expect(screen.queryByText('ClustersPanel')).toBeNull();

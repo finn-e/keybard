@@ -1,5 +1,5 @@
 /**
- * Opening Settings at a section from elsewhere (the rail's About item). The
+ * Opening Settings at a section from elsewhere (an old ?panel= link). The
  * request is held until the Settings page mounts, or delivered at once if it
  * is already open.
  */
@@ -36,6 +36,7 @@ export const PANELS_IN_SETTINGS: Record<string, string> = {
     clusters: "hardware",
     fragments: "hardware",
     hardware: "hardware",
+    about: "about",
 };
 
 /** The Settings section an old panel name opens, if it is one. */

@@ -102,7 +102,7 @@ const SettingsPanel = () => {
         } else requestAnimationFrame(jump);
     };
 
-    // Opened at a section from elsewhere (the rail's About item, an old ?panel= link).
+    // Opened at a card from elsewhere (an old ?panel= link).
     useEffect(() => {
         const pending = takeSettingsSectionRequest();
         if (pending) requestAnimationFrame(() => scrollToSection(pending));

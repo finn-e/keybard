@@ -8,7 +8,7 @@ import { requestSettingsSection, settingsSectionForPanel } from "@/layout/Second
 /**
  * ?panel=settings opens Settings once a layout is loaded (with ?demo, the
  * QWERTY Example), so a review link lands on the Settings page. The old panel
- * names of what is now in Settings (?panel=typing, clusters, fragments) open
+ * names of what is now in Settings (?panel=typing, clusters, fragments, about) open
  * Settings at that section. Once per page load.
  */
 export default function PointingDeepLink() {

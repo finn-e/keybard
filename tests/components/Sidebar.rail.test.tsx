@@ -34,24 +34,12 @@ describe('the rail holds what is used while editing', () => {
         expect(names.indexOf('Overlay')).toBe(names.indexOf('Layouts') + 1);
     });
 
-    it('opens Settings at About from the About item', () => {
+    it('has no About item: About is a card of Settings', () => {
         renderRail();
-        fireEvent.click(screen.getByRole('button', { name: 'About' }));
-        expect(panels.setActivePanel).toHaveBeenCalledWith('settings');
-        expect(takeSettingsSectionRequest()).toBe('about');
-    });
-
-    it('scrolls an open Settings to About without closing it', () => {
-        panels.activePanel = 'settings';
-        panels.open = true;
-        const heard: string[] = [];
-        const listener = (e: Event) => heard.push((e as CustomEvent<string>).detail);
-        window.addEventListener('keybard-settings-section', listener);
-        renderRail();
-        fireEvent.click(screen.getByRole('button', { name: 'About' }));
-        expect(panels.handleCloseDetails).not.toHaveBeenCalled();
-        expect(heard).toEqual(['about']);
-        window.removeEventListener('keybard-settings-section', listener);
+        const names = screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'));
+        expect(names).not.toContain('About');
+        expect(screen.queryByRole('button', { name: 'About' })).toBeNull();
+        expect(names.indexOf('Settings')).toBeGreaterThan(names.indexOf('Quick Start'));
     });
 });
 
@@ -71,7 +59,7 @@ describe('the firmware update dot', () => {
 });
 
 describe('old links to the panels that moved into Settings', () => {
-    it.each([['typing', 'typing'], ['clusters', 'hardware'], ['fragments', 'hardware']])('?panel=%s lands in Settings at %s', (panel, section) => {
+    it.each([['typing', 'typing'], ['clusters', 'hardware'], ['fragments', 'hardware'], ['about', 'about']])('?panel=%s lands in Settings at %s', (panel, section) => {
         expect(settingsSectionForPanel(panel)).toBe(section);
         expect(pointingDemoFromSearch(`?demo=combos&panel=${panel}`)!.panel).toBe(panel);
     });
@@ -84,6 +72,18 @@ describe('old links to the panels that moved into Settings', () => {
         expect(panels.setActivePanel).toHaveBeenCalledWith('settings');
         expect(panels.openDetails).toHaveBeenCalled();
         expect(takeSettingsSectionRequest()).toBe('typing');
+        window.history.replaceState(null, '', '/');
+        _resetPointingDemoForTests();
+        deepLink.keyboard = null;
+    });
+
+    it('opens Settings at About for an old ?panel=about link', () => {
+        deepLink.keyboard = { name: 'demo' };
+        _resetPointingDemoForTests();
+        window.history.replaceState(null, '', '/keybard/?demo=combos&panel=about');
+        render(<PointingDeepLink />);
+        expect(panels.setActivePanel).toHaveBeenCalledWith('settings');
+        expect(takeSettingsSectionRequest()).toBe('about');
         window.history.replaceState(null, '', '/');
         _resetPointingDemoForTests();
         deepLink.keyboard = null;

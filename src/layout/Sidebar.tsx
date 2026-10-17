@@ -1,4 +1,4 @@
-import { ArrowLeft, BookOpen, HelpCircle, Keyboard, ListOrdered, LucideIcon, Mouse, PanelLeftClose, PanelLeftOpen, Piano, Rocket, Settings } from "lucide-react";
+import { ArrowLeft, BookOpen, Keyboard, ListOrdered, LucideIcon, Mouse, PanelLeftClose, PanelLeftOpen, Piano, Rocket, Settings } from "lucide-react";
 import KeybardLogo from "@/components/icons/KeybardLogo";
 import PointingDeviceBall01Icon from "@/components/icons/PointingDeviceBall01Icon";
 import LayoutLayersIcon from "@/components/icons/LayoutLayersIcon";
@@ -105,7 +105,6 @@ const footerItems: SidebarItem[] = [
     // The user manual is published beside the app (see build/manual.ts). Keybard
     // Paranoid is a single offline file, so it has no manual to link to.
     ...(PARANOID ? [] : [{ title: "Manual", url: "manual", icon: BookOpen, href: `${import.meta.env.BASE_URL}manual/` }]),
-    { title: "About", url: "about", icon: HelpCircle },
     { title: "Settings", url: "settings", icon: Settings },
 ];
 
@@ -323,10 +322,8 @@ const AppSidebar = () => {
                 else if (item.url === activePanel) nudgeBindingEditor();
                 return;
             }
-            // About, and the panels that moved into Settings, are sections of
-            // Settings: open Settings there.
-            const settingsSection = item.url === "about" ? "about"
-                : settingsSectionForPanel(item.url);
+            // Panels that became cards of Settings open Settings at that card.
+            const settingsSection = settingsSectionForPanel(item.url);
             if (settingsSection) {
                 requestSettingsSection(settingsSection);
                 if (activePanel === "settings" && open) {

@@ -8,8 +8,8 @@
 //   &hand=left|right          the hand that moves (default: the right)
 //   &motion=0                 no scripted motion (default: on in the demo)
 //   &ball=<id> / &leftBall=   show that ball for this load (see pointing-look.service)
-//   &panel=settings           open Settings on start; typing, clusters, fragments or
-//                             hardware open it at that section
+//   &panel=settings           open Settings on start; typing, clusters, fragments,
+//                             hardware or about open it at that card
 //
 // The scripted motion is the round 5 prototype's finger paths, turned into the
 // same raw counts POINTING_MOTION reports, so the demo and a board drive the
