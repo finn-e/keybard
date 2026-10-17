@@ -262,7 +262,7 @@ const FragmentsPanel: React.FC = () => {
                 >
                     <div className="flex flex-col items-start gap-1 shrink-0 w-[100px]">
                         <Label className="text-sm font-medium">{label}</Label>
-                        {hwFragmentName && <span className="text-xs text-amber-600 dark:text-amber-400">Locked</span>}
+                        {hwFragmentName && <span className="text-xs text-amber-600 dark:text-amber-400">Auto-detected</span>}
                     </div>
                     <div
                         role="status"
@@ -319,7 +319,7 @@ const FragmentsPanel: React.FC = () => {
                             if (hwDetected && hwFragmentName) {
                                 const hwDisplayName = fragmentService.getFragmentDisplayName(keyboard, hwFragmentName);
                                 statusText = isLocked
-                                    ? `Locked: ${hwDisplayName}`
+                                    ? `Auto-detected: ${hwDisplayName}`
                                     : `Detected: ${hwDisplayName}`;
                             }
 
@@ -388,7 +388,7 @@ const FragmentsPanel: React.FC = () => {
                             if (hwDetected && hwFragmentName) {
                                 const hwDisplayName = fragmentService.getFragmentDisplayName(keyboard, hwFragmentName);
                                 statusText = isLocked
-                                    ? `Locked: ${hwDisplayName}`
+                                    ? `Auto-detected: ${hwDisplayName}`
                                     : `Detected: ${hwDisplayName}`;
                             }
 
@@ -454,7 +454,7 @@ const FragmentsPanel: React.FC = () => {
                     if (hwDetected && hwFragmentName) {
                         const hwDisplayName = fragmentService.getFragmentDisplayName(keyboard, hwFragmentName);
                         statusText = isLocked
-                            ? `Locked: ${hwDisplayName}`
+                            ? `Auto-detected: ${hwDisplayName}`
                             : `Detected: ${hwDisplayName}`;
                     }
 
