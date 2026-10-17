@@ -4,7 +4,6 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 
 import { SettingsService } from "@/services/settings.service";
 import { DEFAULT_THEME_PREF, THEME_SETTING_NAME } from "@/lib/theme";
-import { COMBO_EDITOR_PLACEMENT_SETTING, DEFAULT_COMBO_EDITOR_PLACEMENT } from "@/lib/comboEditorPlacement";
 import { DEFAULT_SHOW_ALT_REPEAT, SHOW_ALT_REPEAT_SETTING } from "@/lib/altRepeatVisibility";
 import { COMBO_COLORBLIND_SETTING, COMBO_INDICATOR_SETTING, DEFAULT_COMBO_INDICATOR_MODE } from "@/lib/comboIndicators";
 import { GLOSS_DEFAULT, SPARKLE_DEFAULT } from "@/components/pointing-viz/webgl/materials";
@@ -78,20 +77,6 @@ export const SETTINGS: SettingDefinition[] = [
         description: "Combo colors that stay apart with color blindness, each with its own texture.",
         defaultValue: false,
         type: "boolean",
-    },
-    {
-        name: COMBO_EDITOR_PLACEMENT_SETTING,
-        label: "Binding Editor Placement",
-        description: "Where binding editors sit while you pick keys.",
-        type: "select",
-        items: [
-            { label: "In the side panel", value: "panel" },
-            { label: "Under a half", value: "half" },
-            { label: "Below the keyboard", value: "dock" },
-            { label: "Under the combo's keys", value: "anchored" },
-            { label: "Floating", value: "float" },
-        ],
-        defaultValue: DEFAULT_COMBO_EDITOR_PLACEMENT,
     },
     {
         name: SHOW_ALT_REPEAT_SETTING,
@@ -250,7 +235,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         name: "general",
         label: "General",
         icon: SettingsIcon,
-        settings: [THEME_SETTING_NAME, POINTING_GLOSS_SETTING, POINTING_SPARKLE_SETTING, "typing-binds-key", COMBO_INDICATOR_SETTING, COMBO_COLORBLIND_SETTING, COMBO_EDITOR_PLACEMENT_SETTING, SHOW_ALT_REPEAT_SETTING, "serial-assignment", "international-keyboards", "qmk-settings", "print"],
+        settings: [THEME_SETTING_NAME, POINTING_GLOSS_SETTING, POINTING_SPARKLE_SETTING, "typing-binds-key", COMBO_INDICATOR_SETTING, COMBO_COLORBLIND_SETTING, SHOW_ALT_REPEAT_SETTING, "serial-assignment", "international-keyboards", "qmk-settings", "print"],
     },
     {
         name: "fragments",
