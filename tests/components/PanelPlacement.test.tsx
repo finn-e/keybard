@@ -88,12 +88,18 @@ describe('shared panel placement', () => {
   view.rerender(<SecondarySidebar />);
   expect(screen.getByLabelText('Board name draft')).toHaveValue('My board');
  });
- it.each(['quickstart', 'about', 'clusters', 'typing', 'scanlab'])('provides real %s content in either placement', panel => {
+ it.each(['quickstart', 'about', 'scanlab'])('provides real %s content in either placement', panel => {
   state.activePanel = panel;
   const view = render(<SecondarySidebar />);
-  const expected = {quickstart: 'QuickStartPanel', about: 'AboutPanel', clusters: 'ClustersPanel', typing: 'TypingBehaviorPanel', scanlab: 'ScanLabPanel'}[panel];
+  const expected = {quickstart: 'QuickStartPanel', about: 'AboutPanel', scanlab: 'ScanLabPanel'}[panel];
   expect(screen.getByText(expected!)).toBeVisible();
   view.rerender(<SecondarySidebar bottom />);
   expect(screen.getByText(expected!)).toBeVisible();
+ });
+ it.each(['clusters', 'typing'])('has no panel of its own for %s: it is a section of Settings', panel => {
+  state.activePanel = panel;
+  render(<SecondarySidebar />);
+  expect(screen.queryByText('ClustersPanel')).toBeNull();
+  expect(screen.queryByText('TypingBehaviorPanel')).toBeNull();
  });
 });

@@ -12,13 +12,11 @@ import PointingPanel from "./SecondarySidebar/Panels/PointingPanel";
 import OneShotComposerPanel from "./SecondarySidebar/Panels/OneShotComposerPanel";
 import QmkKeyPanel from "./SecondarySidebar/Panels/QmkKeysPanel";
 import MousePanel from "./SecondarySidebar/Panels/MousePanel";
-import TypingBehaviorPanel from "./SecondarySidebar/Panels/TypingBehaviorPanel";
 import ScanLabPanel from "./SecondarySidebar/Panels/ScanLabPanel";
 import SettingsPanel from "./SecondarySidebar/Panels/SettingsPanel";
 import TapdancePanel from "./SecondarySidebar/Panels/TapdancePanel";
 import AboutPanel from "./SecondarySidebar/Panels/AboutPanel";
 import QuickStartPanel from "./SecondarySidebar/Panels/QuickStartPanel";
-import ClustersPanel from "./SecondarySidebar/Panels/ClustersPanel";
 import type { CustomUIMenuItem } from "@/types/keyboard.types";
 
 export const getPanelTitle = (panel: string | null | undefined, menus?: CustomUIMenuItem[]): string => {
@@ -49,9 +47,7 @@ export const getPanelTitle = (panel: string | null | undefined, menus?: CustomUI
         leaders: "Leader Sequences",
         layouts: "Layouts",
         pointing: "Pointing Devices",
-        typing: "Typing Behavior",
         settings: "Settings",
-        clusters: "Hardware",
         scanlab: "Scan Lab",
         quickstart: "Quick Start",
         about: "About",
@@ -73,10 +69,10 @@ export function PanelContent({ panel, horizontal = false, isPicker = false, tray
     const panels = {
         keyboard: BasicKeyboards, layers: LayersPanel, tapdances: TapdancePanel,
         macros: MacrosPanel, combos: CombosPanel, overrides: OverridesPanel,
-        altrepeat: AltRepeatPanel, leaders: LeadersPanel, clusters: ClustersPanel,
+        altrepeat: AltRepeatPanel, leaders: LeadersPanel,
         layouts: LayoutsPanel, pointing: PointingPanel, qmk: QmkKeyPanel,
         oneshot: OneShotComposerPanel, special: SpecialKeysPanel, mouse: MousePanel,
-        typing: TypingBehaviorPanel, scanlab: ScanLabPanel, settings: SettingsPanel,
+        scanlab: ScanLabPanel, settings: SettingsPanel,
         quickstart: QuickStartPanel, about: AboutPanel,
     };
     if (panel === "keyboard") return <BasicKeyboards trayPortal={trayPortal} />;

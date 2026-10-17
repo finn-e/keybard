@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
     queue: vi.fn(), sync: vi.fn(), commit: vi.fn(), upload: vi.fn(), download: vi.fn(),
     backups: {} as Record<string, unknown>,
 }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/ClustersPanel', () => ({ default: () => <p>Hardware rows</p> }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/TypingBehaviorPanel', () => ({ default: () => <p>Typing behavior rows</p> }));
 vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ keyboard: mocks.keyboard, setKeyboard: vi.fn(), isConnected: true, loadFromFile: vi.fn(), setIsImporting: vi.fn() }) }));
 vi.mock('@/contexts/ChangesContext', () => ({ useChanges: () => ({ queue: mocks.queue, todo: {}, isInstant: mocks.instant, isSaving: false, commit: mocks.commit, setInstant: vi.fn() }) }));
 vi.mock('@/contexts/BackupContext', () => ({ useBackups: () => mocks.backups }));

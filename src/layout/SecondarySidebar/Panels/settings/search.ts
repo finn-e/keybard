@@ -1,5 +1,6 @@
 import type { SettingDefinition } from "@/types/settings.types";
-import type { SettingsBlock, SettingsGroup, SettingsRow, SettingsSection } from "./layout";
+import { QMK_SETTINGS } from "@/constants/qmk-settings";
+import { TYPING_BEHAVIOR_SECTIONS, type SettingsBlock, type SettingsGroup, type SettingsRow, type SettingsSection } from "./layout";
 
 /**
  * Settings search. A query is split into words; a row matches when every word
@@ -10,6 +11,7 @@ import type { SettingsBlock, SettingsGroup, SettingsRow, SettingsSection } from 
 
 /** Words people search with that are not on screen, by section. */
 export const SECTION_SYNONYMS: Record<string, string[]> = {
+    hardware: ["clusters", "fragments", "pointing devices"],
     firmware: [],
     board: ["keyboard", "device"],
     backups: ["backup", "back up"],
@@ -17,6 +19,7 @@ export const SECTION_SYNONYMS: Record<string, string[]> = {
     editing: ["editor", "keymap"],
     about: [],
     developer: ["dev", "debug"],
+    typing: ["qmk settings", "timing"],
 };
 
 /** Synonyms for one setting row, by setting name. */
@@ -34,11 +37,21 @@ export const ROW_SYNONYMS: Record<string, string[]> = {
     export: ["save", "download", "print", "svil", "vil"],
 };
 
+/** The names of the QMK settings Typing behavior shows, and of their groups. */
+function typingBehaviorWords(): string[] {
+    const tabs = QMK_SETTINGS.tabs.filter((tab) => TYPING_BEHAVIOR_SECTIONS.includes(tab.name));
+    return ["tap-hold", "tap hold", "hold", "tapping term", "qmk",
+        ...tabs.flatMap((tab) => [tab.name, ...tab.fields.map((f) => f.title)])];
+}
+
 /** Synonyms for a block row (rendered by the page itself). */
 export const BLOCK_SYNONYMS: Record<SettingsBlock, string[]> = {
+    hardware: ["clusters", "cluster presets", "fragments", "finger", "thumb", "5-key", "6-key", "pointing", "trackball",
+        "touchpad", "ball", "ball color", "pearl", "auto-detected", "detected", "hardware"],
     firmware: ["update", "upgrade", "install", "flash", "version", "release", "qmk", "wipe", "reset", "bootloader"],
     board: ["board name", "serial", "rename", "identity"],
     backups: ["backups", "back up now", "restore", "recover", "undo", "history", "snapshot", "backup folder"],
+    typing: typingBehaviorWords(),
     about: ["version", "help", "manual", "docs", "community", "discord", "support", "release notes", "credits"],
 };
 

@@ -2,10 +2,12 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsPanel from '../../src/layout/SecondarySidebar/Panels/SettingsPanel';
 import { SETTINGS } from '../../src/contexts/SettingsContext';
-import { SETTINGS_PAGE } from '../../src/layout/SecondarySidebar/Panels/settings/layout';
+import { SETTINGS_LAYOUTS, SETTINGS_PAGE } from '../../src/layout/SecondarySidebar/Panels/settings/layout';
 import { highlightParts, searchSettings } from '../../src/layout/SecondarySidebar/Panels/settings/search';
 
 const state = vi.hoisted(() => ({ stored: {} as Record<string, string | number | boolean> }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/ClustersPanel', () => ({ default: () => <p>Hardware rows</p> }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/TypingBehaviorPanel', () => ({ default: () => <p>Typing behavior rows</p> }));
 vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ keyboard: null, isConnected: true }) }));
 vi.mock('@/contexts/LayoutSettingsContext', () => ({ useLayoutSettings: () => ({ layoutMode: 'sidebar' }) }));
 vi.mock('@/contexts/PanelsContext', () => ({ usePanels: () => ({ setActivePanel: vi.fn() }) }));
@@ -41,8 +43,8 @@ describe('Settings search', () => {
     it('finds the theme for "dark", highlights it, and hides everything else', () => {
         render(<SettingsPanel />);
         type('dark');
-        expect(sectionTitles()).toEqual(['Appearance']);
-        const appearance = screen.getByRole('region', { name: 'Appearance' });
+        expect(sectionTitles()).toEqual(['Appearance and editing']);
+        const appearance = screen.getByRole('region', { name: 'Appearance and editing' });
         expect(within(appearance).getByRole('combobox', { name: 'Theme' })).toBeVisible();
         expect(within(appearance).queryByRole('combobox', { name: 'Key size' })).toBeNull();
         expect(within(appearance).getByText('dark', { selector: 'mark' })).toBeVisible();
@@ -52,7 +54,7 @@ describe('Settings search', () => {
     it('finds Firmware for "update"', () => {
         render(<SettingsPanel />);
         type('update');
-        expect(sectionTitles()).toEqual(['Firmware']);
+        expect(sectionTitles()).toEqual(['Firmware and board']);
         expect(screen.getByText('Firmware status')).toBeVisible();
     });
 
@@ -96,7 +98,7 @@ describe('Settings search', () => {
     it('clears on Esc', () => {
         render(<SettingsPanel />);
         type('editing');
-        expect(sectionTitles()).toEqual(['Editing']);
+        expect(sectionTitles()).toEqual(['Appearance and editing']);
         fireEvent.keyDown(search(), { key: 'Escape' });
         expect(search()).toHaveValue('');
         expect(sectionTitles()).toHaveLength(7);
@@ -104,7 +106,7 @@ describe('Settings search', () => {
 
     it('focuses the field on "/" or Ctrl+F inside Settings, without taking "/" from a text field', () => {
         render(<SettingsPanel />);
-        const chip = within(screen.getByRole('navigation', { name: 'Settings sections' })).getByRole('button', { name: 'About' });
+        const chip = within(screen.getByRole('navigation', { name: 'Settings sections' })).getByRole('button', { name: 'Hardware' });
         chip.focus();
         const slash = fireEvent.keyDown(chip, { key: '/' });
         expect(slash).toBe(false); // default prevented
@@ -130,7 +132,7 @@ describe('Settings search', () => {
         const nav = screen.getByRole('navigation', { name: 'Settings sections' });
         expect(within(nav).getByRole('button', { name: 'Firmware' })).toHaveClass('opacity-50');
         expect(within(nav).getByRole('button', { name: 'Appearance' })).not.toHaveClass('opacity-50');
-        fireEvent.click(within(nav).getByRole('button', { name: 'About' }));
+        fireEvent.click(within(nav).getByRole('button', { name: 'Backups' }));
         expect(search()).toHaveValue('');
         expect(sectionTitles()).toHaveLength(7);
     });
@@ -143,14 +145,37 @@ describe('searchSettings', () => {
 
     it('needs every word, found in the row or its section', () => {
         const hits = searchSettings(SETTINGS_PAGE, 'combo colors', lookup)!;
-        expect([...hits.keys()]).toEqual(['editing']);
-        expect([...hits.get('editing')!.rows]).toEqual(['colorblind-combo-colors']);
+        expect([...hits.keys()]).toEqual(['appearance']);
+        expect([...hits.get('appearance')!.rows]).toEqual(['colorblind-combo-colors']);
         expect(searchSettings(SETTINGS_PAGE, 'appearance size', lookup)!.get('appearance')!.rows.has('key-size')).toBe(true);
     });
 
     it('finds option names and synonyms', () => {
-        expect([...searchSettings(SETTINGS_PAGE, 'azerty', lookup)!.keys()]).toEqual(['editing']);
+        expect([...searchSettings(SETTINGS_PAGE, 'azerty', lookup)!.keys()]).toEqual(['appearance']);
         expect([...searchSettings(SETTINGS_PAGE, 'discord', lookup)!.keys()]).toEqual(['about']);
+    });
+});
+
+describe('Hardware and Typing behavior in search', () => {
+    it.each(['trackball', 'cluster', 'ball color', 'fragments'])('finds Hardware for "%s"', (q) => {
+        render(<SettingsPanel />);
+        type(q);
+        expect(sectionTitles()).toContain('Hardware');
+        expect(screen.getByText('Hardware rows')).toBeVisible();
+    });
+
+    it.each(['tapping term', 'auto shift', 'permissive hold', 'grave escape', 'one shot'])('finds and opens Typing behavior for "%s"', (q) => {
+        render(<SettingsPanel />);
+        expect(screen.queryByText('Typing behavior rows')).toBeNull();
+        type(q);
+        expect(sectionTitles()).toContain('Typing behavior');
+        expect(screen.getByText('Typing behavior rows')).toBeVisible();
+    });
+
+    it.each(['a', 'b', 'c'] as const)('finds both in option %s', (id) => {
+        const page = SETTINGS_LAYOUTS[id].groups;
+        expect([...searchSettings(page, 'touchpad', lookup)!.keys()]).toEqual(['hardware']);
+        expect([...searchSettings(page, 'tapping term', lookup)!.keys()]).toEqual(['typing']);
     });
 });
 

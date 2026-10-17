@@ -38,7 +38,7 @@ export const DETAIL_SIDEBAR_WIDTH = "32rem";
 /** Narrower than this, the dock stacks its title row above the keys. */
 const COMBO_DOCK_ONE_ROW_MIN = 660;
 export const getDetailPanelHeight = (panel: string | null | undefined, height: number): string | number =>
-    ["settings", "typing", "scanlab", "quickstart", "about", "clusters", "layouts"].includes(panel ?? "")
+    ["settings", "scanlab", "quickstart", "about", "layouts"].includes(panel ?? "")
         ? "min(60dvh, 36rem)" : height;
 
 /**

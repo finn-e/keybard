@@ -1,13 +1,14 @@
 import React from "react";
 import DescriptionBlock from "@/layout/SecondarySidebar/components/DescriptionBlock";
 import { QmkSettingsSections } from "./QMKSettingsPanel";
+import { TYPING_BEHAVIOR_SECTIONS } from "./settings/layout";
 
-/** QMK settings groups shown in Typing behavior, in order. */
-export const TYPING_BEHAVIOR_SECTIONS = ["Tap-Hold", "Auto Shift", "One Shot Keys", "Magic", "Grave Escape"];
+export { TYPING_BEHAVIOR_SECTIONS };
 
 /**
  * How keys behave when typed: tap-hold timing, Auto Shift, one-shot keys and
- * the QMK swaps. Combo, leader and mouse key timing live in their own panels.
+ * the QMK swaps, shown in Settings. Combo, leader and mouse key timing live in
+ * their own panels.
  */
 const TypingBehaviorPanel: React.FC = () => (
     <section className="flex flex-col">

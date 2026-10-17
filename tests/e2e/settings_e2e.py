@@ -10,6 +10,10 @@ Run with `npm run test:e2e:settings`.
   3. Combo indicators is an on/off switch, on by default; switching it off
      removes the folded corners from the layout, and on brings them back.
   4. An old saved "large" value reads as on.
+  5. Each organization under review (?settingsLayout=a|b|c): no sideways
+     scroll, every section heading visible, Hardware's rows present, Typing
+     behavior collapsed. Old links (?panel=typing|clusters|fragments) land in
+     Settings at that section.
 
 Same server options as combo_editor_e2e.py (E2E_URL, E2E_SKIP_BUILD).
 Exits 1 when a check fails.
@@ -24,7 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from combo_editor_e2e import app_url  # noqa: E402
 
 
-def open_settings(browser, url: str, stored: dict | None = None):
+def open_settings(browser, url: str, stored: dict | None = None, query: str = "?demo=combos&panel=settings"):
     context = browser.new_context(viewport={"width": 1440, "height": 900}, reduced_motion="reduce")
     if stored is not None:
         context.add_init_script(
@@ -32,7 +36,7 @@ def open_settings(browser, url: str, stored: dict | None = None):
     page = context.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
-    page.goto(url + "?demo=combos&panel=settings")
+    page.goto(url + query)
     expect(page.get_by_label("Search settings")).to_be_visible(timeout=20000)
     return context, page, errors
 
@@ -50,7 +54,7 @@ def main() -> int:
 
         context, page, errors = open_settings(browser, url)
         groups = page.locator("h3[id^=settings-group-]").all_inner_texts()
-        check([g.lower() for g in groups] == ["this keyboard", "this browser", "keybard"], f"three groups: {groups}")
+        check([g.lower() for g in groups] == ["this keyboard", "keybard"], f"option A by default, two groups: {groups}")
         check(page.get_by_role("option", name="Large").count() == 0, "no Large option")
         check(page.get_by_role("slider").count() == 0, "no sliders (ball gloss and sparkle are fixed)")
         check(page.get_by_text("gloss", exact=False).count() == 0, "no gloss row")
@@ -70,6 +74,39 @@ def main() -> int:
         check(folds.count() > 0, "folds back when on")
         check(not errors, f"no page errors: {errors}")
         context.close()
+
+        for option in ["a", "b", "c"]:
+            context, page, errors = open_settings(browser, url, query=f"?demo=combos&panel=settings&settingsLayout={option}")
+            check(page.locator(f"[data-settings-layout={option}]").count() == 1, f"{option}: option {option} shown")
+            wide = page.evaluate("""() => {
+                const panel = document.querySelector('[data-settings-layout]');
+                let s = panel; while (s && s.scrollHeight <= s.clientHeight + 2) s = s.parentElement;
+                return { page: document.documentElement.scrollWidth > innerWidth,
+                         panel: !!s && s.scrollWidth > s.clientWidth + 1 };
+            }""")
+            check(not any(wide.values()), f"{option}: no sideways scroll {wide}")
+            headings = page.locator("h4[id^=settings-section-]")
+            missing = []
+            for i in range(headings.count()):
+                h = headings.nth(i)
+                h.scroll_into_view_if_needed()
+                if not h.is_visible():
+                    missing.append(h.inner_text())
+            check(headings.count() >= 4 and not missing, f"{option}: {headings.count()} section headings, all visible {missing}")
+            check(page.get_by_role("group", name="Cluster presets").is_visible(), f"{option}: Hardware rows present")
+            typing = page.get_by_role("button", name="Typing behavior")
+            check(typing.get_attribute("aria-expanded") == "false", f"{option}: Typing behavior starts collapsed")
+            check(not errors, f"{option}: no page errors: {errors}")
+            context.close()
+
+        for old, section in [("typing", "typing"), ("clusters", "hardware"), ("fragments", "hardware")]:
+            context, page, errors = open_settings(browser, url, query=f"?demo=combos&panel={old}")
+            heading = page.locator(f"#settings-section-{section}-title")
+            check(heading.is_visible(), f"?panel={old} lands in Settings at {section}")
+            if section == "typing":
+                check(page.get_by_role("button", name="Typing behavior").get_attribute("aria-expanded") == "true",
+                      "  and opens Typing behavior")
+            context.close()
 
         context, page, errors = open_settings(browser, url, {"combo-indicators": "large"})
         combo = page.get_by_role("group", name="Combo indicators")

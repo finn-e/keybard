@@ -1,4 +1,4 @@
-import { ArrowLeft, BookOpen, HelpCircle, Keyboard, LayoutGrid, ListOrdered, LucideIcon, Mouse, PanelLeftClose, PanelLeftOpen, Piano, Rocket, Settings, Timer } from "lucide-react";
+import { ArrowLeft, BookOpen, HelpCircle, Keyboard, ListOrdered, LucideIcon, Mouse, PanelLeftClose, PanelLeftOpen, Piano, Rocket, Settings } from "lucide-react";
 import KeybardLogo from "@/components/icons/KeybardLogo";
 import PointingDeviceBall01Icon from "@/components/icons/PointingDeviceBall01Icon";
 import LayoutLayersIcon from "@/components/icons/LayoutLayersIcon";
@@ -29,7 +29,7 @@ import { usePanels } from "@/contexts/PanelsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { cn } from "@/lib/utils";
 import { PARANOID } from "@/lib/paranoid";
-import { requestSettingsSection } from "@/layout/SecondarySidebar/Panels/settings/anchor";
+import { requestSettingsSection, settingsSectionForPanel } from "@/layout/SecondarySidebar/Panels/settings/anchor";
 import { useFirmwareUpdates } from "@/features/firmware/FirmwareUpdateProvider";
 import { bindingEditorKind, currentRailMode, isBindingEditorOpen, modalRailExitLabel, pickerCategoryForRail, effectivePickerMode, nudgeBindingEditor, reviewChoice, RAIL_BARS, RAIL_BAR_PARAM, usablePickerCategories } from "@/lib/bindingSpotlight";
 import { ALT_REPEAT_PANEL, panelAllowed, SHOW_ALT_REPEAT_SETTING } from "@/lib/altRepeatVisibility";
@@ -82,8 +82,8 @@ export const primarySidebarItems: SidebarItem[] = [
 const SHOW_LEADERS = true;
 
 /**
- * The binding group of the rail, then Typing Behavior. Alt-Repeat is the last binding
- * item, only when its app preference is on.
+ * The binding group of the rail. Alt-Repeat is the last item, only when its app
+ * preference is on. Typing behavior is set up once, so it lives in Settings.
  */
 export function featureSidebarItemsFor(showAltRepeat: boolean): SidebarItem[] {
     return [
@@ -91,13 +91,12 @@ export function featureSidebarItemsFor(showAltRepeat: boolean): SidebarItem[] {
         { title: "Combos", url: "combos", icon: ComboIcon },
         { title: "Overrides", url: "overrides", icon: OverridesIcon },
         ...(showAltRepeat ? [{ title: "Alt-Repeat", url: ALT_REPEAT_PANEL, icon: AltRepeatArrowsIcon }] : []),
-        { title: "Typing Behavior", url: "typing", icon: Timer },
     ];
 }
 
+// Hardware (clusters, pointing devices, ball color) is set up once, so it lives in Settings.
 const layoutSidebarItems: SidebarItem[] = [
     { title: "Layouts", url: "layouts", icon: LayoutLayersIcon },
-    { title: "Hardware", url: "clusters", icon: LayoutGrid },
     { title: "Overlay", url: "trainer", icon: GraduationCapIcon },
 ];
 
@@ -324,9 +323,12 @@ const AppSidebar = () => {
                 else if (item.url === activePanel) nudgeBindingEditor();
                 return;
             }
-            // About is a section of Settings: open Settings there.
-            if (item.url === "about") {
-                requestSettingsSection("about");
+            // About, and the panels that moved into Settings, are sections of
+            // Settings: open Settings there.
+            const settingsSection = item.url === "about" ? "about"
+                : settingsSectionForPanel(item.url);
+            if (settingsSection) {
+                requestSettingsSection(settingsSection);
                 if (activePanel === "settings" && open) {
                     if (window.innerWidth < 900) setNavigationOpen(false);
                     return;
