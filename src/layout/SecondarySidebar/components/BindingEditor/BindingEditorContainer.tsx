@@ -5,7 +5,8 @@ import { FC, useCallback, useState, useEffect, useRef, KeyboardEvent } from "rea
 import OnOffToggle from "@/components/ui/OnOffToggle";
 import { usePanels } from "@/contexts/PanelsContext";
 import { cn } from "@/lib/utils";
-import { X, GripHorizontal, Trash2 } from "lucide-react";
+import { bindingEditorTitle } from "@/lib/bindingSpotlight";
+import { X, GripHorizontal, GripVertical, Trash2 } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -25,6 +26,7 @@ import ComboEditor from "./ComboEditor";
 import MacroEditor from "./MacroEditor";
 import OverrideEditor from "./OverrideEditor";
 import TapdanceEditor from "./TapdanceEditor";
+import { AnimatedHeight, BarDelete, BarToggle } from "./EditorBar";
 import { useBindingNames } from "@/hooks/useBindingNames";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { getKeyContents } from "@/utils/keys";
@@ -35,6 +37,20 @@ import { isOverrideEnabled, KeyOverrideOptions, prepareOverrideForEdit } from "@
 interface Props {
     shouldClose?: boolean;
     inline?: boolean; // When true, renders inline without absolute positioning (for overlay mode)
+    /** Single-row combo editor for the underslung placements. Combos only. */
+    compact?: boolean;
+    /** Close request for the compact header's close button. */
+    onRequestClose?: () => void;
+    /** Show a move handle in the compact header (floating placement). */
+    movable?: boolean;
+    /** Compact card: title row above the keys instead of one long row. */
+    stacked?: boolean;
+    /**
+     * The compact bar of the side-panel placement, for every kind: one row of
+     * labeled slots with on/off, any time field and delete at its end. No name,
+     * icon or close button; the panel header has the name and the way back.
+     */
+    bar?: boolean;
 }
 
 
@@ -49,7 +65,7 @@ const labels = {
 
 
 
-const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false }) => {
+const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compact = false, onRequestClose, movable = false, stacked = false, bar = false }) => {
     const { itemToEdit, handleCloseEditor, bindingTypeToEdit } = usePanels();
     const [isClosing, setIsClosing] = useState(false);
     const [yOffset, setYOffset] = useState(0);
@@ -129,6 +145,9 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false }) => {
         if (bindingTypeToEdit === "tapdances") {
             return { cosmeticKey: "tapdances" as const, defaultLabel: `Tap Dance Key ${itemToEdit}` };
         }
+        if (bindingTypeToEdit === "combos") {
+            return { cosmeticKey: "combos" as const, defaultLabel: `Combo ${itemToEdit}` };
+        }
         return null;
     };
 
@@ -137,7 +156,8 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false }) => {
         const editConfig = getEditableTitleDefaults();
         if (!editConfig) return;
         const { cosmeticKey, defaultLabel } = editConfig;
-        const currentName = keyboard.cosmetic?.[cosmeticKey]?.[itemToEdit.toString()] || defaultLabel;
+        // A combo with no name starts empty, its number shown as the placeholder.
+        const currentName = keyboard.cosmetic?.[cosmeticKey]?.[itemToEdit.toString()] || (cosmeticKey === "combos" ? "" : defaultLabel);
         setEditTitleValue(currentName);
         setIsEditingTitle(true);
     };
@@ -146,7 +166,7 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false }) => {
         if (itemToEdit === null) return;
         const config = getEditableTitleDefaults();
         if (!config) return;
-        const kind = config.cosmeticKey === "macros" ? "macro" : "tapdance";
+        const kind = config.cosmeticKey === "macros" ? "macro" : config.cosmeticKey === "tapdances" ? "tapdance" : "combo";
         const value = editTitleValue.trim() === config.defaultLabel ? "" : editTitleValue;
         if (await renameBinding(kind, itemToEdit, value)) setIsEditingTitle(false);
     };
@@ -244,21 +264,8 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false }) => {
 
     const getEditorTitle = () => {
         if (!keyboard || itemToEdit === null || !bindingTypeToEdit) return "Data";
-
-        if (bindingTypeToEdit === "macros") {
-            return keyboard.cosmetic?.macros?.[itemToEdit.toString()] || `Macro Key ${itemToEdit}`;
-        }
-        if (bindingTypeToEdit === "tapdances") {
-            return keyboard.cosmetic?.tapdances?.[itemToEdit.toString()] || `Tap Dance Key ${itemToEdit}`;
-        }
-
-        switch (bindingTypeToEdit) {
-            case "combos": return `Combo ${itemToEdit}`;
-            case "overrides": return `Override ${itemToEdit}`;
-            case "altrepeat": return `Alt-Repeat Key ${itemToEdit}`;
-            case "leaders": return `Leader Sequence ${itemToEdit}`;
-            default: return (labels as any)[bindingTypeToEdit] || "Data";
-        }
+        if (!(bindingTypeToEdit in labels)) return "Data";
+        return bindingEditorTitle(bindingTypeToEdit, itemToEdit, keyboard.cosmetic);
     };
 
     const getHasContent = () => {
@@ -439,6 +446,203 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false }) => {
         );
     };
 
+    const confirmDialog = (
+        <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle className="text-xl font-bold">
+                        Clear {getEditorTitle()}
+                    </DialogTitle>
+                </DialogHeader>
+                <DialogFooter className="gap-3 sm:gap-4 mt-4">
+                    <Button
+                        variant="outline"
+                        onClick={() => setIsConfirmOpen(false)}
+                        className="rounded-full px-8 py-5 text-base border-slate-300 dark:border-neutral-500 hover:bg-slate-50 dark:hover:bg-neutral-700 transition-colors"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        onClick={handleClearAll}
+                        className="rounded-full px-8 py-5 text-base font-bold bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 transition-colors border-none"
+                    >
+                        Clear
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+
+    const renderComboToggle = () => keyboard?.combos && itemToEdit !== null ? (
+        <OnOffToggle
+            label="Combo enabled"
+            value={(keyboard.combos[itemToEdit]?.options & ComboOptions.ENABLED) !== 0}
+            onToggle={async (enabled) => {
+                const updatedKeyboard = structuredClone(keyboard);
+                let options = updatedKeyboard.combos![itemToEdit].options;
+                if (enabled) options |= ComboOptions.ENABLED;
+                else options &= ~ComboOptions.ENABLED;
+                updatedKeyboard.combos![itemToEdit].options = options;
+                setKeyboard(updatedKeyboard);
+                await persistBinding(updatedKeyboard, "combo", itemToEdit);
+            }}
+        />
+    ) : null;
+
+    // On/off for the kinds that have it, saved straight away.
+    const enabledToggle = (() => {
+        if (!keyboard || itemToEdit === null) return null;
+        const save = async (updated: typeof keyboard, kind: "tapdance" | "leader" | "override" | "altrepeat" | "combo") => {
+            setKeyboard(updated);
+            await persistBinding(updated, kind, itemToEdit);
+        };
+        const flip = (options: number, bit: number, on: boolean) => on ? options | bit : options & ~bit;
+        switch (bindingTypeToEdit) {
+            case "tapdances":
+                if (!keyboard.tapdances?.[itemToEdit]) return null;
+                return <BarToggle label="Tap dance enabled" value={keyboard.tapdances[itemToEdit].enabled !== false} onToggle={on => {
+                    const u = structuredClone(keyboard); u.tapdances![itemToEdit].enabled = on; void save(u, "tapdance");
+                }} />;
+            case "leaders":
+                if (!keyboard.leaders?.[itemToEdit]) return null;
+                return <BarToggle label="Leader sequence enabled" value={(keyboard.leaders[itemToEdit].options & LeaderOptions.ENABLED) !== 0} onToggle={on => {
+                    const u = structuredClone(keyboard); const e = u.leaders![itemToEdit]; e.options = flip(e.options, LeaderOptions.ENABLED, on); void save(u, "leader");
+                }} />;
+            case "overrides":
+                if (!keyboard.key_overrides?.[itemToEdit]) return null;
+                return <BarToggle label="Override enabled" value={isOverrideEnabled(keyboard.key_overrides[itemToEdit])} onToggle={on => {
+                    const u = structuredClone(keyboard); const o = prepareOverrideForEdit(u.key_overrides![itemToEdit], u.layers); o.options = flip(o.options, KeyOverrideOptions.ENABLED, on); void save(u, "override");
+                }} />;
+            case "altrepeat":
+                if (!keyboard.alt_repeat_keys?.[itemToEdit]) return null;
+                return <BarToggle label="Alt-repeat enabled" value={(keyboard.alt_repeat_keys[itemToEdit].options & AltRepeatKeyOptions.ENABLED) !== 0} onToggle={on => {
+                    const u = structuredClone(keyboard); const e = u.alt_repeat_keys![itemToEdit]; e.options = flip(e.options, AltRepeatKeyOptions.ENABLED, on); void save(u, "altrepeat");
+                }} />;
+            case "combos":
+                if (!keyboard.combos?.[itemToEdit]) return null;
+                return <BarToggle label="Combo enabled" value={(keyboard.combos[itemToEdit].options & ComboOptions.ENABLED) !== 0} onToggle={on => {
+                    const u = structuredClone(keyboard); const e = u.combos![itemToEdit]; e.options = flip(e.options, ComboOptions.ENABLED, on); void save(u, "combo");
+                }} />;
+            default:
+                return null;
+        }
+    })();
+
+    if (bar) {
+        const barEnd = (
+            <>
+                {enabledToggle}
+                <BarDelete label={`Clear ${getEditorTitle()}`} enabled={hasContent} onClick={() => setIsConfirmOpen(true)} />
+            </>
+        );
+        return (
+            <div className="editor-bar w-full min-w-0" data-editor-bar={bindingTypeToEdit ?? ""}>
+                <AnimatedHeight>
+                    <div className="px-2.5 py-2">
+                        {bindingTypeToEdit === "tapdances" && <TapdanceEditor bar barEnd={barEnd} />}
+                        {bindingTypeToEdit === "combos" && <ComboEditor bar barEnd={barEnd} />}
+                        {bindingTypeToEdit === "overrides" && <OverrideEditor bar barEnd={barEnd} />}
+                        {bindingTypeToEdit === "macros" && <MacroEditor bar barEnd={barEnd} />}
+                        {bindingTypeToEdit === "altrepeat" && <AltRepeatEditor bar barEnd={barEnd} />}
+                        {bindingTypeToEdit === "leaders" && <LeaderEditor bar barEnd={barEnd} />}
+                        {nameError && <p role="alert" className="pt-1 text-sm text-red-700 dark:text-red-400">{nameError}</p>}
+                    </div>
+                </AnimatedHeight>
+                {confirmDialog}
+            </div>
+        );
+    }
+
+    // Compact single-combo editor: title, enabled, keys, clear and close in
+    // one row that wraps when narrow. Placement is owned by the sidebar.
+    if (compact && bindingTypeToEdit === "combos") {
+        const title = (
+            <div className="flex flex-row items-center gap-3 shrink-0">
+                {movable && (
+                    <span data-float-drag-handle aria-hidden="true" title="Move" className="cursor-move touch-none text-kb-gray-border dark:text-neutral-400 hover:text-kb-ink">
+                        <GripVertical className="h-4 w-4" />
+                    </span>
+                )}
+                <h3 className="text-base font-semibold leading-none whitespace-nowrap text-kb-ink">
+                    {isEditingTitle ? (
+                        <Input
+                            ref={inputRef}
+                            aria-label="Combo name"
+                            placeholder={`Combo ${itemToEdit}`}
+                            value={editTitleValue}
+                            onChange={(e) => setEditTitleValue(e.target.value)}
+                            onBlur={handleSaveTitle}
+                            onKeyDown={handleTitleKeyDown}
+                            className="h-7 py-0 px-1.5 text-base font-semibold w-[11rem] select-text"
+                            autoFocus
+                        />
+                    ) : (
+                        <button
+                            type="button"
+                            aria-label={`Rename ${getEditorTitle()}`}
+                            title="Click to rename"
+                            className="cursor-pointer rounded-md -mx-1 px-1 py-0.5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+                            onClick={handleStartEditingTitle}
+                            data-combo-editor-title=""
+                        >
+                            {getEditorTitle()}
+                        </button>
+                    )}
+                </h3>
+                {renderComboToggle()}
+            </div>
+        );
+        const nameAlert = nameError ? <p role="alert" className="text-sm text-red-700 dark:text-red-400">{nameError}</p> : null;
+        const actions = (
+            <div className="flex flex-row items-center gap-1 shrink-0 ml-auto">
+                {hasContent && (
+                    <DelayedTooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                aria-label={`Clear ${getEditorTitle()}`}
+                                onClick={() => setIsConfirmOpen(true)}
+                                className="rounded-full p-1.5 text-kb-gray-border dark:text-neutral-400 transition-all hover:bg-red-500 hover:text-white dark:hover:text-white focus:outline-none cursor-pointer"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Clear {getEditorTitle()}</p>
+                        </TooltipContent>
+                    </DelayedTooltip>
+                )}
+                {onRequestClose && (
+                    <Button type="button" variant="ghost" size="icon" aria-label="Close binding editor" className="h-8 w-8 rounded-full" onClick={onRequestClose}>
+                        <X className="h-4 w-4" />
+                    </Button>
+                )}
+            </div>
+        );
+        // Compact single-combo editor. Placement is owned by the sidebar; this
+        // only lays out title, enabled, keys, clear and close.
+        // One row: the error sits under the row, outside the flex line.
+        return stacked ? (
+            <div className="combo-compact-editor flex flex-col gap-1 w-full min-w-0 px-3 py-2">
+                <div className="flex flex-row items-center gap-3">{title}{actions}</div>
+                {nameAlert}
+                <ComboEditor strip />
+                {confirmDialog}
+            </div>
+        ) : (
+            <div className="flex flex-col w-full min-w-0">
+                <div className="combo-compact-editor flex flex-row items-center gap-x-4 w-full min-w-0 px-3 py-2">
+                    {title}
+                    <div className="min-w-0"><ComboEditor strip /></div>
+                    {actions}
+                </div>
+                {nameAlert && <div className="px-3 pb-2">{nameAlert}</div>}
+                {confirmDialog}
+            </div>
+        );
+    }
+
     return (
         <div
             className={containerClasses}
@@ -463,7 +667,7 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false }) => {
                             {renderHeaderIcon()}
                             <div className={cn("flex items-center", inline ? "h-10 pl-3" : "h-14 pl-[20px]")}>
                                 <div className={cn("font-normal", inline ? "text-lg" : "text-xl")}>
-                                    {bindingTypeToEdit === "macros" || bindingTypeToEdit === "tapdances" ? (
+                                    {bindingTypeToEdit === "macros" || bindingTypeToEdit === "tapdances" || bindingTypeToEdit === "combos" ? (
                                         isEditingTitle ? (
                                             <div className="flex items-center gap-2 bg-kb-surface rounded-md px-1 py-0.5 border border-kb-ink shadow-sm">
                                                 <Input
@@ -537,31 +741,7 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false }) => {
                     )}
                 </div>
             </div>
-            <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
-                <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle className="text-xl font-bold">
-                            Clear {getEditorTitle()}
-                        </DialogTitle>
-                    </DialogHeader>
-                    <DialogFooter className="gap-3 sm:gap-4 mt-4">
-                        <Button
-                            variant="outline"
-                            onClick={() => setIsConfirmOpen(false)}
-                            className="rounded-full px-8 py-5 text-base border-slate-300 dark:border-neutral-500 hover:bg-slate-50 dark:hover:bg-neutral-700 transition-colors"
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            onClick={handleClearAll}
-                            className="rounded-full px-8 py-5 text-base font-bold bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 transition-colors border-none"
-                        >
-                            Clear
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {confirmDialog}
         </div >
     );
 };

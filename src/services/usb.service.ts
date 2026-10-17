@@ -231,6 +231,7 @@ export class SvilUSB {
   static readonly CMD_SVIL_STORAGE_RESET_CLEAR = 0x2a;
   static readonly CMD_SVIL_DEFAULT_LAYER_SET = 0x2b;
   static readonly CMD_SVIL_POINTING_HARDWARE = 0x2c; // each half's side and trackball sensor
+  static readonly CMD_SVIL_POINTING_MOTION = 0x2d; // each hand's motion since the last read (read-and-clear)
 
   // Label types for CMD_SVIL_LABEL_*; every label is a fixed 16-byte, null-padded UTF-8 field
   static readonly SVIL_LABEL_TYPE_LAYER = 0;

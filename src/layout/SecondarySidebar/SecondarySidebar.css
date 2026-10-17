@@ -40,7 +40,7 @@
     max-height: calc(100dvh - var(--panel-height) - 16px);
 }
 @media (max-width: 1000px) {
-    .detail-panel[data-placement="side"][data-binding-open="true"] {
+    .detail-panel[data-placement="side"][data-binding-open="true"]:not([data-combo-placement]):not([data-editor-placement]) {
         top: 50dvh;
     }
     .detail-panel[data-placement="side"] .binding-workspace {
@@ -51,4 +51,96 @@
         bottom: 50dvh;
         width: auto;
     }
+}
+
+/* Underslung combo editor: fixed coordinates come from useComboEditorGeometry,
+   so the editor stays mounted in the panel while it sits out of the keyboard's
+   way. Dock gets an explicit width; anchored and float size to their content. */
+.detail-panel[data-combo-placement] .binding-workspace {
+    position: fixed;
+    right: auto;
+    bottom: auto;
+    width: max-content;
+    max-height: calc(100dvh - 16px);
+    border: 1px solid var(--kb-combo-editor-border);
+    border-radius: 1rem;
+    box-shadow: var(--kb-combo-editor-shadow);
+    overflow: hidden;
+}
+.detail-panel[data-combo-placement="dock"] .binding-workspace {
+    border-radius: 0.75rem;
+}
+
+/* "In the side panel": the editor is in the panel's own flow, pinned at the
+   top of the picker scroll with a sticky top from the sidebar. No card sits
+   over the layout. Kept last so it wins over the side rules above. */
+.detail-panel[data-editor-placement="panel"] .binding-workspace {
+    position: sticky;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    width: auto;
+    max-height: none;
+}
+
+/* A rail switch while editing swaps only the picker, with a short crossfade. */
+@keyframes panelPickerSwap {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.panel-picker-swap {
+    animation: panelPickerSwap 120ms ease-out both;
+}
+
+/* Pinned cue: the editor stays put while the picker scrolls beneath it
+   (owner review: ?pinCue=shadow|divider|notch). */
+.detail-panel [data-pin-cue] {
+    transition: box-shadow 160ms ease-out;
+}
+/* shadow: a soft shadow under the editor, only once the picker has scrolled under it. */
+.detail-panel [data-pin-cue="shadow"][data-pinned-under="true"] {
+    box-shadow: var(--kb-pin-shadow);
+}
+/* divider: a hairline rule and a slightly different tint for the editor zone, always on. */
+.detail-panel [data-pin-cue="divider"] {
+    border-color: transparent;
+    border-bottom-color: var(--kb-pin-divider);
+    border-radius: 0;
+    box-shadow: none;
+    background-color: var(--kb-pin-zone);
+}
+.detail-panel [data-pin-cue="divider"] .bg-kb-gray-medium {
+    background-color: var(--kb-pin-zone);
+}
+/* notch: a small pin glyph and a thin highlight-colored rail on the editor's left edge. */
+.detail-panel [data-pin-cue="notch"] {
+    box-shadow: inset 3px 0 0 var(--kb-pin-notch);
+}
+.detail-panel [data-pin-cue="notch"] .pin-cue-glyph {
+    position: absolute;
+    /* In the gutter beside the rail, clear of the editor's title. */
+    top: 8px;
+    left: -15px;
+    width: 12px;
+    height: 12px;
+    color: var(--kb-pin-notch);
+    transform: rotate(45deg);
+    pointer-events: none;
+}
+
+/* L-shaped picker (owner review: ?pickerShape=L). The panel and the
+   Standard Keys tray are one surface, drawn by PickerTray behind both, so the
+   panel draws no frame of its own. */
+.detail-panel[data-picker-shape] {
+    border-color: transparent;
+    box-shadow: none;
+    background-color: transparent;
+}
+.picker-surface {
+    filter: var(--kb-picker-surface-shadow);
+}
+.picker-surface path {
+    fill: var(--kb-surface);
+    stroke: var(--border);
+    stroke-width: 1;
 }

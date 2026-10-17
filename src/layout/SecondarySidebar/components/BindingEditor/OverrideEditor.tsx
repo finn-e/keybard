@@ -1,4 +1,4 @@
-import { FC, useState, useEffect } from "react";
+import { FC, ReactNode, useState, useEffect, useId } from "react";
 import { ArrowRight } from "lucide-react";
 import OnOffToggle from "@/components/ui/OnOffToggle";
 
@@ -27,14 +27,19 @@ const OPTIONS = [
     { label: "Stay Active on Other Keys", bit: KeyOverrideOptions.NO_UNREGISTER_ON_OTHER_KEY_DOWN, inverted: false },
 ] as const;
 
-
-
-
-
 import { useBindingChanges } from "@/hooks/useBindingChanges";
 import EditorKey from "./EditorKey";
+import { BAR_KEY_PX, BAR_KEY_SIZE, BAR_KEY_VARIANT, BarEnd, BarOptionsButton, BarRow, BarSep, BarSlot } from "./EditorBar";
 
-const OverrideEditor: FC = () => {
+interface Props {
+    /** The compact bar of the side-panel placement, with these controls at the row's end. */
+    bar?: boolean;
+    barEnd?: ReactNode;
+}
+
+const OverrideEditor: FC<Props> = ({ bar = false, barEnd }) => {
+    const [optionsOpen, setOptionsOpen] = useState(false);
+    const optionsId = useId();
     const { keyboard, setKeyboard } = useKeyboard();
     const persistBinding = useBindingChanges();
     const { itemToEdit, setPanelToGoBack, setAlternativeHeader, initialEditorSlot } = usePanels();
@@ -158,6 +163,26 @@ const OverrideEditor: FC = () => {
         const keycode = slot === "trigger" ? override.trigger : override.replacement;
         const isSelected = isSlotSelected(slot);
 
+        if (bar) return (
+            <BarSlot label={label}>
+                <EditorKey
+                    keycode={keycode}
+                    selected={isSelected}
+                    onClick={() => selectOverrideKey(overrideIndex, slot)}
+                    onClear={() => clearKey(slot)}
+                    onDrop={(item) => handleDrop(slot, item)}
+                    size={BAR_KEY_SIZE}
+                    trashCorner
+                    unitSize={BAR_KEY_PX}
+                    variant={BAR_KEY_VARIANT}
+                    wrapperClassName={`relative ${BAR_KEY_SIZE}`}
+                    editorType="override"
+                    editorId={itemToEdit!}
+                    editorSlot={slot}
+                />
+            </BarSlot>
+        );
+
         return (
             <div className="flex flex-col items-center gap-2 relative">
                 <span className="text-sm font-bold text-slate-600 dark:text-neutral-300">{label}</span>
@@ -184,6 +209,89 @@ const OverrideEditor: FC = () => {
 
     if (!override) return <div className="p-5">Override not found</div>;
 
+    // Modifiers, layers and options: below the keys, or behind Options in the bar.
+    const settings = (
+        <>
+                {/* Tabs */}
+                <div className={cn("flex flex-row flex-wrap gap-1 items-center bg-gray-200/50 dark:bg-neutral-700/50 p-1 rounded-lg border border-gray-400/50 dark:border-neutral-500/50 w-full", !bar && "mt-4")}>
+                    {TABS.map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={cn(
+                                "flex-1 min-w-20 px-2 py-1.5 text-xs uppercase tracking-wider rounded-md transition-all font-bold border-none",
+                                activeTab === tab
+                                    ? "bg-kb-active text-kb-active-fg shadow-md"
+                                    : "text-gray-500 dark:text-neutral-400 hover:text-kb-ink dark:hover:text-kb-ink hover:bg-white/50 dark:hover:bg-neutral-700"
+                            )}
+                        >
+                            {tab}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Modifiers Section */}
+                <OverrideModifierSelector value={currentMask} onChange={updateMask} />
+
+                {/* Layers Section */}
+                <div className="flex flex-col gap-1.5">
+                    <span className="font-semibold text-lg text-kb-ink">Layers</span>
+                    <div className="grid grid-cols-[repeat(auto-fit,2.5rem)] gap-2 w-full">
+                        {Array.from({ length: 16 }).map((_, i) => {
+                            const isActive = (override.layers & (1 << i)) !== 0;
+                            return (
+                                <div
+                                    key={i}
+                                    className={cn(
+                                        "w-10 h-10 flex items-center justify-center rounded-md cursor-pointer transition-colors text-sm font-medium",
+                                        isActive
+                                            ? "bg-kb-active text-kb-active-fg hover:bg-kb-surface dark:hover:bg-neutral-700 hover:text-kb-ink"
+                                            : "bg-kb-gray-medium text-slate-700 dark:text-neutral-200 hover:bg-kb-surface dark:hover:bg-neutral-700 hover:text-kb-ink dark:hover:text-kb-ink"
+                                    )}
+                                    onClick={() => updateLayer(i, !isActive)}
+                                >
+                                    {i}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Options Switches */}
+                <div className="flex flex-col gap-1 mt-2">
+                    {OPTIONS.map((opt) => (
+                        <div key={opt.label} className="flex flex-row items-center justify-between py-1">
+                            <div className="flex flex-col gap-0.5">
+                                <span className="text-sm font-medium text-slate-700 dark:text-neutral-200">{opt.label}</span>
+                            </div>
+                            <OnOffToggle
+                                label={opt.label}
+                                value={((override.options & opt.bit) !== 0) !== opt.inverted}
+                                onToggle={(val) => updateOption(opt.bit, val !== opt.inverted)}
+                            />
+                        </div>
+                    ))}
+                </div>
+        </>
+    );
+
+    if (bar) {
+        return (
+            <div className="flex flex-col gap-2">
+                <BarRow label="Override keys">
+                    {renderOverrideKey("Trigger", "trigger")}
+                    <BarSep><ArrowRight /></BarSep>
+                    {renderOverrideKey("Replacement", "replacement")}
+                    <BarEnd>
+                        <BarOptionsButton open={optionsOpen} onToggle={() => setOptionsOpen(o => !o)} controls={optionsId} />
+                        {barEnd}
+                    </BarEnd>
+                </BarRow>
+                {optionsOpen && <div id={optionsId} className="flex flex-col gap-2 border-t border-kb-gray-border/40 pt-2">{settings}</div>}
+            </div>
+        );
+    }
+
     return (
         <div className="flex flex-col gap-2 py-6 pl-10 pb-16">
             {/* Active Switch */}
@@ -198,68 +306,7 @@ const OverrideEditor: FC = () => {
                 {renderOverrideKey("Replacement", "replacement")}
             </div>
 
-            {/* Tabs */}
-            <div className="flex flex-row flex-wrap gap-1 items-center bg-gray-200/50 dark:bg-neutral-700/50 p-1 rounded-lg border border-gray-400/50 dark:border-neutral-500/50 w-full mt-4">
-                {TABS.map((tab) => (
-                    <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={cn(
-                            "flex-1 min-w-20 px-2 py-1.5 text-xs uppercase tracking-wider rounded-md transition-all font-bold border-none",
-                            activeTab === tab
-                                ? "bg-kb-active text-kb-active-fg shadow-md"
-                                : "text-gray-500 dark:text-neutral-400 hover:text-kb-ink dark:hover:text-kb-ink hover:bg-white/50 dark:hover:bg-neutral-700"
-                        )}
-                    >
-                        {tab}
-                    </button>
-                ))}
-            </div>
-
-            {/* Modifiers Section */}
-            <OverrideModifierSelector value={currentMask} onChange={updateMask} />
-
-            {/* Layers Section */}
-            <div className="flex flex-col gap-1.5">
-                <span className="font-semibold text-lg text-kb-ink">Layers</span>
-                <div className="grid grid-cols-[repeat(auto-fit,2.5rem)] gap-2 w-full">
-                    {Array.from({ length: 16 }).map((_, i) => {
-                        const isActive = (override.layers & (1 << i)) !== 0;
-                        return (
-                            <div
-                                key={i}
-                                className={cn(
-                                    "w-10 h-10 flex items-center justify-center rounded-md cursor-pointer transition-colors text-sm font-medium",
-                                    isActive
-                                        ? "bg-kb-active text-kb-active-fg hover:bg-kb-surface dark:hover:bg-neutral-700 hover:text-kb-ink"
-                                        : "bg-kb-gray-medium text-slate-700 dark:text-neutral-200 hover:bg-kb-surface dark:hover:bg-neutral-700 hover:text-kb-ink dark:hover:text-kb-ink"
-                                )}
-                                onClick={() => updateLayer(i, !isActive)}
-                            >
-                                {i}
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-
-
-
-            {/* Options Switches */}
-            <div className="flex flex-col gap-1 mt-2">
-                {OPTIONS.map((opt) => (
-                    <div key={opt.label} className="flex flex-row items-center justify-between py-1">
-                        <div className="flex flex-col gap-0.5">
-                            <span className="text-sm font-medium text-slate-700 dark:text-neutral-200">{opt.label}</span>
-                        </div>
-                        <OnOffToggle
-                            label={opt.label}
-                            value={((override.options & opt.bit) !== 0) !== opt.inverted}
-                            onToggle={(val) => updateOption(opt.bit, val !== opt.inverted)}
-                        />
-                    </div>
-                ))}
-            </div>
+            {settings}
         </div>
     );
 };

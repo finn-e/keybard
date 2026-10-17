@@ -1,7 +1,7 @@
 import type { KeyboardInfo } from '../types/keyboard.types';
 import { customValueService } from './custom-value.service';
 import { MacroService } from './macro.service';
-import { LabelService } from './label.service';
+import { LabelService, validateLabelText } from './label.service';
 import { keyService } from './key.service';
 import { activeKeycodeVersion } from '@/constants/keycode-numbering';
 import { usbInstance } from './usb.service';
@@ -9,6 +9,7 @@ import { FragmentService, NO_SELECTION } from './fragment.service';
 import { FragmentComposerService } from './fragment-composer.service';
 import { KleService } from './kle.service';
 import { getClosestPresetColor } from '../utils/color-conversion';
+import { sameCombo } from '../utils/combo-names';
 
 export interface ImportReview {
     keyboard: KeyboardInfo;
@@ -121,6 +122,22 @@ export function prepareImport(file: KeyboardInfo, current?: KeyboardInfo): Impor
             map[i] = name;
         }
         next.cosmetic[field] = map;
+    }
+    // Combo names live in Keybard only, so any firmware takes them. A file with
+    // combo names decides the name of every combo it sets. A file without them
+    // (a .vil, an older .svil) keeps a name only where the combo is unchanged.
+    if (file.combos) {
+        const count = Math.min(file.combos.length, current.combo_count ?? 0);
+        const fileNames = file.cosmetic?.combos;
+        const map: Record<string, string> = { ...current.cosmetic?.combos };
+        for (let i = 0; i < count; i++) {
+            const name = fileNames ? (fileNames[i] ?? '').trim()
+                : sameCombo(file.combos[i], current.combos?.[i]) ? (map[i] ?? '') : '';
+            try { validateLabelText(name); } catch (error) { errors.push(`combo ${i}: ${(error as Error).message}`); }
+            if (name) map[i] = name;
+            else delete map[i];
+        }
+        if (Object.keys(map).length || current.cosmetic?.combos) next.cosmetic.combos = map;
     }
     summary.push('Entries beyond the file’s layers and tables will be kept from the keyboard.');
     return { keyboard: next, errors, warnings, summary };

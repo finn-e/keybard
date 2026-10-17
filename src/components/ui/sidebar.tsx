@@ -47,6 +47,12 @@ type SidebarEntry = {
     open: boolean;
     defaultOpen: boolean;
     openMobile: boolean;
+    /**
+     * Held narrow by the app (the rail while a binding editor is open, with
+     * ?railMode=collapse). Never saved: the person's own open state stays as
+     * it was and comes back when this is cleared.
+     */
+    forcedCollapsed?: boolean;
 };
 
 type SidebarContextValue = {
@@ -58,6 +64,7 @@ type SidebarContextValue = {
     setOpen: (name: string, value: boolean | ((value: boolean) => boolean)) => void;
     setOpenMobile: (name: string, value: boolean | ((value: boolean) => boolean)) => void;
     toggleSidebar: (name: string) => void;
+    setForcedCollapsed: (name: string, value: boolean) => void;
 };
 
 const SidebarContext = React.createContext<SidebarContextValue | null>(null);
@@ -77,7 +84,7 @@ function useSidebar(name = "default", options?: { defaultOpen?: boolean }) {
     }, [name, registerSidebar, unregisterSidebar, defaultOpen]);
 
     const entry = sidebars[name];
-    const open = name === "primary-nav" && context.isNarrow
+    const open = entry?.forcedCollapsed ? false : name === "primary-nav" && context.isNarrow
         ? entry?.narrowOpen ?? false
         : entry?.open ?? defaultOpen ?? true;
     const openMobile = entry?.openMobile ?? false;
@@ -93,6 +100,7 @@ function useSidebar(name = "default", options?: { defaultOpen?: boolean }) {
             setOpenMobile: (value: boolean | ((value: boolean) => boolean)) => context.setOpenMobile(name, value),
             isMobile: context.isMobile,
             toggleSidebar: () => context.toggleSidebar(name),
+            setForcedCollapsed: (value: boolean) => context.setForcedCollapsed(name, value),
         }),
         [context, name, open, openMobile, state]
     );
@@ -168,7 +176,8 @@ function SidebarProvider({ defaultOpen = true, className, style, children, ...pr
     const setOpen = React.useCallback((name: string, value: boolean | ((value: boolean) => boolean)) => {
         setSidebars((prev) => {
             const existing = prev[name];
-            if (!existing) {
+            // Held narrow by the app: the person's own state waits until it is released.
+            if (!existing || existing.forcedCollapsed) {
                 return prev;
             }
 
@@ -190,6 +199,16 @@ function SidebarProvider({ defaultOpen = true, className, style, children, ...pr
             };
         });
     }, [isNarrow]);
+
+    const setForcedCollapsed = React.useCallback((name: string, value: boolean) => {
+        setSidebars((prev) => {
+            const existing = prev[name];
+            if (!existing || !!existing.forcedCollapsed === value) {
+                return prev;
+            }
+            return { ...prev, [name]: { ...existing, forcedCollapsed: value } };
+        });
+    }, []);
 
     const setOpenMobile = React.useCallback((name: string, value: boolean | ((value: boolean) => boolean)) => {
         setSidebars((prev) => {
@@ -253,8 +272,9 @@ function SidebarProvider({ defaultOpen = true, className, style, children, ...pr
             setOpen,
             setOpenMobile,
             toggleSidebar: toggleSidebarByName,
+            setForcedCollapsed,
         }),
-        [isMobile, isNarrow, sidebars, registerSidebar, unregisterSidebar, setOpen, setOpenMobile, toggleSidebarByName]
+        [isMobile, isNarrow, sidebars, registerSidebar, unregisterSidebar, setOpen, setOpenMobile, toggleSidebarByName, setForcedCollapsed]
     );
 
     return (

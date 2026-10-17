@@ -8,6 +8,7 @@ import { activeKeycodeVersion } from '@/constants/keycode-numbering';
 import { SVALBOARD_VIAL_CUSTOM_KEYCODES, SVALBOARD_VIAL_UID } from '@/constants/svalboard-vial';
 import { KleService } from "./kle.service";
 import { isOverrideEnabled, overrideOptionsFromFile } from '@/utils/key-override';
+import { importBalls, savedBalls } from "./pointing-look.service";
 
 // Default template for KBINFO if needed (simplified from SVALBOARD)
 const DEFAULT_KB_INFO: any = {
@@ -479,6 +480,11 @@ export class FileService {
         if (kbinfo.cosmetic) {
             svil.cosmetic = kbinfo.cosmetic;
         }
+        // The trackball ball each hand shows (kept per board in this browser, never on the board).
+        const pointingBalls = savedBalls(kbinfo.kbid);
+        if (Object.keys(pointingBalls).length) {
+            svil.cosmetic = { ...(svil.cosmetic ?? {}), pointing_balls: pointingBalls };
+        }
 
         // Save custom values (VIA3 dynamic menu values + layer colors)
         // Uses kbinfo.custom_values which are loaded at connect time with raw bytes
@@ -778,7 +784,9 @@ export class FileService {
 
         // Restore cosmetic data (layer names, etc.)
         if (svil.cosmetic) {
-            kbinfo.cosmetic = svil.cosmetic;
+            const { pointing_balls: pointingBalls, ...cosmetic } = svil.cosmetic as Record<string, unknown>;
+            kbinfo.cosmetic = cosmetic as KeyboardInfo["cosmetic"];
+            if (pointingBalls) importBalls(kbinfo.kbid, pointingBalls);
         }
 
         // Restore fragment definitions and composition

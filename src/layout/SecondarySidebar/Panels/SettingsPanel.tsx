@@ -30,9 +30,19 @@ import DynamicMenuPanel from "./DynamicMenuPanel";
 import { selectPointingMenu } from "@/utils/pointing-menu";
 import type { CustomUIMenuItem } from "@/types/keyboard.types";
 
+/** ?category=<name> (a review link) opens Settings on that category; anything else is General. */
+function initialSettingsCategory(names: string[]): string {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const asked = (params.get("category") ?? (params.get("panel") === "fragments" ? "fragments" : null))?.trim().toLowerCase();
+        if (asked && names.includes(asked)) return asked;
+    } catch { /* no URL */ }
+    return "general";
+}
+
 const SettingsPanel = () => {
     const { getSetting, updateSetting, settingsDefinitions, settingsCategories } = useSettings();
-    const [activeCategory, setActiveCategory] = useState<string>("general");
+    const [activeCategory, setActiveCategory] = useState<string>(() => initialSettingsCategory(settingsCategories.map((c) => c.name)));
     const { keyboard } = useKeyboard();
     const { setActivePanel } = usePanels();
     const { navigateTo } = useNavigation();
@@ -334,7 +344,8 @@ const SettingsPanel = () => {
                                                     aria-description={setting.description}
                                                     type="number"
                                                     value={getSetting(setting.name, setting.defaultValue) as number}
-                                                    onChange={(e) => updateSetting(setting.name, parseInt(e.target.value) || 0)}
+                                                    step={setting.step}
+                                                    onChange={(e) => updateSetting(setting.name, (setting.step ?? 1) < 1 ? Math.min(setting.max ?? 1, Math.max(setting.min ?? 0, parseFloat(e.target.value) || 0)) : parseInt(e.target.value) || 0)}
                                                     className="w-22 ml-4 text-right select-text"
                                                 />
                                             </div>

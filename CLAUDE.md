@@ -72,6 +72,7 @@ npm test               # Run all tests
 npm run test:watch     # Watch mode for development
 npm run test:coverage  # Tests with coverage report (75-90% thresholds)
 npm run test:ui        # Interactive Vitest UI
+npm run test:e2e       # Browser tests of the combo editor (builds, serves, runs Playwright for Python)
 ```
 
 ## Architecture
