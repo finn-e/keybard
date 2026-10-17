@@ -23,7 +23,7 @@ export interface PointingDeviceProps {
     ball: BallId;
     gloss: number;
     sparkle: number;
-    /** TEMPORARY "Ball lightness" (removable); omitted = as designed. */
+    /** Body lightness override (see bodyAt); omitted = the ball's own. */
     lightness?: number;
     theme: Theme;
     feed: PointingFeed | null;

@@ -8,6 +8,8 @@ export type BallId = "silver" | "red" | "black" | "pearl_blue" | "pearl_purple" 
 interface FlakeBall {
     name: string; mm: number; type: "flake"; base: string; metal: number; rough: number; coat: number; flake: number;
     tilt: number; hue: number; freq: number; rimDark: number; room?: number; flakeTint?: string; swatch: string;
+    /** Body lightness (see bodyAt); omitted = the base color as is. */
+    light?: number;
 }
 interface PearlBall {
     name: string; mm: number; type: "pearl"; deep: string; body: string; swirl: string; hi: string; swatch: string;
@@ -16,7 +18,7 @@ interface PearlBall {
 export type Ball = FlakeBall | PearlBall;
 
 export const BALLS: Record<BallId, Ball> = {
-    silver:       { name: "Silver sparkle", mm: 44, type: "flake", base: "#cfcdca", metal: 1.0, rough: 0.5, coat: 0.0, flake: 1.0, tilt: 0.7, hue: 0.5, freq: 130, rimDark: 0.66, room: 0.9, swatch: "#c1bfbd" },
+    silver:       { name: "Silver sparkle", mm: 44, type: "flake", base: "#cfcdca", metal: 1.0, rough: 0.5, coat: 0.0, flake: 1.0, tilt: 0.7, hue: 0.5, freq: 130, rimDark: 0.66, room: 0.9, swatch: "#c1bfbd", light: 1.0 },
     red:          { name: "Glossy red", mm: 44, type: "flake", base: "#b0081f", metal: 0.35, rough: 0.34, coat: 1.0, flake: 0.25, tilt: 0.3, hue: 0.0, freq: 220, rimDark: 0.3, flakeTint: "#ff3040", swatch: "#ad1931" },
     black:        { name: "Black sparkle", mm: 44, type: "flake", base: "#5c5d62", metal: 1.0, rough: 0.4, coat: 1.0, flake: 0.9, tilt: 0.5, hue: 0.25, freq: 240, rimDark: 0.6, room: 0.35, swatch: "#36373a" },
     pearl_blue:   { name: "Pearl blue", mm: 52, type: "pearl", deep: "#010a20", body: "#05315f", swirl: "#2f8fd2", hi: "#b4def7", swatch: "#0d5a92", contrast: 1.0, area: 0.24, seed: [7.3, 2.2, 0.4] },
@@ -119,10 +121,9 @@ export function coatAt(mat: BallId, gloss: number): Coat {
     return { coat: mix(a.coat, b.coat), rough: Math.exp(mix(Math.log(a.rough), Math.log(b.rough))), rim: mix(a.rim, b.rim), box: mix(a.box, b.box), sheen: mix(a.sheen, b.sheen) };
 }
 
-/* TEMPORARY (removable): "Ball lightness", a tuning slider the owner asked for to judge the sense of
-   saturation. It moves every ball's body color (flake base, pearl deep/body/swirl), independent of
-   the sparkle and the coat. At LIGHTNESS_DEFAULT nothing changes; above it the body mixes toward
-   white, below it toward black. To remove: delete this block, the Settings entry and the prop. */
+/* Body lightness: a ball's "light" moves its body color (flake base), apart from the sparkle and
+   the coat. At LIGHTNESS_DEFAULT nothing changes; above it the body mixes toward white, below it
+   toward black. Silver is set at 1 (chosen on review); the others are as designed. */
 export const LIGHTNESS_DEFAULT = 0.5;
 /** A linear RGB body color at lightness l (0..1): unchanged at LIGHTNESS_DEFAULT. */
 export function bodyAt(rgb: readonly number[], lightness: number | undefined): number[] {

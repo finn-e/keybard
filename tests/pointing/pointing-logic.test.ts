@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { SETTINGS, SETTINGS_CATEGORIES, POINTING_GLOSS_SETTING, POINTING_LIGHTNESS_SETTING, POINTING_SPARKLE_SETTING } from "@/contexts/SettingsContext";
+import { SETTINGS, SETTINGS_CATEGORIES, POINTING_GLOSS_SETTING, POINTING_SPARKLE_SETTING } from "@/contexts/SettingsContext";
 import { BALLS, bodyAt, coatAt, GLOSS_DEFAULT, LIGHTNESS_DEFAULT, MAT_ORDER, SPARKLE_DEFAULT, spkAt } from "@/components/pointing-viz/webgl/materials";
 import { _setWebGLDisabledForTest, drawDevice, rotFromEuler, unpremultiplyFlipped, webglAvailable } from "@/components/pointing-viz/webgl/renderer";
 import { demoReport, pointingDemoFromSearch } from "@/features/pointing-demo";
@@ -38,13 +38,10 @@ describe("preferences and defaults", () => {
         expect(general.slice(1, 3)).toEqual([POINTING_GLOSS_SETTING, POINTING_SPARKLE_SETTING]);
     });
 
-    it("Ball lightness (temporary) is an app slider next to Sparkle density, defaulting to no change", () => {
-        const light = SETTINGS.find((s) => s.name === POINTING_LIGHTNESS_SETTING)!;
-        expect(light).toMatchObject({ type: "slider", min: 0, max: 1, step: 0.01, label: "Ball Lightness" });
-        expect(light.scope).toBeUndefined();
-        expect(light.defaultValue).toBe(LIGHTNESS_DEFAULT);
-        const general = SETTINGS_CATEGORIES.find((c) => c.name === "general")!.settings;
-        expect(general.slice(1, 4)).toEqual([POINTING_GLOSS_SETTING, POINTING_SPARKLE_SETTING, POINTING_LIGHTNESS_SETTING]);
+    it("Ball lightness is fixed per ball: silver at 1, the others as designed, and no slider", () => {
+        expect(SETTINGS.find((s) => s.name === "pointing-ball-lightness")).toBeUndefined();
+        expect(BALLS.silver).toMatchObject({ light: 1 });
+        for (const id of MAT_ORDER) if (id !== "silver") expect((BALLS[id] as { light?: number }).light).toBeUndefined();
     });
 
     it("Ball lightness leaves the body color alone at the default and moves it lighter or darker", () => {

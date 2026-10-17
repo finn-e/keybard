@@ -7,13 +7,11 @@ import { DEFAULT_THEME_PREF, THEME_SETTING_NAME } from "@/lib/theme";
 import { COMBO_EDITOR_PLACEMENT_SETTING, DEFAULT_COMBO_EDITOR_PLACEMENT } from "@/lib/comboEditorPlacement";
 import { DEFAULT_SHOW_ALT_REPEAT, SHOW_ALT_REPEAT_SETTING } from "@/lib/altRepeatVisibility";
 import { COMBO_COLORBLIND_SETTING, COMBO_INDICATOR_SETTING, DEFAULT_COMBO_INDICATOR_MODE } from "@/lib/comboIndicators";
-import { GLOSS_DEFAULT, LIGHTNESS_DEFAULT, SPARKLE_DEFAULT } from "@/components/pointing-viz/webgl/materials";
+import { GLOSS_DEFAULT, SPARKLE_DEFAULT } from "@/components/pointing-viz/webgl/materials";
 
 /** Pointing device look: app preferences (this browser), not board settings. */
 export const POINTING_GLOSS_SETTING = "pointing-ball-gloss";
 export const POINTING_SPARKLE_SETTING = "pointing-sparkle";
-/** TEMPORARY tuning slider (removable later): the balls' body lightness. */
-export const POINTING_LIGHTNESS_SETTING = "pointing-ball-lightness";
 
 // Settings definitions - single source of truth
 export const SETTINGS: SettingDefinition[] = [
@@ -44,17 +42,6 @@ export const SETTINGS: SettingDefinition[] = [
         description: "How much sparkle silver and black trackball balls show.",
         type: "slider",
         defaultValue: SPARKLE_DEFAULT,
-        min: 0,
-        max: 1,
-        step: 0.01,
-    },
-    // TEMPORARY (removable): a tuning slider for the sense of saturation; remove with LIGHTNESS_DEFAULT in materials.ts.
-    {
-        name: POINTING_LIGHTNESS_SETTING,
-        label: "Ball Lightness",
-        description: "How light the body color of trackball balls looks, apart from the sparkle.",
-        type: "slider",
-        defaultValue: LIGHTNESS_DEFAULT,
         min: 0,
         max: 1,
         step: 0.01,
@@ -263,7 +250,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         name: "general",
         label: "General",
         icon: SettingsIcon,
-        settings: [THEME_SETTING_NAME, POINTING_GLOSS_SETTING, POINTING_SPARKLE_SETTING, POINTING_LIGHTNESS_SETTING, "typing-binds-key", COMBO_INDICATOR_SETTING, COMBO_COLORBLIND_SETTING, COMBO_EDITOR_PLACEMENT_SETTING, SHOW_ALT_REPEAT_SETTING, "serial-assignment", "international-keyboards", "qmk-settings", "print"],
+        settings: [THEME_SETTING_NAME, POINTING_GLOSS_SETTING, POINTING_SPARKLE_SETTING, "typing-binds-key", COMBO_INDICATOR_SETTING, COMBO_COLORBLIND_SETTING, COMBO_EDITOR_PLACEMENT_SETTING, SHOW_ALT_REPEAT_SETTING, "serial-assignment", "international-keyboards", "qmk-settings", "print"],
     },
     {
         name: "fragments",

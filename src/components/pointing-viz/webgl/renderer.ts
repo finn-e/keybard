@@ -22,7 +22,7 @@ export interface DrawSpec {
     corner?: number;
     gloss: number;
     sparkle: number;
-    /** TEMPORARY "Ball lightness" (removable): the body color's lightness; omitted = as designed. */
+    /** Body lightness override (see bodyAt); omitted = the ball's own. */
     lightness?: number;
 }
 
@@ -199,7 +199,7 @@ export function drawDevice(canvas: HTMLCanvasElement, px: number, spec: DrawSpec
             gl.uniform2fv(U.uBakeSize, [1, 1]);
             gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, t);
         } else {
-            if (U.uBase) gl.uniform3fv(U.uBase, bodyAt(lin(b.base), spec.lightness)); set3("uFlakeTint", b.flakeTint || "#ffffff");
+            if (U.uBase) gl.uniform3fv(U.uBase, bodyAt(lin(b.base), spec.lightness ?? b.light)); set3("uFlakeTint", b.flakeTint || "#ffffff");
             set1("uMetal", b.metal); set1("uRough", b.rough); set1("uFlake", b.flake);
             set1("uFlakeFreq", b.freq); set1("uTilt", b.tilt); set1("uHueJit", b.hue); set1("uRimDark", b.rimDark);
             set1("uCoat", ct.coat); set1("uCoatRough", ct.rough); set1("uRimK", ct.rim); set1("uBox", ct.box); set1("uSheen", ct.sheen);
