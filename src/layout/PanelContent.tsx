@@ -51,7 +51,7 @@ export const getPanelTitle = (panel: string | null | undefined, menus?: CustomUI
         pointing: "Pointing Devices",
         typing: "Typing Behavior",
         settings: "Settings",
-        clusters: "Clusters",
+        clusters: "Hardware",
         scanlab: "Scan Lab",
         quickstart: "Quick Start",
         about: "About",

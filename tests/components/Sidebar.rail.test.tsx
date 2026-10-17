@@ -24,14 +24,14 @@ const renderRail = () => render(<SidebarProvider><AppSidebar /></SidebarProvider
 beforeEach(() => { vi.clearAllMocks(); panels.activePanel = null; panels.open = false; firmware.dot = false; takeSettingsSectionRequest(); });
 
 describe('rail homes for what left Settings', () => {
-    it('lists Typing Behavior after Overrides (Alt-Repeat off), and Clusters beside Layouts', () => {
+    it('lists Typing Behavior after Overrides (Alt-Repeat off), and Hardware beside Layouts', () => {
         renderRail();
         const names = screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'));
         expect(names.indexOf('Typing Behavior')).toBe(names.indexOf('Overrides') + 1);
-        expect(names.indexOf('Clusters')).toBe(names.indexOf('Layouts') + 1);
+        expect(names.indexOf('Hardware')).toBe(names.indexOf('Layouts') + 1);
     });
 
-    it.each([['Typing Behavior', 'typing'], ['Clusters', 'clusters']])('opens %s as a panel', (name, panel) => {
+    it.each([['Typing Behavior', 'typing'], ['Hardware', 'clusters']])('opens %s as a panel', (name, panel) => {
         renderRail();
         fireEvent.click(screen.getByRole('button', { name }));
         expect(panels.setActivePanel).toHaveBeenCalledWith(panel);

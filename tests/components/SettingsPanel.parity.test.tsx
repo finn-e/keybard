@@ -47,7 +47,7 @@ describe('Settings page', () => {
         render(<SettingsPanel />);
         fireEvent.click(screen.getByRole('button', { name: 'Developer' }));
         const text = document.body.textContent ?? '';
-        for (const banned of ['Typing Behavior', 'Tap-Hold', 'QMK Settings', 'Clusters', 'Fragments', 'Pointing', 'DPI',
+        for (const banned of ['Typing Behavior', 'Tap-Hold', 'QMK Settings', 'Clusters', 'Fragments', 'Hardware', 'Pointing', 'DPI',
             'Layer color', 'Brightness', 'Live Updating', 'Overlay', 'Combo timeout', 'Leader', 'Mouse key', 'Print Layers']) {
             expect(text).not.toContain(banned);
         }

@@ -97,7 +97,7 @@ export function featureSidebarItemsFor(showAltRepeat: boolean): SidebarItem[] {
 
 const layoutSidebarItems: SidebarItem[] = [
     { title: "Layouts", url: "layouts", icon: LayoutLayersIcon },
-    { title: "Clusters", url: "clusters", icon: LayoutGrid },
+    { title: "Hardware", url: "clusters", icon: LayoutGrid },
     { title: "Overlay", url: "trainer", icon: GraduationCapIcon },
 ];
 

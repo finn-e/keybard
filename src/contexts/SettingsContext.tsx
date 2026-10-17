@@ -167,7 +167,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     },
     {
         name: "fragments",
-        label: "Fragments",
+        label: "Hardware",
         icon: LayoutGrid,
         settings: [],
     },

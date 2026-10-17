@@ -7,7 +7,7 @@ import { pointingDemo } from "@/features/pointing-demo";
 /**
  * ?panel=settings opens Settings once a layout is loaded (with ?demo, the
  * QWERTY Example), so a review link lands on the Settings page;
- * ?panel=fragments opens Clusters, where the fragment and ball choices now
+ * ?panel=fragments opens Hardware, where the fragment and ball choices now
  * live. Once per page load.
  */
 export default function PointingDeepLink() {

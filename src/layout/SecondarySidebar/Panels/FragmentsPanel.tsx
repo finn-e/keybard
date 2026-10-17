@@ -363,7 +363,7 @@ const FragmentsPanel: React.FC = () => {
                                             aria-label={fragmentService.getInstanceDisplayName(instance.id)}
                                             aria-description={statusText || undefined}
                                             className="flex-1 basis-36 min-w-0">
-                                            <SelectValue placeholder="Select fragment" />
+                                            <SelectValue placeholder="Choose one" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {options.map((fragmentName) => (
@@ -433,7 +433,7 @@ const FragmentsPanel: React.FC = () => {
                                             aria-label={fragmentService.getInstanceDisplayName(instance.id)}
                                             aria-description={statusText || undefined}
                                             className="flex-1 basis-36 min-w-0">
-                                            <SelectValue placeholder="Select fragment" />
+                                            <SelectValue placeholder="Choose one" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {options.map((fragmentName) => (
@@ -500,7 +500,7 @@ const FragmentsPanel: React.FC = () => {
                                             aria-label={fragmentService.getInstanceDisplayName(instance.id)}
                                             aria-description={statusText || undefined}
                                             className="flex-1 basis-36 min-w-0">
-                                    <SelectValue placeholder="Select fragment" />
+                                    <SelectValue placeholder="Choose one" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {options.map((fragmentName) => (

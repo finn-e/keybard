@@ -9,7 +9,7 @@ import FragmentsPanel from "./FragmentsPanel";
 const ClustersPanel: React.FC = () => (
     <section className="flex flex-col">
         <DescriptionBlock>
-            Match the drawn layout to the key clusters installed on your board.
+            Match the drawn layout to the clusters and pointing devices on your board.
         </DescriptionBlock>
         <FragmentsPanel />
     </section>
