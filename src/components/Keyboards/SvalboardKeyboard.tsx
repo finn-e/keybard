@@ -110,7 +110,7 @@ const SvalboardKeyboard: FunctionComponent<IProps> = ({ onChange, onKeyPress: on
             SV_SNIPER_2_TG: "Sniper\n2xTG",
             SV_SNIPER_3_TG: "Sniper\n3xTG",
             SV_SNIPER_5_TG: "Sniper\n5xTG",
-            SV_SCROLL_HOLD: "Drag\nScroll",
+            SV_SCROLL_HOLD: "Drag Scroll",
             SV_SCROLL_TOGGLE: "Scroll\nToggle",
             SV_OUTPUT_STATUS: "Output\nStatus",
         },

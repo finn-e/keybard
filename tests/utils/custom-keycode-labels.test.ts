@@ -6,7 +6,7 @@ import type { KeyboardInfo } from '../../src/types/keyboard.types';
 
 describe('custom keycode labels', () => {
     it('shows SV_SCROLL_HOLD as "Drag Scroll", whatever the firmware calls it', () => {
-        expect(customKeycodeShortName({ name: 'SV_SCROLL_HOLD', shortName: 'Scroll\\nToggle\\nHold' })).toBe('Drag\nScroll');
+        expect(customKeycodeShortName({ name: 'SV_SCROLL_HOLD', shortName: 'Scroll\\nToggle\\nHold' })).toBe('Drag Scroll');
     });
 
     it("keeps the firmware's shortName for other keys, with real line breaks", () => {
@@ -22,7 +22,7 @@ describe('custom keycode labels', () => {
             ],
         } as unknown as KeyboardInfo;
         keyService.generateAllKeycodes(kbinfo);
-        expect(KEYMAP['SV_SCROLL_HOLD'].str).toBe('Drag\nScroll');
+        expect(KEYMAP['SV_SCROLL_HOLD'].str).toBe('Drag Scroll');
         expect(KEYMAP['SV_SNIPER_2'].str).toBe('Sniper\n2x');
     });
 });
