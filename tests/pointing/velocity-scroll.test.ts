@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { drawPills, PILL_LABEL } from "@/components/pointing-viz/overlay-draw";
 import {
-    drawVelocity, PAD_LENS_MIN_PX, padLensRadius, speedTip, velocityHere, velocityScale,
+    DEAD_BAND, drawVelocity, PAD_LENS_MIN_PX, padLensRadius, SPEED_MARKS, speedPx, speedTip, velocityHere, velocityScale,
 } from "@/components/pointing-viz/velocity-draw";
 import { demoReport, pointingDemoFromSearch, velocityPath, _resetPointingDemoForTests } from "@/features/pointing-demo";
 import { hostPointingEvent } from "@/features/trainer/host-pointing";
@@ -102,25 +102,36 @@ describe("where it shows", () => {
     it("nothing without a state", () => expect(velocityHere(at("ball", "right", true, null), null)).toBe(false));
 });
 
-describe("the drawing's scale", () => {
-    it("square root per axis, with full speed at the field's radius, so the dead zone stays visible", () => {
-        const c = VELOCITY_DEFAULTS.ball, s = velocityScale(c, 50);
-        expect(s(velocityFullMm(c))).toBeCloseTo(50, 6);
-        expect(s(1000)).toBe(50); // clamped where the firmware clamps
-        expect(Math.abs(s(-c.deadMm))).toBeGreaterThan(7); // 0.8 mm is still ~8 px
-        expect(s(-4)).toBeLessThan(0);
+describe("the drawing's scale: offset and speed share it", () => {
+    const c = VELOCITY_DEFAULTS.ball, R = 100;
+    it("crosses the dead-zone band linearly, then runs out by the speed share to the full-speed circle", () => {
+        const s = velocityScale(c, R);
+        expect(s(0)).toBe(0);
+        expect(s(c.deadMm / 2)).toBeCloseTo(R * DEAD_BAND / 2, 6);
+        expect(s(-c.deadMm)).toBeCloseTo(-R * DEAD_BAND, 6);
+        expect(s(velocityOffsetFor(c, 30))).toBeCloseTo(speedPx(0.5, R), 6);
+        expect(s(velocityFullMm(c))).toBeCloseTo(R, 6);
+        expect(s(1000)).toBe(R); // clamped where the firmware clamps
+    });
+    it("the arrow: none inside the dead zone, and its tip on the offset's tip outside it", () => {
+        for (const mm of [0, 0.5, 3, 12, velocityFullMm(c)]) {
+            const st = velocityStateFor({ x: 0, y: mm }, null);
+            const tip = speedTip(st, c, R), at = velocityScale(c, R)(mm);
+            if (mm <= c.deadMm) expect(Math.abs(tip.y)).toBe(0);
+            else expect(tip.y).toBeCloseTo(at, 6); // toward the user scrolls down, drawn down
+        }
+        const fast = { ...velocityStateFor({ x: 0, y: 0 }, null), speedNps: { h: -600, v: 0 } };
+        expect(speedTip(fast, c, R).x).toBe(-R);
+    });
+    it("the speed ticks are evenly spaced", () => {
+        const s = velocityScale(c, R);
+        const ticks = SPEED_MARKS.map((f) => s(velocityOffsetFor(c, f * c.maxNps)));
+        const steps = ticks.slice(1).map((t, i) => t - ticks[i]);
+        for (const st of steps) expect(st).toBeCloseTo(steps[0], 6);
     });
     it("the touchpad's lens never shrinks below its minimum, so small keys stay legible", () => {
         expect(padLensRadius(20)).toBe(PAD_LENS_MIN_PX);
         expect(padLensRadius(60)).toBeCloseTo(81, 6);
-        const pad = VELOCITY_DEFAULTS.pad, r = padLensRadius(30) * 0.86;
-        expect(Math.abs(velocityScale(pad, r)(pad.deadMm))).toBeGreaterThan(12); // the 1.5 mm dead zone
-    });
-    it("the speed arrow: share of the maximum along each axis, up on screen for +v", () => {
-        const st = { ...velocityStateFor({ x: 0, y: 0 }, null), speedNps: { h: 30, v: 15 } };
-        expect(speedTip(st, VELOCITY_DEFAULTS.ball, 100)).toEqual({ x: 50, y: -25 });
-        const fast = { ...st, speedNps: { h: -600, v: 0 } };
-        expect(speedTip(fast, VELOCITY_DEFAULTS.ball, 100).x).toBe(-100);
     });
 });
 
@@ -187,6 +198,13 @@ describe("the demo", () => {
         const r = demoReport(d, 2, 2.1);
         const dy = velocityPath(2.1, "trackball", true).y - velocityPath(2, "trackball", true).y;
         expect(Math.sign(r.right.dy)).toBe(Math.sign(dy));
+    });
+    it("&offset=x,y sets the still offset; on the pad the finger stays on the glass", () => {
+        const d = pointingDemoFromSearch("?demo=pointing&velocity=1&motion=0&hand=left&offset=0,25")!;
+        const r = demoReport(d, 0, 0.016);
+        expect(r.velocityScroll!.offsetMm).toEqual({ x: 0, y: 25 });
+        expect(r.left.touchY).toBeLessThan(255);
+        expect(pointingDemoFromSearch("?demo=pointing&offset=junk")!.offset).toBeUndefined();
     });
     it("without &velocity there is no state", () => {
         expect(demoReport(pointingDemoFromSearch("?demo=pointing")!, 0, 0.016).velocityScroll).toBeUndefined();

@@ -11,15 +11,18 @@
 // dead zone (a square: it is per axis), the offset line, and the speed as an
 // arrow in the brand green that reaches the circle at full speed.
 //
-// Both devices use one scale: square root per axis, with the full-speed offset
-// at the field's radius. The curve runs to ~30 mm, past a ball's rim, and the
-// marks that matter (a 0.8-1.5 mm dead zone, the first quarter of the speed)
-// sit in the first few millimeters, so a true-size field would be too small to
-// read. On a trackball the field fills the ball. On a touchpad it is a
-// magnified lens anchored at the touch-down point, with a minimum size so it
-// stays legible at every key size; the fingertip is drawn where it really is.
+// One scale for the offset and the speed, per axis, so the arrow tracks the
+// motion: inside the dead zone the offset moves across a small inner band (the
+// dead-zone square) and there is no arrow; past it, the distance from the
+// anchor is the speed that offset sets, as a share of the maximum, out to the
+// dashed full-speed circle. So the arrow's tip sits on the offset's tip (on
+// each axis that scrolls), the speed ticks are evenly spaced, and the curve
+// shows as how fast the offset point runs out for each millimeter of motion.
+// On a trackball the field fills the ball. On a touchpad it is a magnified
+// lens anchored at the touch-down point, with a minimum size so it stays
+// legible at every key size; the fingertip is drawn where it really is.
 
-import { velocityFullMm, velocityOffsetFor, type VelocityCurve, type VelocityScrollState } from "@/utils/velocity-scroll";
+import { velocityOffsetFor, velocitySpeed, type VelocityCurve, type VelocityScrollState } from "@/utils/velocity-scroll";
 import { strokeHair } from "./overlay-draw";
 
 /**
@@ -52,10 +55,25 @@ export const FALLBACK_VELOCITY_COLORS: VelocityColors = { accent: "#099e7c" };
 /** How a distance along one axis, in mm, is drawn: px from the anchor (signed). */
 export type AxisScale = (mm: number) => number;
 
-/** Square root per axis, with the curve's full-speed offset at `radius` px (and clamped there, as the firmware clamps). */
+/** The dead-zone band's half-width, as a share of the field's radius. */
+export const DEAD_BAND = 0.16;
+
+/** Px from the anchor for a share of the maximum speed (0 at the dead zone's edge, 1 at the full-speed circle). */
+export function speedPx(share: number, radius: number): number {
+    return radius * (DEAD_BAND + (1 - DEAD_BAND) * Math.max(0, Math.min(1, share)));
+}
+
+/**
+ * The offset along one axis, px from the anchor (signed): linear across the
+ * dead-zone band, then the speed it sets as a share of the maximum, so it
+ * stops at the full-speed circle where the firmware clamps.
+ */
 export function velocityScale(c: VelocityCurve, radius: number): AxisScale {
-    const full = Math.max(1e-3, velocityFullMm(c));
-    return (mm) => Math.sign(mm) * radius * Math.sqrt(Math.min(1, Math.abs(mm) / full));
+    return (mm) => {
+        const a = Math.abs(mm);
+        if (a <= c.deadMm) return Math.sign(mm) * radius * DEAD_BAND * (c.deadMm > 0 ? a / c.deadMm : 0);
+        return Math.sign(mm) * speedPx(Math.abs(velocitySpeed(c, a)) / (c.maxNps > 0 ? c.maxNps : 1), radius);
+    };
 }
 
 /**
@@ -67,12 +85,16 @@ export function padLensRadius(unitPx: number): number {
     return Math.max(PAD_LENS_MIN_PX, 1.35 * unitPx);
 }
 
-/** The speed arrow's tip for a state, px from the anchor (+x right, +y down on screen). */
+/**
+ * The speed arrow's tip, px from the anchor (+x right, +y down on screen), on
+ * the field's scale: none on an axis that doesn't scroll, else from the dead
+ * zone's edge out to the full-speed circle by the share of the maximum.
+ */
 export function speedTip(st: VelocityScrollState, c: VelocityCurve, radius: number): { x: number; y: number } {
     const max = c.maxNps > 0 ? c.maxNps : 1;
-    const f = (v: number) => Math.max(-1, Math.min(1, v / max));
+    const axis = (v: number) => (Math.abs(v) < 0.005 ? 0 : Math.sign(v) * speedPx(Math.abs(v) / max, radius));
     // +v scrolls up, which is a pull away from the user: up on screen.
-    return { x: f(st.speedNps.h) * radius, y: -f(st.speedNps.v) * radius };
+    return { x: axis(st.speedNps.h), y: -axis(st.speedNps.v) };
 }
 
 export interface VelocityDrawOpts {
@@ -198,7 +220,7 @@ export function drawVelocity(ctx: CanvasRenderingContext2D, st: VelocityScrollSt
     const a = Math.min(1, o.amount * 1.3);
     const ox = scale(st.offsetMm.x), oy = scale(st.offsetMm.y);
     const tip = speedTip(st, c, radius);
-    const d = Math.max(3, Math.abs(scale(c.deadMm)));
+    const d = radius * DEAD_BAND;
     ctx.save();
     ctx.translate(o.anchor.x, o.anchor.y);
     if (o.kind === "pad") lens(ctx, padLensRadius(o.unitPx), a, o.k);

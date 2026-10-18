@@ -7,6 +7,7 @@
 //   &sniper=1 &boost=1        hold sniper or boost on (simulated; a board reports its own)
 //   &velocity=1               hold Velocity Scroll at the moving hand, with an offset that
 //                             moves (or holds still with &motion=0)
+//   &offset=x,y               the still offset in mm (+x right, +y toward the user)
 //   &hand=left|right          the hand that moves (default: the right)
 //   &motion=0                 no scripted motion (default: on in the demo)
 //   &ball=<id> / &leftBall=   show that ball for this load (see pointing-look.service)
@@ -33,6 +34,8 @@ export interface PointingDemo {
     boost: boolean;
     /** Velocity Scroll held at the moving hand (simulated). */
     velocity: boolean;
+    /** &offset=x,y: Velocity Scroll's still offset, mm. */
+    offset?: { x: number; y: number };
     hand: "left" | "right";
     motion: boolean;
     /** "settings", or the old panel name of a section of Settings (settings/anchor.ts). */
@@ -45,6 +48,13 @@ function kindParam(v: string | null): DemoKind | undefined {
     if (s === "touchpad" || s === "pad") return "touchpad";
     if (s === "none" || s === "0") return "none";
     return undefined;
+}
+/** &offset=x,y in mm, or undefined. */
+function offsetParam(v: string | null): { x: number; y: number } | undefined {
+    const m = v?.trim().match(/^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/);
+    if (!m) return undefined;
+    const clamp = (n: number) => Math.max(-60, Math.min(60, n));
+    return { x: clamp(Number(m[1])), y: clamp(Number(m[2])) };
 }
 const on = (v: string | null) => v !== null && !/^(0|false|off|no)$/i.test(v.trim());
 
@@ -65,6 +75,7 @@ export function pointingDemoFromSearch(search: string): PointingDemo | null {
         sniper,
         boost,
         velocity,
+        offset: offsetParam(p.get("offset")),
         hand: p.get("hand")?.trim().toLowerCase() === "left" ? "left" : "right",
         motion: p.has("motion") ? on(p.get("motion")) : demo,
         panel,
@@ -122,7 +133,8 @@ function emptyHalf() {
  * pulls toward the user to near full speed, eases back through the dead zone,
  * pushes away, and drifts sideways a little. Still (motion off): a fixed offset.
  */
-export function velocityPath(t: number, kind: "trackball" | "touchpad", moving: boolean): { x: number; y: number } {
+export function velocityPath(t: number, kind: "trackball" | "touchpad", moving: boolean, still?: { x: number; y: number }): { x: number; y: number } {
+    if (!moving && still) return { ...still };
     const reach = kind === "trackball" ? 34 : 20;
     if (!moving) return { x: kind === "trackball" ? 2.2 : 1.2, y: reach * 0.62 };
     const T = 9, u = (((t % T) + T) % T) / T;
@@ -133,6 +145,12 @@ export function velocityPath(t: number, kind: "trackball" | "touchpad", moving: 
 
 /** Where the scripted pad finger touches down, in pad half-extents. */
 export const VELOCITY_PAD_ANCHOR = { x: -0.15, y: -0.1 };
+
+/** With a set offset, the anchor sits so the finger stays on the glass: centered between them. */
+export function velocityPadAnchor(still?: { x: number; y: number }): { x: number; y: number } {
+    if (!still) return VELOCITY_PAD_ANCHOR;
+    return { x: -still.x / TOUCHPAD_MM.w, y: -still.y / TOUCHPAD_MM.h };
+}
 
 /**
  * A scripted POINTING_MOTION report for the interval (t0, t1] seconds: the
@@ -149,12 +167,13 @@ export function demoReport(d: PointingDemo, t0: number, t1: number): PointingMot
         if (side !== d.hand) continue;
         if (d.velocity) {
             // Velocity Scroll: the ball rolls by the offset's change; the finger sits at the anchor plus the offset.
-            const a = velocityPath(t0, kind, d.motion), b = velocityPath(t1, kind, d.motion);
+            const a = velocityPath(t0, kind, d.motion, d.offset), b = velocityPath(t1, kind, d.motion, d.offset);
+            const anchor = velocityPadAnchor(d.motion ? undefined : d.offset);
             if (kind === "trackball") {
                 half.dx = Math.round((b.x - a.x) * DEMO_COUNTS_PER_MM);
                 half.dy = Math.round((b.y - a.y) * DEMO_COUNTS_PER_MM);
             } else {
-                const fx = VELOCITY_PAD_ANCHOR.x + b.x / (TOUCHPAD_MM.w / 2), fy = VELOCITY_PAD_ANCHOR.y + b.y / (TOUCHPAD_MM.h / 2);
+                const fx = anchor.x + b.x / (TOUCHPAD_MM.w / 2), fy = anchor.y + b.y / (TOUCHPAD_MM.h / 2);
                 half.touchValid = true;
                 half.fingers = 1;
                 half.touchX = Math.round((Math.max(-1, Math.min(1, fx)) * 0.5 + 0.5) * 255);
@@ -184,7 +203,7 @@ export function demoReport(d: PointingDemo, t0: number, t1: number): PointingMot
     }
     const vsKind = d[d.hand];
     const velocityScroll = d.velocity && (vsKind === "trackball" || vsKind === "touchpad")
-        ? velocityStateFor(velocityPath(t1, vsKind, d.motion), vsKind === "touchpad" ? d.hand : null)
+        ? velocityStateFor(velocityPath(t1, vsKind, d.motion, d.offset), vsKind === "touchpad" ? d.hand : null)
         : undefined;
     return {
         sniper: d.sniper, boost: d.boost, autoMouseLayer: false, axisLockEnabled: false, naturalScroll: false, scrollKey: false,
