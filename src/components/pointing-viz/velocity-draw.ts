@@ -19,8 +19,8 @@
 // each axis that scrolls), the speed ticks are evenly spaced, and the curve
 // shows as how fast the offset point runs out for each millimeter of motion.
 // On a trackball the field fills the ball. On a touchpad it is a magnified
-// lens anchored at the touch-down point, with a minimum size so it stays
-// legible at every key size; the fingertip is drawn where it really is.
+// lens anchored at the touch-down point, about 1.35 key widths across and
+// clipped to the glass; the fingertip is drawn where it really is.
 
 import { velocityOffsetFor, velocitySpeed, type VelocityCurve, type VelocityScrollState } from "@/utils/velocity-scroll";
 import { strokeHair } from "./overlay-draw";
@@ -76,13 +76,9 @@ export function velocityScale(c: VelocityCurve, radius: number): AxisScale {
     };
 }
 
-/**
- * The touchpad lens's radius, px: about 1.35 key units, never under 64 px, so
- * the dead zone and the marks stay readable on small and medium keys.
- */
-export const PAD_LENS_MIN_PX = 64;
+/** The touchpad lens's radius, px: about 1.35 key units, so it scales with the keys. */
 export function padLensRadius(unitPx: number): number {
-    return Math.max(PAD_LENS_MIN_PX, 1.35 * unitPx);
+    return 1.35 * unitPx;
 }
 
 /**
@@ -109,6 +105,8 @@ export interface VelocityDrawOpts {
     /** Canvas px per CSS px (for hairlines). */
     k: number;
     colors: VelocityColors;
+    /** The touchpad's glass (half-extents and corner, px): the lens is clipped to it. */
+    glass?: { hw: number; hh: number; corner: number };
 }
 
 const TAU = Math.PI * 2;
@@ -222,6 +220,13 @@ export function drawVelocity(ctx: CanvasRenderingContext2D, st: VelocityScrollSt
     const tip = speedTip(st, c, radius);
     const d = radius * DEAD_BAND;
     ctx.save();
+    if (o.kind === "pad" && o.glass) {
+        // never past the pad's edge
+        const g = o.glass;
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") ctx.roundRect(-g.hw, -g.hh, g.hw * 2, g.hh * 2, g.corner); else ctx.rect(-g.hw, -g.hh, g.hw * 2, g.hh * 2);
+        ctx.clip();
+    }
     ctx.translate(o.anchor.x, o.anchor.y);
     if (o.kind === "pad") lens(ctx, padLensRadius(o.unitPx), a, o.k);
     rulers(ctx, c, scale, a, o.k, size);

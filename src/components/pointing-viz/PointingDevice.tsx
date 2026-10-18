@@ -189,6 +189,7 @@ export function PointingDevice(props: PointingDeviceProps) {
                 // a pad driven as a relative pointer draws the trackball's field over the glass
                 reach: p.placement.kind === "ball" ? ballPx : Math.min(hw, hh) * 0.9,
                 unitPx: p.unitPx, k, colors: p.velocityColors ?? FALLBACK_VELOCITY_COLORS,
+                glass: p.placement.kind === "pad" ? { hw, hh, corner: (p.placement.corner ?? 0.2) * p.unitPx } : undefined,
             });
         };
         wake.current = () => { if (!s.raf && typeof requestAnimationFrame === "function") s.raf = requestAnimationFrame(frame); };

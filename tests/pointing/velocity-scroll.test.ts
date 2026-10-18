@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { drawPills, PILL_LABEL } from "@/components/pointing-viz/overlay-draw";
 import {
-    DEAD_BAND, drawVelocity, PAD_LENS_MIN_PX, padLensRadius, SPEED_MARKS, speedPx, speedTip, velocityHere, velocityScale,
+    DEAD_BAND, drawVelocity, padLensRadius, SPEED_MARKS, speedPx, speedTip, velocityHere, velocityScale,
 } from "@/components/pointing-viz/velocity-draw";
 import { demoReport, pointingDemoFromSearch, velocityPath, _resetPointingDemoForTests } from "@/features/pointing-demo";
 import { hostPointingEvent } from "@/features/trainer/host-pointing";
@@ -129,8 +129,8 @@ describe("the drawing's scale: offset and speed share it", () => {
         const steps = ticks.slice(1).map((t, i) => t - ticks[i]);
         for (const st of steps) expect(st).toBeCloseTo(steps[0], 6);
     });
-    it("the touchpad's lens never shrinks below its minimum, so small keys stay legible", () => {
-        expect(padLensRadius(20)).toBe(PAD_LENS_MIN_PX);
+    it("the touchpad's lens scales with the keys (about 1.35 key widths)", () => {
+        expect(padLensRadius(20)).toBeCloseTo(27, 6);
         expect(padLensRadius(60)).toBeCloseTo(81, 6);
     });
 });
