@@ -4,16 +4,20 @@ import { SHOW_ALT_REPEAT_SETTING } from "@/lib/altRepeatVisibility";
 import { COMBO_COLORBLIND_SETTING, COMBO_INDICATOR_SETTING } from "@/lib/comboIndicators";
 
 /**
- * The Settings page, declared. Settings holds two kinds of thing: preferences
- * for the Keybard app, and management of the board and its firmware. Anything
- * that configures the board's layout or devices lives in the editor panel for
- * that feature, never here (docs/design/firmware-settings/settings-structure.md).
+ * The Settings page, declared. Settings holds the setup a board needs once
+ * (its hardware, firmware, backups and typing behavior), and preferences for
+ * the Keybard app. What people use while editing a layout (layers, combos,
+ * pointing modes and the rest) lives on the rail, never here.
+ *
+ * The page is one short list of cards. Every card opens and collapses, and
+ * opens the way it was left in this browser (sectionStateSetting); until then
+ * it follows `defaultOpen`.
  *
  * A row is either a setting from SETTINGS (by name, with an optional label or
  * description for this page) or a block this page renders itself. To add a
  * preference, add its definition to SETTINGS and its name to a section here.
  */
-export type SettingsBlock = "firmware" | "board" | "backups" | "about";
+export type SettingsBlock = "hardware" | "firmware" | "board" | "backups" | "typing" | "about";
 
 export type SettingsRow =
     | { setting: string; label?: string; description?: string }
@@ -22,77 +26,88 @@ export type SettingsRow =
 export interface SettingsSection {
     id: string;
     title: string;
+    /** The jump chip's label. */
+    chip: string;
     rows: SettingsRow[];
-    /** Starts collapsed, and stays expanded once opened in this browser. */
-    collapsible?: boolean;
+    /** Open on a first visit in this browser. */
+    defaultOpen: boolean;
+    /** What the card holds, in a few words, under its heading. */
+    summary: string;
 }
 
-export interface SettingsGroup {
-    id: string;
-    title: string;
-    sections: SettingsSection[];
-}
+/** QMK settings groups shown in Typing behavior, in order. */
+export const TYPING_BEHAVIOR_SECTIONS = ["Tap-Hold", "Auto Shift", "One Shot Keys", "Magic", "Grave Escape"];
 
-export const SETTINGS_PAGE: SettingsGroup[] = [
+/**
+ * The app setting that remembers whether a section was left "open" or
+ * "collapsed" in this browser (unset until first toggled).
+ */
+export const sectionStateSetting = (id: string) => `settings-${id}-open`;
+
+/** Whether Hardware was left "open" or "collapsed". */
+export const HARDWARE_OPEN_SETTING = sectionStateSetting("hardware");
+
+export const SETTINGS_PAGE: SettingsSection[] = [
     {
-        id: "this-keyboard",
-        title: "This keyboard",
-        sections: [
-            { id: "firmware", title: "Firmware", rows: [{ block: "firmware" }] },
-            { id: "board", title: "Board", rows: [{ block: "board" }] },
-            {
-                id: "backups",
-                title: "Backups and files",
-                rows: [
-                    { block: "backups" },
-                    { setting: "import", label: "Import layout", description: "Open a .svil or .vil file. You review the changes before anything is written." },
-                    { setting: "export", label: "Export layout", description: "Save the layout as .svil or .vil, or print it." },
-                ],
-            },
-        ],
+        id: "hardware",
+        title: "Hardware",
+        chip: "Hardware",
+        // Set up once when the board arrives: open until someone collapses it.
+        defaultOpen: true,
+        rows: [{ block: "hardware" }],
+        summary: "Clusters, pointing devices and ball color",
     },
     {
-        id: "this-browser",
-        title: "This browser",
-        sections: [
-            {
-                id: "appearance",
-                title: "Appearance",
-                rows: [
-                    { setting: THEME_SETTING_NAME, label: "Theme", description: "System follows your computer's light or dark mode." },
-                    { setting: KEY_SIZE_SETTING },
-                    { setting: PANEL_POSITION_SETTING },
-                ],
-            },
-            {
-                id: "editing",
-                title: "Editing",
-                rows: [
-                    { setting: "typing-binds-key", label: "Typing binds a key" },
-                    { setting: "serial-assignment", label: "Advance after assigning", description: "After you assign a key, select the next one in this order." },
-                    { setting: "international-keyboards", label: "Key legends", description: "The keyboard layout your computer uses, so keys show what they type." },
-                    { setting: SHOW_ALT_REPEAT_SETTING },
-                    { setting: COMBO_INDICATOR_SETTING, label: "Combo indicators" },
-                    { setting: COMBO_COLORBLIND_SETTING, label: "Colorblind-friendly combo colors" },
-                ],
-            },
+        id: "firmware",
+        title: "Firmware and backups",
+        chip: "Firmware",
+        defaultOpen: false,
+        rows: [
+            { block: "firmware" },
+            { block: "board" },
+            { block: "backups" },
+            { setting: "import", label: "Import layout", description: "Open a .svil or .vil file. You review the changes before anything is written." },
+            { setting: "export", label: "Export layout", description: "Save the layout as .svil or .vil, or print it." },
         ],
+        summary: "Updates, board name, backups, import and export",
     },
     {
-        id: "keybard",
-        title: "Keybard",
-        sections: [
-            { id: "about", title: "About", rows: [{ block: "about" }] },
-            {
-                id: "developer",
-                title: "Developer",
-                collapsible: true,
-                rows: [
-                    { setting: "scan-lab", label: "Scan Lab", description: "Measure key scanning and sensor timing." },
-                    { setting: "key-proof-sheet", label: "Key proof sheet", description: "Every key rendering at every size, for visual checks." },
-                ],
-            },
+        id: "appearance",
+        title: "Appearance and editing",
+        chip: "Appearance",
+        defaultOpen: false,
+        rows: [
+            { setting: THEME_SETTING_NAME, label: "Theme", description: "System follows your computer's light or dark mode." },
+            { setting: KEY_SIZE_SETTING },
+            { setting: PANEL_POSITION_SETTING },
+            { setting: "typing-binds-key", label: "Typing binds a key" },
+            { setting: "serial-assignment", label: "Advance after assigning", description: "After you assign a key, select the next one in this order." },
+            { setting: "international-keyboards", label: "Key legends", description: "The keyboard layout your computer uses, so keys show what they type." },
+            { setting: SHOW_ALT_REPEAT_SETTING },
+            { setting: COMBO_INDICATOR_SETTING, label: "Combo indicators" },
+            { setting: COMBO_COLORBLIND_SETTING, label: "Colorblind-friendly combo colors" },
         ],
+        summary: "Theme, key size, legends and combo indicators",
+    },
+    {
+        id: "typing",
+        title: "Typing behavior",
+        chip: "Typing",
+        defaultOpen: false,
+        rows: [{ block: "typing" }],
+        summary: "Tap-hold, Auto Shift, one-shot keys and key swaps",
+    },
+    {
+        id: "about",
+        title: "About",
+        chip: "About",
+        defaultOpen: false,
+        rows: [
+            { block: "about" },
+            { setting: "scan-lab", label: "Scan Lab", description: "Measure key scanning and sensor timing." },
+            { setting: "key-proof-sheet", label: "Key proof sheet", description: "Every key rendering at every size, for visual checks." },
+        ],
+        summary: "Version, manual, community and developer tools",
     },
 ];
 
@@ -104,17 +119,12 @@ export const SETTINGS_SHOWN_ELSEWHERE: Record<string, string> = {
     "live-updating": "the toolbar (Live Updating / Manual Updates)",
 };
 
-/** Sections the anchor chips jump to. */
-export const SETTINGS_ANCHORS: Array<{ id: string; label: string }> = [
-    { id: "firmware", label: "Firmware" },
-    { id: "board", label: "Board" },
-    { id: "backups", label: "Backups" },
-    { id: "appearance", label: "Appearance" },
-    { id: "editing", label: "Editing" },
-    { id: "about", label: "About" },
-];
-
 /** Every setting name the page renders, in page order. */
-export function settingsOnPage(page: SettingsGroup[] = SETTINGS_PAGE): string[] {
-    return page.flatMap((g) => g.sections.flatMap((s) => s.rows.flatMap((r) => ("setting" in r ? [r.setting] : []))));
+export function settingsOnPage(page: SettingsSection[] = SETTINGS_PAGE): string[] {
+    return page.flatMap((s) => s.rows.flatMap((r) => ("setting" in r ? [r.setting] : [])));
+}
+
+/** Every block the page renders, in page order. */
+export function blocksOnPage(page: SettingsSection[] = SETTINGS_PAGE): SettingsBlock[] {
+    return page.flatMap((s) => s.rows.flatMap((r) => ("block" in r ? [r.block] : [])));
 }

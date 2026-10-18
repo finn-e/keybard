@@ -10,7 +10,8 @@
 //   &hand=left|right          the hand that moves (default: the right)
 //   &motion=0                 no scripted motion (default: on in the demo)
 //   &ball=<id> / &leftBall=   show that ball for this load (see pointing-look.service)
-//   &panel=settings|fragments open that side panel on start
+//   &panel=settings           open Settings on start; typing, clusters, fragments,
+//                             hardware or about open it at that card
 //
 // The scripted motion is the round 5 prototype's finger paths, turned into the
 // same raw counts POINTING_MOTION reports, so the demo and a board drive the
@@ -20,6 +21,7 @@ import type { PointingMotionReport } from "@/utils/pointing-motion";
 import { DEFAULT_TRACKBALL_CPI } from "@/components/pointing-viz/ball-gearing";
 import { TOUCHPAD_MM } from "@/components/pointing-viz/webgl/materials";
 import { velocityStateFor } from "@/utils/velocity-scroll";
+import { settingsSectionForPanel } from "@/layout/SecondarySidebar/Panels/settings/anchor";
 
 export type DemoKind = "trackball" | "touchpad" | "none";
 export interface PointingDemo {
@@ -33,7 +35,8 @@ export interface PointingDemo {
     velocity: boolean;
     hand: "left" | "right";
     motion: boolean;
-    panel?: "settings" | "fragments";
+    /** "settings", or the old panel name of a section of Settings (settings/anchor.ts). */
+    panel?: string;
 }
 
 function kindParam(v: string | null): DemoKind | undefined {
@@ -53,7 +56,7 @@ export function pointingDemoFromSearch(search: string): PointingDemo | null {
     const left = kindParam(p.get("left")), right = kindParam(p.get("right"));
     const sniper = on(p.get("sniper")), boost = on(p.get("boost")), velocity = on(p.get("velocity"));
     const panelRaw = p.get("panel")?.trim().toLowerCase();
-    const panel = panelRaw === "settings" || panelRaw === "fragments" ? panelRaw : undefined;
+    const panel = panelRaw === "settings" || (!!panelRaw && !!settingsSectionForPanel(panelRaw)) ? panelRaw : undefined;
     if (!demo && !left && !right && !sniper && !boost && !velocity && !p.has("motion") && !panel) return null;
     return {
         demo,

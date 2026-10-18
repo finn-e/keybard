@@ -35,7 +35,8 @@ from playwright.sync_api import Page, expect, sync_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BASE_PATH = "/keybard-e2e/"
-OUT_DIR = ".e2e-dist"
+# At the repo root, not under vite's root (src/), where source scans would find it.
+OUT_DIR = os.path.join(ROOT, ".e2e-dist")
 # The side panel editor, whatever this build's default placement is.
 REVIEW = "comboEditor=panel&demo=combos"
 SIZES = ["default", "medium", "small"]  # Normal, Medium, Small
