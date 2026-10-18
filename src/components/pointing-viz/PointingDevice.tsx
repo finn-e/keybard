@@ -7,8 +7,8 @@ import { PAD_COUNTS_PER_HALF } from "@/features/pointing-demo";
 import { ballRollRadians } from "./ball-gearing";
 import { BALLS, type BallId } from "./webgl/materials";
 import { drawDevice, roll, rotFromEuler, type Theme } from "./webgl/renderer";
-import { drawContact, drawPadReticle, drawPills, drawReticle, pillFont, type PillColors } from "./overlay-draw";
-import { drawVelocity, FALLBACK_VELOCITY_COLORS, velocityHere, velocityViz, type VelocityColors, type VelocityViz } from "./velocity-draw";
+import { drawContact, drawPadReticle, drawPills, drawReticle, type PillColors } from "./overlay-draw";
+import { drawVelocity, FALLBACK_VELOCITY_COLORS, velocityHere, type VelocityColors } from "./velocity-draw";
 import { padFromRelative, syncFingers, type Finger } from "./pad-contacts";
 
 /** A source of POINTING_MOTION reports: the board, Keybard Host, or the demo script. */
@@ -42,8 +42,6 @@ export interface PointingDeviceProps {
     velocityPill?: boolean;
     /** The other hand's device, which decides where a trackball's Velocity Scroll shows. */
     otherKind?: "ball" | "pad" | null;
-    /** The Velocity Scroll look (review switch); default from ?velViz=. */
-    velocityViz?: VelocityViz;
     /** Device hidden: only the pills, centered where it would be (Keybard Host). */
     ghost?: boolean;
     host?: boolean;
@@ -158,6 +156,8 @@ export function PointingDevice(props: PointingDeviceProps) {
             ctx.setTransform(k, 0, 0, k, pxSize / 2, pxSize / 2);
             const first = [...s.fingers.values()].find((f) => f.down);
             const c = first ?? s.contact;
+            // Velocity Scroll under the fingertips, so the finger stays on top of the pad's lens
+            if (!p.ghost && s.vs && s.sm.vel > 0.001) drawHeld(ctx, s.vs, k);
             if (p.placement.kind === "pad" && !p.ghost) {
                 drawContact(ctx, hw, hh, s.contact.x, s.contact.y, s.contact.press, p.unitPx, k);
                 for (const f of s.fingers.values()) drawContact(ctx, hw, hh, f.x, f.y, f.press, p.unitPx, k);
@@ -165,7 +165,6 @@ export function PointingDevice(props: PointingDeviceProps) {
             if (!p.ghost) {
                 if (p.placement.kind === "ball") drawReticle(ctx, ballPx, s.sm.sniper, k);
                 else drawPadReticle(ctx, hw, hh, (p.placement.corner ?? 0.2) * p.unitPx, c.x * hw, c.y * hh, s.sm.sniper, p.unitPx, k);
-                if (s.vs && s.sm.vel > 0.001) drawHeld(ctx, s.vs, k);
             }
             drawPills(ctx, [
                 { kind: "sniper", amount: s.sm.sniper, mult: p.labels.sniper },
@@ -186,12 +185,10 @@ export function PointingDevice(props: PointingDeviceProps) {
                 anchor = { x: f.x * hw - vs.offsetMm.x * pxPerMm, y: f.y * hh - vs.offsetMm.y * pxPerMm };
             }
             drawVelocity(ctx, vs, {
-                viz: p.velocityViz ?? velocityViz(), kind: onPad ? "pad" : "ball", side, amount: s.sm.vel, anchor,
+                kind: onPad ? "pad" : "ball", amount: s.sm.vel, anchor,
                 // a pad driven as a relative pointer draws the trackball's field over the glass
                 reach: p.placement.kind === "ball" ? ballPx : Math.min(hw, hh) * 0.9,
-                pxPerMm, unitPx: p.unitPx, k, colors: p.velocityColors ?? FALLBACK_VELOCITY_COLORS, fontPx: pillFont(p.unitPx, !!p.host),
-                bottom: p.placement.kind === "ball" ? ballPx : hh,
-                glass: p.placement.kind === "pad" ? { hw, hh, corner: (p.placement.corner ?? 0.2) * p.unitPx } : undefined,
+                unitPx: p.unitPx, k, colors: p.velocityColors ?? FALLBACK_VELOCITY_COLORS,
             });
         };
         wake.current = () => { if (!s.raf && typeof requestAnimationFrame === "function") s.raf = requestAnimationFrame(frame); };
@@ -202,7 +199,7 @@ export function PointingDevice(props: PointingDeviceProps) {
     // Anything that changes the look redraws once.
     useEffect(() => {
         sim.current.dirty = true; sim.current.ovDirty = true; wake.current();
-    }, [props.ball, props.gloss, props.sparkle, props.lightness, props.theme, sizeCss, props.sniper, props.boost, props.showModes, props.labels.sniper, props.labels.boost, ghost, props.pillColors.bg, props.pillColors.fg, props.velocityColors?.accent, props.velocityPill, props.otherKind, props.velocityViz]);
+    }, [props.ball, props.gloss, props.sparkle, props.lightness, props.theme, sizeCss, props.sniper, props.boost, props.showModes, props.labels.sniper, props.labels.boost, ghost, props.pillColors.bg, props.pillColors.fg, props.velocityColors?.accent, props.velocityPill, props.otherKind]);
 
     // Motion from the feed rolls the ball or moves the fingertip.
     useEffect(() => {

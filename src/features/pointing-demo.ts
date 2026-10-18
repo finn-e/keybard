@@ -6,7 +6,7 @@
 //   &left= &right=            trackball | touchpad | none, per hand (also works on a board)
 //   &sniper=1 &boost=1        hold sniper or boost on (simulated; a board reports its own)
 //   &velocity=1               hold Velocity Scroll at the moving hand, with an offset that
-//                             moves (or holds still with &motion=0); &velViz= picks the look
+//                             moves (or holds still with &motion=0)
 //   &hand=left|right          the hand that moves (default: the right)
 //   &motion=0                 no scripted motion (default: on in the demo)
 //   &ball=<id> / &leftBall=   show that ball for this load (see pointing-look.service)
@@ -123,7 +123,7 @@ function emptyHalf() {
  * pushes away, and drifts sideways a little. Still (motion off): a fixed offset.
  */
 export function velocityPath(t: number, kind: "trackball" | "touchpad", moving: boolean): { x: number; y: number } {
-    const reach = kind === "trackball" ? 34 : 14;
+    const reach = kind === "trackball" ? 34 : 20;
     if (!moving) return { x: kind === "trackball" ? 2.2 : 1.2, y: reach * 0.62 };
     const T = 9, u = (((t % T) + T) % T) / T;
     const y = reach * (0.62 * Math.cos(u * Math.PI * 2) + 0.18 * Math.sin(u * Math.PI * 4));

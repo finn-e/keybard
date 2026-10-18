@@ -28,14 +28,12 @@ export function pillColorsFromTokens(host = false): PillColors {
     };
 }
 
-/** Velocity Scroll's colors: the speed from --kb-pointing-velocity, the curve card in the pill colors. */
+/** Velocity Scroll's color: the speed, from --kb-pointing-velocity. */
 export function velocityColorsFromTokens(host = false): VelocityColors {
-    const pill = pillColorsFromTokens(host);
     const fallback = FALLBACK_VELOCITY_COLORS.accent;
-    if (typeof document === "undefined") return { accent: fallback, card: pill.bg, cardFg: pill.fg };
+    if (typeof document === "undefined") return { accent: fallback };
     const cs = getComputedStyle(document.documentElement);
-    const accent = cs.getPropertyValue(host ? "--kb-pointing-host-velocity" : "--kb-pointing-velocity").trim() || fallback;
-    return { accent, card: pill.bg, cardFg: pill.fg };
+    return { accent: cs.getPropertyValue(host ? "--kb-pointing-host-velocity" : "--kb-pointing-velocity").trim() || fallback };
 }
 
 interface Props {

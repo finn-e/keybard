@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { drawPills, PILL_LABEL } from "@/components/pointing-viz/overlay-draw";
 import {
-    DEFAULT_VELOCITY_VIZ, drawVelocity, speedReach, speedTip, velocityHere, velocityScale, velocityVizFromSearch, VELOCITY_VIZ,
+    drawVelocity, PAD_LENS_MIN_PX, padLensRadius, speedTip, velocityHere, velocityScale,
 } from "@/components/pointing-viz/velocity-draw";
 import { demoReport, pointingDemoFromSearch, velocityPath, _resetPointingDemoForTests } from "@/features/pointing-demo";
 import { hostPointingEvent } from "@/features/trainer/host-pointing";
@@ -102,19 +102,19 @@ describe("where it shows", () => {
     it("nothing without a state", () => expect(velocityHere(at("ball", "right", true, null), null)).toBe(false));
 });
 
-describe("the drawing's scales", () => {
-    it("touchpad: true size, so the offset line ends under the finger", () => {
-        const s = velocityScale("pad", VELOCITY_DEFAULTS.pad, 0, 4);
-        expect(s(10)).toBe(40);
-        expect(s(-2.5)).toBe(-10);
-        expect(speedReach(VELOCITY_DEFAULTS.pad, s)).toBeCloseTo(velocityFullMm(VELOCITY_DEFAULTS.pad) * 4, 6);
-    });
-    it("trackball: a square-root field with full speed at the rim, so the dead zone stays visible", () => {
-        const c = VELOCITY_DEFAULTS.ball, s = velocityScale("ball", c, 50, 0);
+describe("the drawing's scale", () => {
+    it("square root per axis, with full speed at the field's radius, so the dead zone stays visible", () => {
+        const c = VELOCITY_DEFAULTS.ball, s = velocityScale(c, 50);
         expect(s(velocityFullMm(c))).toBeCloseTo(50, 6);
         expect(s(1000)).toBe(50); // clamped where the firmware clamps
         expect(Math.abs(s(-c.deadMm))).toBeGreaterThan(7); // 0.8 mm is still ~8 px
         expect(s(-4)).toBeLessThan(0);
+    });
+    it("the touchpad's lens never shrinks below its minimum, so small keys stay legible", () => {
+        expect(padLensRadius(20)).toBe(PAD_LENS_MIN_PX);
+        expect(padLensRadius(60)).toBeCloseTo(81, 6);
+        const pad = VELOCITY_DEFAULTS.pad, r = padLensRadius(30) * 0.86;
+        expect(Math.abs(velocityScale(pad, r)(pad.deadMm))).toBeGreaterThan(12); // the 1.5 mm dead zone
     });
     it("the speed arrow: share of the maximum along each axis, up on screen for +v", () => {
         const st = { ...velocityStateFor({ x: 0, y: 0 }, null), speedNps: { h: 30, v: 15 } };
@@ -138,28 +138,18 @@ function fakeCtx() {
     return { ctx: ctx as unknown as CanvasRenderingContext2D, calls };
 }
 
-describe("the look", () => {
-    it("is picked by ?velViz=, field by default", () => {
-        expect(DEFAULT_VELOCITY_VIZ).toBe("field");
-        expect(VELOCITY_VIZ).toEqual(["field", "curve", "rim"]);
-        expect(velocityVizFromSearch("?velViz=rim")).toBe("rim");
-        expect(velocityVizFromSearch("?velViz=CURVE")).toBe("curve");
-        expect(velocityVizFromSearch("?velViz=nope")).toBe("field");
-        expect(velocityVizFromSearch("")).toBe("field");
-    });
-    it("every look draws, on a ball and on a pad, and nothing once it has faded", () => {
+describe("the field", () => {
+    const opts = (kind: "ball" | "pad", amount: number) => ({ kind, amount, anchor: { x: 3, y: -4 }, reach: 60, unitPx: 50, k: 2, colors: { accent: "#099e7c" } });
+    it("draws on a ball and, as a lens, on a pad; nothing once it has faded", () => {
         const st = velocityStateFor({ x: 2, y: 9 }, "left");
-        for (const viz of VELOCITY_VIZ) {
-            for (const kind of ["ball", "pad"] as const) {
-                const { ctx, calls } = fakeCtx();
-                drawVelocity(ctx, st, { viz, kind, side: "left", amount: 1, anchor: { x: 3, y: -4 }, reach: 60, pxPerMm: 4, unitPx: 50, k: 2,
-                    colors: { accent: "#099e7c", card: "#000", cardFg: "#fff" }, fontPx: 11, bottom: 60 });
-                expect(calls.some((c) => c.startsWith("arc"))).toBe(true);
-            }
+        for (const kind of ["ball", "pad"] as const) {
+            const { ctx, calls } = fakeCtx();
+            drawVelocity(ctx, st, opts(kind, 1));
+            expect(calls.some((c) => c.startsWith("arc"))).toBe(true);
+            expect(calls.filter((c) => c === "fill(0)").length).toBeGreaterThan(kind === "pad" ? 3 : 2);
         }
         const { ctx, calls } = fakeCtx();
-        drawVelocity(ctx, st, { viz: "field", kind: "ball", side: "left", amount: 0, anchor: { x: 0, y: 0 }, reach: 60, pxPerMm: 4, unitPx: 50, k: 2,
-            colors: { accent: "#099e7c", card: "#000", cardFg: "#fff" }, fontPx: 11, bottom: 60 });
+        drawVelocity(ctx, st, opts("ball", 0));
         expect(calls).toEqual([]);
     });
     it("the pill reads VEL SCROLL, with no multiplier", () => {
