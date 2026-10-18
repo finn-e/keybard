@@ -35,11 +35,12 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings, QWebEngineScript
 from .device.protocol import candidates, hid_backend
 from .device.worker import DeviceWorker
-from .state import DEFAULTS, EFFECTS, PRESETS, HostState, serialize_profile
+from .boards import Board, Follower, composite, device_keys, kinds, lent_sides, motion_used
+from .state import BALL_NAMES, DEFAULT_BALL, DEFAULTS, EFFECTS, PRESETS, HostState, serialize_profile
 from .host_pointing import demo_motion
 from .colors import ColorsPanel
 from .modifiers import ModifierReader
-from .server import REMOTE_ORIGINS, load_paranoid_page, make_server
+from .server import REMOTE_ORIGINS, load_paranoid_page, make_server, web_base_problem
 from .build import build_info
 from .browser import open_contained
 from .macos import float_window, hide_dock_icon, is_mac
@@ -305,16 +306,22 @@ class Host(QObject):
     def __init__(self, app, assets, state, port, remote_origins=(), paranoid=False, page=None):
         super().__init__()
         self.app, self.state = app, state
-        self.worker = None
-        self.last_state = self.last_press = 0
-        self.generation = 0
-        self.profile_ready = False
         self.auto_connect = True
         self.devices = {}
-        self.selected = None
+        # Every connected Svalboard, by id, each with its own reader (see boards.py).
+        self.boards = {}
+        self.board_order = 0
+        self.retiring = []      # readers told to stop, kept until their thread ends
+        self.paused = None      # Disconnect: the ids present then; None while connecting
+        self.follower = Follower((state.remembered or {}).get('serial'), state.pinned)
+        self.shown_signature = None
+        self.demo = False
+        self.demo_at = 0.0
         self.bridge = Bridge()
         # Pointing: motion waiting to go to the overlay.
         self.pointing_pending = None
+        self.pointing_source = None
+        self.pointing_sides = {}
         self.pointing_sent = 0.0
         self.demo_pointing = None
         self.bridge.command.connect(self.command)
@@ -371,7 +378,6 @@ class Host(QObject):
         self.tray.show()
         # Firmware that reports Shift and Caps Lock (GET_INFO second feature byte,
         # bit 2) is used alone; older firmware falls back to the computer's state.
-        self.board_reports_modifiers = False
         self.modifier_reader = ModifierReader()
         self.modifier_timer = QTimer(self); self.modifier_timer.timeout.connect(self.read_modifiers); self.modifier_timer.start(16)
         self.timer = QTimer(self); self.timer.timeout.connect(self.tick); self.timer.start(100)
@@ -380,8 +386,12 @@ class Host(QObject):
         self.surface.windowHandle().screenChanged.connect(lambda screen: QTimer.singleShot(0, self.size_surface))
         app.aboutToQuit.connect(self.shutdown)
 
+    def shown_board(self):
+        return self.boards.get(self.follower.shown)
+
     def read_modifiers(self):
-        if self.board_reports_modifiers or not self.profile_ready: return
+        shown = self.shown_board()
+        if shown is None or not shown.ready or shown.modifiers is not None: return
         value = self.modifier_reader.read()
         with self.state.lock:
             if value == self.state.modifiers: return
@@ -476,6 +486,36 @@ class Host(QObject):
         self.pointing_pills_action = self.pointing_menu.addAction('Show sniper and boost'); self.pointing_pills_action.setCheckable(True)
         self.pointing_pills_action.setToolTip('The sniper and boost pills, even with the devices hidden')
         self.pointing_pills_action.triggered.connect(lambda value: self.set_config(pointingPills=value))
+        # Which ball each trackball of the board on show has: Keybard's balls, kept per board.
+        self.pointing_menu.addSeparator()
+        self.ball_menus = {}
+        for side, title in (('left', 'Left trackball'), ('right', 'Right trackball')):
+            menu = self.pointing_menu.addMenu(title); group = QActionGroup(menu); actions = {}
+            for ball, name in BALL_NAMES.items():
+                action = menu.addAction(name); action.setCheckable(True); group.addAction(action)
+                action.triggered.connect(lambda _checked=False, s=side, b=ball: self.set_ball(s, b))
+                actions[ball] = action
+            self.ball_menus[side] = (menu, actions)
+        self.pointing_menu.aboutToShow.connect(self.sync_balls)
+        self.sync_balls()
+
+    def sync_balls(self):
+        """Show a ball choice for each hand of the board on show that has a trackball, checked at its ball."""
+        with self.state.lock:
+            board = self.state.board
+            look = self.state.pointing_look()
+        pointing = (board or {}).get('pointing') or {}
+        for side, (menu, actions) in self.ball_menus.items():
+            menu.menuAction().setVisible(pointing.get(side) == 'trackball')
+            for ball, action in actions.items(): action.setChecked(ball == look.get(side, DEFAULT_BALL))
+
+    def set_ball(self, side, ball):
+        """A ball chosen in the Overlay: kept for the board on show until it or Keybard chooses again."""
+        serial = self.state.shown_serial
+        if not serial: return
+        self.state.set_board_ball(serial, side, ball)
+        self.sync_balls()
+        self.publish_state()
 
     def add_settings(self, menu):
         menu.addMenu(self.board_menu)
@@ -499,21 +539,28 @@ class Host(QObject):
         self.colors_panel.show(); self.colors_panel.raise_(); self.colors_panel.activateWindow()
 
     def fill_board_menu(self):
-        """The connected Svalboards, read when the menu opens so new boards show up."""
+        """Automatic (follow the board in use), or one board only; read when the menu opens so new boards show up."""
         self.board_menu.clear()
         group = QActionGroup(self.board_menu)
+        automatic = self.board_menu.addAction('Follow the board in use'); automatic.setCheckable(True); group.addAction(automatic)
+        automatic.setToolTip('Show whichever Svalboard you type on or point with')
+        automatic.setChecked(self.state.pinned is None)
+        automatic.triggered.connect(lambda _checked=False: self.command(dict(op='connect', id='auto')))
+        self.board_menu.addSeparator()
         devices = list(self.state.devices)
         names = [d['name'] for d in devices]
         for d in devices:
             label = d['name'] if names.count(d['name']) == 1 else f"{d['name']} ({d['serial'][-4:]})"
+            if self.state.pinned is None and d['id'] == self.state.selected_device: label += ' · showing'
             action = self.board_menu.addAction(label); action.setCheckable(True); group.addAction(action)
-            action.setChecked(d['id'] == self.state.selected_device)
+            action.setToolTip('Show this board only')
+            action.setChecked(self.state.pinned is not None and self.state.pinned in (d['serial'], d['id']))
             action.triggered.connect(lambda _checked=False, key=d['id']: self.command(dict(op='connect', id=key)))
         if not devices:
             self.board_menu.addAction('No Svalboard found').setEnabled(False)
         self.board_menu.addSeparator()
         disconnect = self.board_menu.addAction('Disconnect', lambda: self.command(dict(op='disconnect')))
-        disconnect.setEnabled(self.state.selected_device is not None)
+        disconnect.setEnabled(bool(self.boards))
 
     def set_capitals(self, value): self.set_flag('capitalAlphas', value)
 
@@ -572,103 +619,194 @@ class Host(QObject):
         area = (self.surface.screen() or self.app.primaryScreen()).availableGeometry()
         self.surface.move(area.x() + (area.width() - self.surface.width()) // 2, area.bottom() - self.surface.height() - 25)
 
+    # The reader class for each board; tests swap in a fake.
+    Worker = DeviceWorker
+
     def scan(self):
-        hid = hid_backend()
+        """Find every Svalboard: start a reader for each new one, let go of the ones unplugged."""
         try:
-            devices = candidates(hid)
-            self.devices = {hashlib.sha256(d['path']).hexdigest()[:20]: d for d in devices}
-            with self.state.lock:
-                self.state.devices = [dict(id=key, name=d.get('product_string') or 'Svalboard', serial=d.get('serial_number') or '') for key, d in self.devices.items()]
-            if self.worker is None and self.auto_connect:
-                remembered = self.state.remembered
-                matches = [key for key, d in self.devices.items() if remembered and remembered.get('serial') and d.get('serial_number') == remembered['serial']]
-                if remembered and len(matches) == 1: self.connect(matches[0], remembered.get('uid'))
-                elif not remembered and len(self.devices) == 1: self.connect(next(iter(self.devices)))
+            hid = hid_backend()
+            self.devices = device_keys(candidates(hid))
         except (OSError, ValueError) as e:
             with self.state.lock: self.state.status = f'Could not enumerate boards: {e}'
+            return
+        for key in [k for k in self.boards if k not in self.devices]:
+            self.retire(self.boards.pop(key).worker)
+        if self.paused is not None:
+            # Paused by Disconnect until a board arrives: a new one, or one back after a firmware update.
+            self.paused &= set(self.devices)
+            if any(key not in self.paused for key in self.devices): self.paused = None
+        if self.paused is None and self.auto_connect:
+            for key, device in self.devices.items():
+                board = self.boards.get(key)
+                if board is None:
+                    self.board_order += 1
+                    board = self.boards[key] = Board(key, device, order=self.board_order)
+                board.device = device
+                # A board without a serial can't be found again after a drop: its reader ends; start another.
+                if board.worker is None or board.worker.isFinished(): self.start(board)
+        with self.state.lock:
+            self.state.devices = [dict(id=key, name=d.get('product_string') or 'Svalboard', serial=d.get('serial_number') or '') for key, d in self.devices.items()]
+        self.follow()
 
-    def connect(self, key, uid=None):
-        if key not in self.devices: return
-        if not self.disconnect(): return
-        self.selected = self.devices[key]
-        self.state.selected_device = key
-        self.worker = DeviceWorker(self.selected, int(uid) if uid else None)
-        self.generation = self.worker.set_press_tracking(self.state.config['highlightPressed'])
-        self.worker.profile.connect(self.profile)
-        self.worker.state.connect(self.layers)
-        self.worker.pressed.connect(self.pressed)
-        self.worker.status.connect(self.status)
-        self.worker.pointing.connect(self.pointing_motion)
-        self.worker.set_pointing_tracking(self.pointing_wanted())
-        self.worker.start()
+    def start(self, board):
+        if board.worker is not None: self.retire(board.worker)
+        board.worker = worker = self.Worker(board.device)
+        board.ready = board.valid = board.loading = False
+        # Held keys are always read: they tell which board is in use, shown or not.
+        board.generation = worker.set_press_tracking(True)
+        worker.profile.connect(self.profile)
+        worker.state.connect(self.layers)
+        worker.pressed.connect(self.pressed)
+        worker.status.connect(self.status)
+        worker.pointing.connect(self.pointing_motion)
+        self.track_pointing(board)
+        worker.start()
+
+    def retire(self, worker):
+        """Stop a reader without waiting; reaped once its thread ends."""
+        if worker is None: return
+        worker.stop()
+        self.retiring.append(worker)
+
+    def reap(self):
+        for worker in [w for w in self.retiring if w.isFinished()]:
+            self.retiring.remove(worker); worker.deleteLater()
+
+    def board_of(self, worker):
+        return next((b for b in self.boards.values() if b.worker is worker and worker is not None), None)
+
+    def connect(self, key):
+        """Show this board only ('auto': follow the board in use), and end a pause."""
+        if key == 'auto': pinned = None
+        elif key in self.devices: pinned = self.devices[key].get('serial_number') or key
+        else: return
+        self.state.pinned = self.follower.pinned = pinned
+        try: self.state.save()
+        except OSError: pass
+        if self.paused is not None:
+            self.paused = None
+            self.scan()
+        self.follow()
 
     def disconnect(self):
-        if self.worker:
-            self.worker.stop()
-            if not self.worker.wait(1600): return False
-            self.worker.deleteLater(); self.worker = None
-        self.profile_ready = False
+        """Let go of every board (Keybard asks this before a firmware update), until a board
+        arrives or one is chosen in the Board menu. Waits briefly for the readers to close."""
+        workers = [b.worker for b in self.boards.values() if b.worker is not None]
+        for worker in workers: worker.stop()
+        deadline = time.monotonic() + 1.6
+        stopped = all([worker.wait(max(0, int((deadline - time.monotonic()) * 1000))) for worker in workers])
+        for worker in workers: self.retire(worker)
+        self.boards.clear()
+        self.paused = set(self.devices)
+        with self.state.lock: self.state.session = secrets.token_hex(12)
+        self.follow()
+        return stopped
+
+    def follow(self, now=None):
+        """Pick the board on show (boards.py) and put its state where the overlay reads it."""
+        if self.demo: return
+        now = time.monotonic() if now is None else now
+        shown_key, lender_key = self.follower.choose(self.boards, now)
+        shown, lender = self.boards.get(shown_key), self.boards.get(lender_key)
+        signature = (shown.key, shown.revision, lender.key if lender else None, lender.revision if lender else 0) if shown else None
+        changed = signature != self.shown_signature
         with self.state.lock:
-            self.state.valid = False; self.state.pressed = []; self.state.board = None; self.state.selected_device = None
-            self.state.layout_revision += 1; self.state.session = secrets.token_hex(12)
-            self.state.default = None; self.state.active = 0; self.state.matrix_available = None; self.state.modifiers = None
-        self.board_reports_modifiers = False
-        return True
+            state = self.state
+            if changed:
+                self.shown_signature = signature
+                state.board = composite(shown, lender)
+                state.layout_revision += 1
+            state.selected_device = shown.key if shown else None
+            state.shown_serial = (shown.serial or shown.key) if shown else None
+            state.pointing_device = lender.key if lender else None
+            pinned = self.follower.pinned_board(self.boards) if state.pinned is not None else None
+            state.follow = 'auto' if state.pinned is None else (pinned.key if pinned else state.pinned)
+            state.paused = self.paused is not None
+            state.boards = [b.summary() for b in sorted(self.boards.values(), key=lambda b: b.order)]
+            if shown is not None:
+                state.active, state.default, state.valid = shown.active, shown.default, shown.valid
+                state.matrix_available = shown.matrix_available
+                state.pressed = list(shown.pressed) if state.config['highlightPressed'] else []
+                if shown.modifiers is not None: state.modifiers = shown.modifiers
+                state.status = shown.status if len(self.boards) < 2 else f'{shown.name} · {shown.status}'
+            else:
+                state.active, state.default, state.valid, state.pressed, state.matrix_available = 0, None, False, [], None
+                state.status = ('Disconnected by user' if self.paused is not None
+                    else 'Waiting for the chosen board' if state.pinned is not None
+                    else next((b.status for b in self.boards.values()), 'Waiting for a Svalboard'))
+            # Remembered when chosen by use, not when it stands in for a board unplugged.
+            if changed and shown is not None and shown.used and shown.keyed and shown.serial and shown.board.get('uid'):
+                remembered = dict(serial=shown.serial, uid=shown.board['uid'])
+                if remembered != state.remembered:
+                    state.remembered = remembered; self.follower.preferred = shown.serial
+                    try: state.save()
+                    except OSError: pass
+        if changed:
+            self.pointing_pending = None; self.pointing_sides = {}
+            for board in self.boards.values(): self.track_pointing(board)
+            self.size_surface()
+            self.publish_state()
 
     def profile(self, profile):
-        if self.sender() is not self.worker: return
-        with self.state.lock:
-            self.state.board = serialize_profile(profile); self.state.layout_revision += 1
-            self.state.board['name'] = self.selected.get('product_string') or profile.name
-            serial = self.selected.get('serial_number')
-            if serial:
-                self.state.remembered = dict(serial=serial, uid=str(profile.uid))
-                try: self.state.save()
-                except OSError: pass
-        self.profile_ready = True
-        if self.worker: self.worker.set_pointing_tracking(self.pointing_wanted())
-        self.size_surface()
+        board = self.board_of(self.sender())
+        if board is None: return
+        board.board = serialize_profile(profile)
+        board.board['name'] = board.device.get('product_string') or profile.name
+        board.ready, board.loading = True, False
+        board.revision += 1
+        self.track_pointing(board)
+        self.follow()
         self.publish_state()
 
     def layers(self, snapshot):
-        if self.sender() is not self.worker or not self.profile_ready: return
-        self.last_state = time.monotonic()
-        with self.state.lock:
-            self.state.active, self.state.default = snapshot.active, snapshot.default
-            # Shift and Caps Lock come from this board alone when it reports them.
-            self.board_reports_modifiers = snapshot.modifiers is not None
-            if self.board_reports_modifiers: self.state.modifiers = snapshot.modifiers
-            mask = snapshot.active | (snapshot.default if snapshot.default is not None else self.state.config['manualDefault'])
-            self.state.valid = not (mask >> len(self.state.board['keymap']))
-            if not self.state.valid: self.state.status = 'Board refers to an unknown layer; reload the layout'
-        self.publish_state()
+        board = self.board_of(self.sender())
+        if board is None or not board.ready or board.loading: return
+        board.last_state = time.monotonic()
+        board.active, board.default = snapshot.active, snapshot.default
+        # Shift and Caps Lock come from this board alone when it reports them.
+        board.modifiers = snapshot.modifiers
+        mask = snapshot.active | (snapshot.default if snapshot.default is not None else self.state.config['manualDefault'])
+        board.valid = not (mask >> len(board.board['keymap']))
+        if not board.valid: board.status = 'Board refers to an unknown layer; reload the layout'
+        if board.key == self.follower.shown:
+            self.follow()
+            self.publish_state()
 
     def pressed(self, snapshot):
-        if self.sender() is not self.worker: return
+        board = self.board_of(self.sender())
+        if board is None: return
         generation, positions, sampled_at = snapshot
-        if generation != self.generation or not self.state.config['highlightPressed']: return
-        with self.state.lock:
-            self.state.matrix_available = positions is not None
-            self.state.pressed = [row * 6 + col for row, col in positions] if positions is not None and self.state.valid and time.monotonic() - sampled_at <= .5 else []
-        self.last_press = sampled_at
-        self.publish_state()
+        if generation != board.generation: return
+        board.matrix_available = positions is not None
+        board.pressed = [row * 6 + col for row, col in positions] if positions is not None and board.valid and time.monotonic() - sampled_at <= .5 else []
+        board.last_press = sampled_at
+        if positions and board.ready: board.used = sampled_at
+        shown = self.follower.shown
+        self.follow()
+        if board.key in (shown, self.follower.shown): self.publish_state()
 
     def status(self, status):
-        if self.sender() is not self.worker: return
-        with self.state.lock:
-            self.state.status = status
-            if not status.startswith('Connected'):
-                self.state.valid = False; self.state.pressed = []
-                if status.startswith(('Connecting', 'Disconnected', 'Stopped')):
-                    self.profile_ready = False; self.state.default = None
+        board = self.board_of(self.sender())
+        if board is None: return
+        board.status = status
+        if not status.startswith('Connected'):
+            board.valid = False; board.pressed = []
+            if status.startswith(('Connecting', 'Disconnected', 'Stopped')):
+                board.ready = False; board.default = None
+                self.follow()
 
     def tick(self):
+        now = time.monotonic()
+        for board in self.boards.values():
+            if now - board.last_state > .6: board.valid = False; board.pressed = []
+            if now - board.last_press > .5: board.pressed = []
         with self.state.lock:
-            if time.monotonic() - self.last_state > .6:
-                self.state.valid = False; self.state.pressed = []
-            if time.monotonic() - self.last_press > .5: self.state.pressed = []
-            if time.monotonic() - self.state.practice_at > 2.5:
+            if self.demo and now - self.demo_at > .6: self.state.valid = False
+            if now - self.state.practice_at > 2.5:
                 self.state.practice_hidden = []; self.state.practice_target = None
+        self.reap()
+        self.follow(now)
         self.status_action.setText(self.state.status[:65])
         self.sync_menu()
         self.publish_state()
@@ -676,11 +814,10 @@ class Host(QObject):
     def command(self, value):
         op = value['op']
         if op == 'configure':
-            if self.worker:
-                self.generation = self.worker.set_press_tracking(self.state.config['highlightPressed'])
+            for board in self.boards.values():
+                board.pressed = []; self.track_pointing(board)
             with self.state.lock: self.state.pressed = []
             self.size_surface()
-            if self.worker: self.worker.set_pointing_tracking(self.pointing_wanted())
         elif op == 'show':
             if value['value']: self.controls.set_collapsed(False)
             self.state.visible = value['value']; self.surface.setVisible(value['value']); self.show_action.setChecked(value['value']); self.controls.setVisible(value['value'])
@@ -691,42 +828,66 @@ class Host(QObject):
         elif op == 'scan': self.scan()
         elif op == 'connect': self.auto_connect = True; self.connect(value['id'])
         elif op == 'disconnect':
-            self.auto_connect = False
-            if self.disconnect(): self.state.status = 'Disconnected by user'
-        elif op == 'reload' and self.worker:
-            self.state.valid = False; self.profile_ready = False; self.worker.reload()
-        elif op == 'refresh' and self.worker and self.profile_ready:
-            # Keybard changed the board: re-read it, showing the current layout until the new one arrives.
-            self.worker.refresh()
-        elif op == 'refresh' and self.worker:
-            self.worker.reload()
+            self.disconnect()
+        elif op in ('reload', 'refresh'):
+            # Keybard doesn't say which board it changed: every board reads its layout again.
+            for board in self.boards.values():
+                if board.worker is None: continue
+                if op == 'refresh' and board.ready:
+                    # The current layout stays on show until the new one arrives.
+                    board.worker.refresh()
+                else:
+                    board.valid, board.loading = False, True
+                    board.worker.reload()
+            self.follow()
         self.publish_state()
 
-    def pointing_wanted(self):
-        """Read the board's pointing motion only while the overlay draws something with it."""
+    def track_pointing(self, board):
+        """Read a board's pointing motion: often while the overlay draws it (the shown board, and
+        keyless boards whose devices it may borrow), now and then otherwise, to see it's in use."""
+        if board.worker is None: return
         config = self.state.config
-        board = self.state.board
-        has_module = board is None or any((board.get('pointing') or {}).values())
-        return has_module and (config['showPointing'] or config['pointingPills'])
+        has_module = board.board is None or bool(kinds(board.board))
+        drawn = config['showPointing'] or config['pointingPills']
+        candidate = board.key in (self.follower.shown, self.follower.lender) or (board.board is not None and not board.keyed)
+        board.worker.set_pointing_tracking(has_module and drawn and candidate, watch=has_module)
 
     def pointing_motion(self, motion):
-        """Motion from the board (or the demo): to the overlay at up to 60 Hz."""
-        if self.sender() is not self.worker and self.sender() is not self.demo_pointing: return
-        self.forward_pointing(motion)
+        """Motion from a board (or the demo): to the overlay at up to 60 Hz, from the board on
+        show and, on its hands, a keyless board whose devices are borrowed."""
+        sender = self.sender()
+        if sender is not None and sender is self.demo_pointing: return self.forward_pointing(motion)
+        board = self.board_of(sender)
+        if board is None: return
+        if motion_used(motion) and board.ready:
+            board.used = board.moved = time.monotonic()
+            self.follow()
+        shown, lender = self.shown_board(), self.boards.get(self.follower.lender)
+        lent = lent_sides(lender)
+        if board is shown:
+            sides = tuple(side for side in ('left', 'right') if side not in lent)
+            if sides: self.forward_pointing(motion, sides, source=board.key)
+        elif board is lender and shown is not None:
+            self.forward_pointing(motion, lent, modes=not kinds(shown.board), source=board.key)
 
-    def forward_pointing(self, motion):
+    def forward_pointing(self, motion, sides=('left', 'right'), modes=True, source=None):
+        """Add this motion to what goes to the overlay next: dx and dy add up, the rest is the newest."""
         pending = self.pointing_pending
         if pending is None:
-            pending = self.pointing_pending = json.loads(json.dumps(motion))
-        else:
+            pending = self.pointing_pending = dict(sniper=motion['sniper'], boost=motion['boost'], elapsedMs=0)
             for side in ('left', 'right'):
-                for key in ('dx', 'dy'): pending[side][key] += motion[side][key]
-                for key in ('valid', 'touchValid', 'touchX', 'touchY', 'fingers', 'scrolling'): pending[side][key] = motion[side][key]
-                for key in ('cpi', 'contacts'):  # the newest only: contacts are where the fingers are now
-                    if key in motion[side]: pending[side][key] = motion[side][key]
-                    else: pending[side].pop(key, None)
-            pending['sniper'], pending['boost'] = motion['sniper'], motion['boost']
-            pending['elapsedMs'] = pending.get('elapsedMs', 0) + motion.get('elapsedMs', 0)
+                pending[side] = dict(self.pointing_sides.get(side) or motion[side], dx=0, dy=0)
+            self.pointing_source = source
+        for side in sides:
+            for key in ('dx', 'dy'): pending[side][key] += motion[side][key]
+            for key in ('valid', 'touchValid', 'touchX', 'touchY', 'fingers', 'scrolling'): pending[side][key] = motion[side][key]
+            for key in ('cpi', 'contacts'):  # the newest only: contacts are where the fingers are now
+                if key in motion[side]: pending[side][key] = motion[side][key]
+                else: pending[side].pop(key, None)
+            self.pointing_sides[side] = dict(motion[side], dx=0, dy=0)
+        if modes: pending['sniper'], pending['boost'] = motion['sniper'], motion['boost']
+        # The board's own time between reads, from one board only, or the overlay's speeds double.
+        if source == self.pointing_source: pending['elapsedMs'] += motion.get('elapsedMs', 0)
         config = self.state.config
         now = time.monotonic()
         if now - self.pointing_sent < .015: return
@@ -739,19 +900,21 @@ class Host(QObject):
         from dataclasses import replace
         from .device.model import demo_profile
         profile = replace(demo_profile(), pointing=(('left', 'touchpad'), ('right', 'trackball')))
+        self.auto_connect = False
+        self.disconnect()
+        self.demo = True
         with self.state.lock:
             self.state.board = serialize_profile(profile); self.state.layout_revision += 1
             self.state.valid = True; self.state.status = 'Pointing demo (no board)'
-        self.profile_ready = True
-        self.auto_connect = False
         self.size_surface()
         self.demo_pointing = QTimer(self)
         started = time.monotonic()
         last = [started]
+        self.demo_at = started
 
         def step():
             now = time.monotonic()
-            self.last_state = now
+            self.demo_at = now
             with self.state.lock: self.state.valid = True
             motion = demo_motion(now - started, now - last[0]); last[0] = now
             self.forward_pointing(motion)
@@ -764,8 +927,9 @@ class Host(QObject):
         if self.demo_pointing is not None: self.demo_pointing.stop()
         self.scan_timer.stop(); self.timer.stop()
         if self.colors_panel is not None: self.colors_panel.close()
-        if self.worker:
-            self.worker.stop(); self.worker.wait(5000)
+        workers = [b.worker for b in self.boards.values() if b.worker is not None] + self.retiring
+        for worker in workers: worker.stop()
+        for worker in workers: worker.wait(5000)
         self.server.shutdown(); self.server.server_close(); self.controls.close(); self.surface.close(); self.tray.hide()
 
 
@@ -777,9 +941,9 @@ def running_mode(url):
     except (OSError, ValueError): return None
 
 
-def refuse(message):
+def refuse(message, title='Keybard Overlay (paranoid mode)'):
     from PySide6.QtWidgets import QMessageBox
-    QMessageBox.critical(None, 'Keybard Overlay (paranoid mode)', message)
+    QMessageBox.critical(None, title, message)
 
 
 KEYBARD_URL = 'https://keybard.svalboard.com/#overlay'
@@ -831,6 +995,12 @@ def main():
         from PySide6.QtGui import QDesktopServices
         QDesktopServices.openUrl(QUrl(controls_url(False, url, args.keybard_url))); return
     if not (args.assets / 'index.html').exists(): raise SystemExit('Build Keybard web assets before starting the host.')
+    if not args.paranoid:
+        problem = web_base_problem((args.assets / 'index.html').read_text(encoding='utf-8', errors='replace'))
+        if problem:
+            # A blank overlay with no word why is worse than not starting.
+            print(problem, file=sys.stderr)
+            return refuse(f'Keybard Overlay will not start: {problem}.', 'Keybard Overlay')
     page = None
     if args.paranoid:
         try: page = load_paranoid_page(args.assets)

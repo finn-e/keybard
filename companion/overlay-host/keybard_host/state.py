@@ -3,6 +3,7 @@ import copy
 import json
 import re
 import secrets
+import time
 from threading import RLock
 from pathlib import Path
 
@@ -27,8 +28,15 @@ DEFAULTS = dict(layoutId='us', appearance=dict(PRESETS['Outline only']),
 # Settings that earlier test builds saved and this Host no longer has; dropped when read.
 RETIRED = frozenset({'cursorMultiplier'})
 
-# The balls Keybard can draw (Keybard's src/components/pointing-viz/webgl/materials.ts).
-BALLS = frozenset({'silver', 'red', 'black', 'pearl_blue', 'pearl_purple', 'pearl_white', 'pearl_black'})
+# The balls Keybard can draw, in its order and with its names (Keybard's
+# src/components/pointing-viz/webgl/materials.ts: BALLS, MAT_ORDER, DEFAULT_BALL).
+BALL_NAMES = {'silver': 'Silver sparkle', 'red': 'Glossy red', 'black': 'Black sparkle', 'pearl_blue': 'Pearl blue',
+              'pearl_purple': 'Pearl purple', 'pearl_white': 'Pearl white', 'pearl_black': 'Pearl black'}
+BALLS = frozenset(BALL_NAMES)
+DEFAULT_BALL = 'silver'
+# Keybard draws every ball at these (BALL_GLOSS, BALL_SPARKLE); looks saved by older Keybards
+# with other values would draw the overlay's balls differently, so these are always sent.
+BALL_GLOSS, BALL_SPARKLE = 1.0, 0.75
 # Boards whose pointing look is kept; the oldest is dropped beyond this.
 REMEMBERED_POINTING_BOARDS = 16
 
@@ -99,8 +107,18 @@ def validate_config(value):
 
 
 def remembered_board(value):
-    """The remembered board from preferences, or None unless it has a string serial and uid."""
+    """The remembered board from preferences, or None unless it has a string serial and uid.
+
+    Earlier versions followed only this board. Now every board is followed, and this is
+    just the one shown last: shown first at start, until a board is used."""
     if isinstance(value, dict) and isinstance(value.get('serial'), str) and isinstance(value.get('uid'), str):
+        return value
+    return None
+
+
+def pinned_board(value):
+    """The board chosen with "Show this board only" (its serial, or its id when it has none), or None."""
+    if isinstance(value, str) and 1 <= len(value) <= 128 and value.isprintable():
         return value
     return None
 
@@ -112,12 +130,18 @@ class HostState:
         self.token = secrets.token_urlsafe(32)
         self.config = copy.deepcopy(DEFAULTS)
         self.remembered = None
+        # Automatic (None): the overlay follows the board in use. Else the one board to show.
+        self.pinned = None
         self.revision = 0
         self.layout_revision = 0
         self.board = None
         self.status = 'Waiting for a Svalboard'
         self.devices = []
-        self.selected_device = None
+        self.selected_device = None  # the board on show
+        self.boards = []             # every connected board: id, name, serial, status, ready, keys, pointing
+        self.pointing_device = None  # a keyless board whose devices are drawn in the shown layout
+        self.follow = 'auto'          # 'auto', or the id of the pinned board
+        self.paused = False
         self.modifiers = None
         self.active = 0
         self.default = None
@@ -130,6 +154,11 @@ class HostState:
         self.visible = True
         self.session = secrets.token_hex(12)
         self.pointing_looks = {}
+        # When Keybard last sent each uid's look, and the balls chosen in the Overlay per board
+        # (serial): {serial: {'left': id, 'right': id, 'at': time}}. The most recent choice wins.
+        self.look_times = {}
+        self.board_balls = {}
+        self.shown_serial = None  # the board on show, set by the Host
         try:
             saved = json.loads(self.path.read_text())
         except (OSError, ValueError):
@@ -138,6 +167,7 @@ class HostState:
         try: self.config = validate_config(saved.get('config', {}))
         except (ValueError, TypeError, KeyError): pass
         self.remembered = remembered_board(saved.get('remembered'))
+        self.pinned = pinned_board(saved.get('pinned'))
         looks = saved.get('pointingLooks')
         if isinstance(looks, dict):
             for uid, look in list(looks.items())[-REMEMBERED_POINTING_BOARDS:]:
@@ -145,6 +175,15 @@ class HostState:
                     key, checked = validate_pointing_look(dict(look, uid=uid))
                     self.pointing_looks[key] = checked
                 except (ValueError, TypeError): pass
+        times = saved.get('pointingLookTimes')
+        if isinstance(times, dict):
+            self.look_times = {k: float(v) for k, v in times.items() if k in self.pointing_looks and type(v) in (int, float)}
+        balls = saved.get('boardBalls')
+        if isinstance(balls, dict):
+            for serial, choice in list(balls.items())[-REMEMBERED_POINTING_BOARDS:]:
+                if not isinstance(serial, str) or not 1 <= len(serial) <= 128 or not isinstance(choice, dict): continue
+                kept = {side: choice[side] for side in ('left', 'right') if choice.get(side) in BALLS}
+                if kept and type(choice.get('at')) in (int, float): self.board_balls[serial] = dict(kept, at=float(choice['at']))
         version = saved.get('version', 0)
         if 'config' in saved and type(version) is int and 0 <= version < PREFERENCES_VERSION:
             for migrate in PREFERENCES_MIGRATIONS[version:]: migrate(self.config)
@@ -154,7 +193,8 @@ class HostState:
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix('.tmp')
-        temporary.write_text(json.dumps(dict(version=PREFERENCES_VERSION, config=self.config, remembered=self.remembered, pointingLooks=self.pointing_looks)))
+        temporary.write_text(json.dumps(dict(version=PREFERENCES_VERSION, config=self.config, remembered=self.remembered, pinned=self.pinned, pointingLooks=self.pointing_looks,
+            pointingLookTimes=self.look_times, boardBalls=self.board_balls)))
         temporary.replace(self.path)
 
     def configure(self, config, revision):
@@ -176,20 +216,46 @@ class HostState:
         with self.lock:
             self.pointing_looks.pop(uid, None)
             self.pointing_looks[uid] = look
+            self.look_times[uid] = time.time()
             while len(self.pointing_looks) > REMEMBERED_POINTING_BOARDS:
                 self.pointing_looks.pop(next(iter(self.pointing_looks)))
+            self.look_times = {k: v for k, v in self.look_times.items() if k in self.pointing_looks}
             try: self.save()
             except OSError: pass  # still used this session
 
-    def pointing_look(self):
-        board = self.board
-        return dict(self.pointing_looks.get(board.get('uid'), {})) if board else {}
+    def set_board_ball(self, serial, side, ball):
+        """The ball chosen in the Overlay for one hand of one board (by serial); saved."""
+        if side not in ('left', 'right') or ball not in BALLS or not isinstance(serial, str) or not serial:
+            raise ValueError('Unknown ball or hand')
+        with self.lock:
+            choice = self.board_balls.pop(serial, {})
+            self.board_balls[serial] = dict(choice, **{side: ball}, at=time.time())
+            while len(self.board_balls) > REMEMBERED_POINTING_BOARDS:
+                self.board_balls.pop(next(iter(self.board_balls)))
+            try: self.save()
+            except OSError: pass  # still used this session
+
+    def pointing_look(self, board=None, serial=None):
+        """The balls the overlay draws for a board: per hand, the Overlay's choice for this board
+        or Keybard's look for its uid, whichever was made last; always Keybard's gloss and sparkle."""
+        board = self.board if board is None else board
+        if not board: return {}
+        serial = self.shown_serial if serial is None else serial
+        uid = board.get('uid')
+        keybard, sent = self.pointing_looks.get(uid, {}), self.look_times.get(uid, 0.0)
+        mine = self.board_balls.get(serial, {}) if serial else {}
+        look = {}
+        for side in ('left', 'right'):
+            ball = mine.get(side) if side in mine and mine['at'] >= sent else keybard.get(side, mine.get(side))
+            if ball: look[side] = ball
+        return dict(look, gloss=BALL_GLOSS, sparkle=BALL_SPARKLE)
 
     def snapshot(self, known_layout=None):
         with self.lock:
             return copy.deepcopy(dict(apiVersion=1, config=self.config, revision=self.revision,
                 layoutRevision=self.layout_revision, board=self.board if known_layout != self.layout_revision else None,
-                status=self.status, devices=self.devices, selectedDevice=self.selected_device, active=self.active, default=self.default, valid=self.valid,
+                status=self.status, devices=self.devices, selectedDevice=self.selected_device,
+                boards=self.boards, follow=self.follow, pointingDevice=self.pointing_device, paused=self.paused, active=self.active, default=self.default, valid=self.valid,
                 modifiers=self.modifiers, pointingLook=self.pointing_look(), practiceHidden=self.practice_hidden, practiceTarget=self.practice_target, pressed=self.pressed, matrixAvailable=self.matrix_available, visible=self.visible, session=self.session))
 
 

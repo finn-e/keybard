@@ -42,6 +42,20 @@ def paranoid_policy_ok(html):
             and policy.get('base-uri') == ["'none'"] and policy.get('form-action') == ["'none'"])
 
 
+def web_base_problem(index_html):
+    """Why a Keybard web build can't be served from the overlay's root, or None.
+
+    Every script and stylesheet must load from /assets/. A build made in Git Bash with
+    VITE_BASE_PATH=/ loads them from /Program Files/Git/assets/ instead (Git Bash rewrites
+    the path), so every one 404s and the overlay draws nothing."""
+    urls = re.findall(r'<script[^>]*\ssrc="([^"]+)"', index_html) + re.findall(r'<link[^>]*\srel="(?:stylesheet|modulepreload)"[^>]*\shref="([^"]+)"', index_html)
+    scripts = re.findall(r'<script[^>]*\ssrc="([^"]+)"', index_html)
+    wrong = [u for u in urls if not u.startswith(('/assets/', 'data:', 'blob:')) and not re.match(r'[a-z]+://', u)]
+    if not scripts or wrong:
+        return f'index.html loads {wrong or "no scripts"}, not /assets/: rebuild Keybard with VITE_BASE_PATH=/ from PowerShell (in Git Bash, also MSYS_NO_PATHCONV=1)'
+    return None
+
+
 def is_paranoid_page(index):
     return paranoid_policy_ok(index.read_text(encoding='utf-8', errors='replace'))
 
