@@ -11,6 +11,9 @@ import type { CustomKeycode } from "@/types/keyboard.types";
 export const CUSTOM_KEYCODE_LABELS: Readonly<Record<string, string>> = {
     // Firmware: "Scroll\nToggle\nHold". While held, pointer motion scrolls.
     SV_SCROLL_HOLD: "Drag Scroll",
+    // Firmware: "Velocity\nScroll". Hold: how far the pointer moves from where
+    // it was sets a scroll speed, and it keeps scrolling while the pointer is still.
+    SV_VELOCITY_SCROLL: "Velocity Scroll",
 };
 
 /** The label Keybard shows for a custom keycode, with real line breaks. */

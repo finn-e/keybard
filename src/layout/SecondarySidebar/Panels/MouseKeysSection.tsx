@@ -79,10 +79,16 @@ const MouseKeysSection = ({ compact, variant: variantOverride }: Props) => {
         { keycode: "SV_BOOST_5_TG", label: "Boost 5xTG" },
     ];
 
-    // Row 4: hold to scroll with the pointer (firmware SV_SCROLL_HOLD). The
-    // label matches the layout's (CUSTOM_KEYCODE_LABELS).
+    // Row 4: hold to scroll with the pointer (firmware SV_SCROLL_HOLD), and
+    // hold to scroll at a speed set by how far the pointer moves
+    // (SV_VELOCITY_SCROLL). The labels match the layout's
+    // (CUSTOM_KEYCODE_LABELS). Velocity Scroll is offered unless the connected
+    // firmware has no such key (it came after Drag Scroll).
+    const firmwareKeycodes = keyboard?.custom_keycodes;
+    const hasVelocityScroll = !firmwareKeycodes || firmwareKeycodes.some((ck) => ck.name === "SV_VELOCITY_SCROLL");
     const scrollKeys = [
         { keycode: "SV_SCROLL_HOLD", label: "Drag Scroll" },
+        ...(hasVelocityScroll ? [{ keycode: "SV_VELOCITY_SCROLL", label: "Velocity Scroll" }] : []),
     ];
 
     // Every key row in this section MUST go through renderKey so it picks up the
@@ -240,7 +246,7 @@ const MouseKeysSection = ({ compact, variant: variantOverride }: Props) => {
                 <span className={compact ? "text-[9px] font-bold text-slate-500 dark:text-neutral-400 uppercase" : "font-semibold text-lg text-kb-ink"}>
                     Scroll
                 </span>
-                {/* Row 4: Drag Scroll */}
+                {/* Row 4: Drag Scroll, Velocity Scroll */}
                 <div className="flex flex-wrap gap-1">
                     {scrollKeys.map((k) => renderKey(k, false))}
                 </div>

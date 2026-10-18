@@ -9,6 +9,10 @@ describe('custom keycode labels', () => {
         expect(customKeycodeShortName({ name: 'SV_SCROLL_HOLD', shortName: 'Scroll\\nToggle\\nHold' })).toBe('Drag Scroll');
     });
 
+    it('shows SV_VELOCITY_SCROLL as "Velocity Scroll" on one line', () => {
+        expect(customKeycodeShortName({ name: 'SV_VELOCITY_SCROLL', shortName: 'Velocity\\nScroll' })).toBe('Velocity Scroll');
+    });
+
     it("keeps the firmware's shortName for other keys, with real line breaks", () => {
         expect(customKeycodeShortName({ name: 'SV_SNIPER_2', shortName: 'Sniper\\n2x' })).toBe('Sniper\n2x');
         expect(customKeycodeShortName({ name: 'SV_SNIPER_3', shortName: 'Sniper\n3x' })).toBe('Sniper\n3x');

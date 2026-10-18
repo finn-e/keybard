@@ -7,7 +7,8 @@ import MouseKeysSection from '../../src/layout/SecondarySidebar/Panels/MouseKeys
 const layoutSettings = { keyVariant: 'default' as 'small' | 'medium' | 'default', layoutMode: 'sidebar' };
 
 vi.mock('@/contexts/LayoutSettingsContext', () => ({ useLayoutSettings: () => layoutSettings }));
-vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ keyboard: null }) }));
+const keyboardState: { keyboard: unknown } = { keyboard: null };
+vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => keyboardState }));
 vi.mock('@/contexts/LayerContext', () => ({ useLayer: () => ({ selectedLayer: 0 }) }));
 const assignKeycode = vi.fn();
 vi.mock('@/contexts/KeyBindingContext', () => ({ useKeyBinding: () => ({ assignKeycode }) }));
@@ -21,7 +22,7 @@ const EXPECTED_KEYS = [
     'KC_BTN1', 'KC_BTN2', 'KC_BTN3', 'KC_BTN4', 'KC_BTN5',
     'SV_SNIPER_2', 'SV_SNIPER_3', 'SV_SNIPER_5', 'SV_SNIPER_2_TG', 'SV_SNIPER_3_TG', 'SV_SNIPER_5_TG',
     'SV_BOOST_2', 'SV_BOOST_3', 'SV_BOOST_5', 'SV_BOOST_2_TG', 'SV_BOOST_3_TG', 'SV_BOOST_5_TG',
-    'SV_SCROLL_HOLD',
+    'SV_SCROLL_HOLD', 'SV_VELOCITY_SCROLL',
 ];
 
 function renderedKeys() {
@@ -45,6 +46,7 @@ function expectUniformSizing(expectedVariant: string, expectedSize: string) {
 describe('MouseKeysSection: mouse buttons, sniper, boost and scroll rows size identically', () => {
     beforeEach(() => {
         layoutSettings.keyVariant = 'default';
+        keyboardState.keyboard = null;
     });
 
     it('renders the Boost and Scroll rows alongside Mouse Buttons and Sniper Keys', () => {
@@ -60,6 +62,24 @@ describe('MouseKeysSection: mouse buttons, sniper, boost and scroll rows size id
         const key = screen.getAllByTestId('key').find((el) => el.getAttribute('data-keycode') === 'SV_SCROLL_HOLD');
         expect(key).toBeDefined();
         expect(key!.getAttribute('data-label')).toBe('Drag Scroll');
+    });
+
+    it('offers Velocity Scroll (SV_VELOCITY_SCROLL) next to Drag Scroll, and assigns it', () => {
+        render(<MouseKeysSection />);
+        const keys = screen.getAllByTestId('key').map((el) => el.getAttribute('data-keycode'));
+        expect(keys.indexOf('SV_VELOCITY_SCROLL')).toBe(keys.indexOf('SV_SCROLL_HOLD') + 1);
+        const key = screen.getAllByTestId('key').find((el) => el.getAttribute('data-keycode') === 'SV_VELOCITY_SCROLL')!;
+        expect(key.getAttribute('data-label')).toBe('Velocity Scroll');
+        fireEvent.click(key);
+        expect(assignKeycode).toHaveBeenCalledWith('SV_VELOCITY_SCROLL');
+    });
+
+    it('leaves Velocity Scroll out for firmware that has no such key', () => {
+        keyboardState.keyboard = { custom_keycodes: [{ name: 'SV_SCROLL_HOLD', title: '', shortName: 'Scroll\\nToggle\\nHold' }] };
+        render(<MouseKeysSection />);
+        const keys = screen.getAllByTestId('key').map((el) => el.getAttribute('data-keycode'));
+        expect(keys).toContain('SV_SCROLL_HOLD');
+        expect(keys).not.toContain('SV_VELOCITY_SCROLL');
     });
 
     it('assigns SV_SCROLL_HOLD when Drag Scroll is clicked', () => {
