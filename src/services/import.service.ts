@@ -17,7 +17,8 @@ const kc = (value: unknown): number => typeof value === "string" ? keyService.pa
  */
 const canonical: Record<string, (entry: any) => unknown> = {
     combos: c => [[0, 1, 2, 3].map(i => kc(c.keys?.[i] ?? 0)), kc(c.output), (c.options ?? 0) >>> 0],
-    tapdances: t => [kc(t.tap), kc(t.hold), kc(t.doubletap), kc(t.taphold), t.tapping_term ?? 200, t.enabled !== false],
+    // Every tap dance write turns it on, so `enabled` isn't compared.
+    tapdances: t => [kc(t.tap), kc(t.hold), kc(t.doubletap), kc(t.taphold), t.tapping_term ?? 200],
     key_overrides: o => [kc(o.trigger), kc(o.replacement), (o.layers ?? 0xFFFF) >>> 0, o.trigger_mods || 0, o.negative_mod_mask || 0, o.suppressed_mods || 0, o.options || 0],
     alt_repeat_keys: a => [kc(a.keycode), kc(a.alt_keycode), a.allowed_mods || 0, a.options || 0],
     // The board's reader drops empty sequence slots, so compare without them.

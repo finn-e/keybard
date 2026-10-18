@@ -353,17 +353,6 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false }) => {
                     />
                 </div>
 
-                {bindingTypeToEdit === "tapdances" && keyboard?.tapdances && itemToEdit !== null && (
-                    <div className="mt-[20px]" aria-label="Tap dance enabled">
-                        <span className="text-xs">Enabled</span>
-                        <OnOffToggle label="Tap dance enabled" value={keyboard.tapdances[itemToEdit]?.enabled !== false} onToggle={async enabled => {
-                            const updatedKeyboard = structuredClone(keyboard);
-                            updatedKeyboard.tapdances![itemToEdit].enabled = enabled;
-                            setKeyboard(updatedKeyboard);
-                            await persistBinding(updatedKeyboard, "tapdance", itemToEdit);
-                        }} />
-                    </div>
-                )}
                 {bindingTypeToEdit === "leaders" && keyboard?.leaders && itemToEdit !== null && (
                     <div className="mt-[20px]">
                         <OnOffToggle
