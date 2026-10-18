@@ -79,8 +79,43 @@ def parse_pointing_motion(data):
             cpi = int.from_bytes(data[offset:offset + 2], "little")
             if cpi:
                 block['cpi'] = cpi
-    return dict(sniper=bool(modes & 1), boost=bool(modes & 2), elapsedMs=data[2],
-                left=left, right=right)
+    motion = dict(sniper=bool(modes & 1), boost=bool(modes & 2), elapsedMs=data[2],
+                  left=left, right=right)
+    velocity = parse_velocity_scroll(data)
+    if velocity is not None:
+        motion['velocityScroll'] = velocity
+    return motion
+
+
+# Velocity Scroll's block in a 0x2D payload: offsets 29-52, marked by 0x56 at 29.
+VELOCITY_SCROLL_OFF = 29
+VELOCITY_SCROLL_LEN = 24
+VELOCITY_SCROLL_MAGIC = 0x56
+
+
+def parse_velocity_scroll(data):
+    """Velocity Scroll's state and curves from a 0x2D payload, as Keybard's VelocityScrollState, or None.
+
+    magic(1) flags(1) offset x, y (int16, 0.01 mm) speed h, v (int16, 0.01 notch/s, +up)
+    max (uint16, 0.01 notch/s), then dead zone (0.01 mm), gain (0.01 notch/s) and exponent
+    (0.001) for the trackball and for the touchpad. Older firmware leaves the magic zero.
+    """
+    o = VELOCITY_SCROLL_OFF
+    if len(data) < o + VELOCITY_SCROLL_LEN or data[o] != VELOCITY_SCROLL_MAGIC:
+        return None
+    flags = data[o + 1]
+    s16 = lambda k: int.from_bytes(data[o + k:o + k + 2], "little", signed=True)
+    u16 = lambda k: int.from_bytes(data[o + k:o + k + 2], "little")
+    top = u16(10) / 100
+    curve = lambda k: dict(deadMm=u16(k) / 100, gain=u16(k + 2) / 100, exponent=u16(k + 4) / 1000, maxNps=top)
+    lock = (flags >> 4) & 3
+    return dict(held=bool(flags & 1),
+                padHand=('right' if flags & 4 else 'left') if flags & 2 else None,
+                axisLock=bool(flags & 8),
+                lockedAxis={1: 'vertical', 2: 'horizontal'}.get(lock, 'none'),
+                offsetMm=dict(x=s16(2) / 100, y=s16(4) / 100),
+                speedNps=dict(h=s16(6) / 100, v=s16(8) / 100),
+                ball=curve(12), pad=curve(18))
 
 
 def pad_unit(count, counts):

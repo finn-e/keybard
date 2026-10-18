@@ -8,6 +8,7 @@ import { PARANOID } from '@/lib/paranoid';
 import { appStorage } from '@/utils/app-storage';
 import type { PadContact } from '@/utils/pointing-contacts';
 import type { PointingMotionReport } from '@/utils/pointing-motion';
+import { velocityScrollFromJson } from '@/utils/velocity-scroll';
 import { HOST_ORIGIN } from './host';
 
 /** The Host's pointing settings: devices off, the pills on. */
@@ -76,9 +77,11 @@ export function hostPointingEvent(detail: unknown): PointingMotionReport | null 
             ...(Array.isArray(o.contacts) ? { contacts: hostContacts(o.contacts) } : {}),
         };
     };
+    const velocityScroll = velocityScrollFromJson(d.velocityScroll);
     return {
         sniper: d.sniper === true, boost: d.boost === true, autoMouseLayer: false, axisLockEnabled: false, naturalScroll: false, scrollKey: false,
         elapsedMs: typeof d.elapsedMs === 'number' ? d.elapsedMs : 16, axisLock: 'free', left: half(d.left), right: half(d.right),
+        ...(velocityScroll ? { velocityScroll } : {}),
     };
 }
 

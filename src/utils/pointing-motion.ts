@@ -4,6 +4,7 @@
 // keyboards/svalboard/docs/protocol.md, "Pointing motion".
 
 import type { PadContact } from "./pointing-contacts";
+import { parseVelocityScroll, type VelocityScrollState } from "./velocity-scroll";
 
 /** GET_INFO second feature byte: the board answers POINTING_MOTION (0x2D). */
 export const SVIL_FLAG2_POINTING_MOTION = 0x08;
@@ -64,6 +65,11 @@ export interface PointingMotionReport {
     axisLock: AxisLock;
     left: PointingMotionHalf;
     right: PointingMotionHalf;
+    /**
+     * Velocity Scroll's state and curves, on firmware that reports them (a
+     * 64-byte reply with the block at 29-52). Absent: no pill, nothing drawn.
+     */
+    velocityScroll?: VelocityScrollState;
 }
 
 const HALF_BYTES = 10;
@@ -108,6 +114,7 @@ export function parsePointingMotion(reply: Uint8Array, cmd = 0x2d): PointingMoti
     const p = 1; // payload offset 0 = format byte
     const mode = view.getUint8(p + 1);
     const axis = view.getUint8(p + 23);
+    const velocityScroll = parseVelocityScroll(view, p);
     return {
         sniper: (mode & 0x01) !== 0,
         boost: (mode & 0x02) !== 0,
@@ -119,5 +126,6 @@ export function parsePointingMotion(reply: Uint8Array, cmd = 0x2d): PointingMoti
         axisLock: axis === 1 ? "vertical" : axis === 2 ? "horizontal" : "free",
         left: withCpi(parseHalf(view, p + 3), view, p + 25),
         right: withCpi(parseHalf(view, p + 3 + HALF_BYTES), view, p + 27),
+        ...(velocityScroll ? { velocityScroll } : {}),
     };
 }

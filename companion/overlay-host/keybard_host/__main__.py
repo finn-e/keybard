@@ -726,6 +726,9 @@ class Host(QObject):
                     if key in motion[side]: pending[side][key] = motion[side][key]
                     else: pending[side].pop(key, None)
             pending['sniper'], pending['boost'] = motion['sniper'], motion['boost']
+            # Velocity Scroll: the newest state, and gone when the board stops sending it.
+            if 'velocityScroll' in motion: pending['velocityScroll'] = motion['velocityScroll']
+            else: pending.pop('velocityScroll', None)
             pending['elapsedMs'] = pending.get('elapsedMs', 0) + motion.get('elapsedMs', 0)
         config = self.state.config
         now = time.monotonic()
@@ -734,8 +737,9 @@ class Host(QObject):
         if self.state.visible and (config['showPointing'] or config['pointingPills']):
             self.surface.page().runJavaScript("window.dispatchEvent(new CustomEvent('keybard-host-pointing',{detail:" + json.dumps(pending, separators=(',', ':')) + "}))")
 
-    def start_demo_pointing(self):
-        """--demo-pointing: an illustration board with a left touchpad and a right trackball, rolling, sniper on."""
+    def start_demo_pointing(self, velocity=False):
+        """--demo-pointing: an illustration board with a left touchpad and a right trackball, rolling, sniper on.
+        --demo-velocity: the same board with Velocity Scroll held on the trackball, its offset moving."""
         from dataclasses import replace
         from .device.model import demo_profile
         profile = replace(demo_profile(), pointing=(('left', 'touchpad'), ('right', 'trackball')))
@@ -753,7 +757,7 @@ class Host(QObject):
             now = time.monotonic()
             self.last_state = now
             with self.state.lock: self.state.valid = True
-            motion = demo_motion(now - started, now - last[0]); last[0] = now
+            motion = demo_motion(now - started, now - last[0], velocity); last[0] = now
             self.forward_pointing(motion)
         self.demo_pointing.timeout.connect(step)
         self.demo_pointing.start(16)
@@ -807,6 +811,7 @@ def main():
     parser.add_argument('--paranoid', action='store_true', help='serve Keybard Paranoid and accept no website origins')
     parser.add_argument('--keybard-url', default=KEYBARD_URL, help='Keybard page that Open Keybard opens (testing)')
     parser.add_argument('--demo-pointing', action='store_true', help='review: an illustration board with pointing devices, rolling, sniper on (no board needed)')
+    parser.add_argument('--demo-velocity', action='store_true', help='review: --demo-pointing with Velocity Scroll held on the trackball, its offset moving')
     parser.add_argument('--show-pointing', action='store_true', help='review: turn on Show pointing devices for this run, without saving it')
     args = parser.parse_args()
     if args.paranoid:
@@ -839,7 +844,7 @@ def main():
     host = Host(app, args.assets, state, args.port, args.allow_origin, args.paranoid, page)
     host.keybard_url = args.keybard_url
     if args.show_pointing: state.config['showPointing'] = True
-    if args.demo_pointing: host.start_demo_pointing()
+    if args.demo_pointing or args.demo_velocity: host.start_demo_pointing(velocity=args.demo_velocity)
     if not args.no_open: host.open_controls()
     sys.exit(app.exec())
 

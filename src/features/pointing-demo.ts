@@ -5,6 +5,8 @@
 //                             trackball (the demo layout has no pointing instances)
 //   &left= &right=            trackball | touchpad | none, per hand (also works on a board)
 //   &sniper=1 &boost=1        hold sniper or boost on (simulated; a board reports its own)
+//   &velocity=1               hold Velocity Scroll at the moving hand, with an offset that
+//                             moves (or holds still with &motion=0); &velViz= picks the look
 //   &hand=left|right          the hand that moves (default: the right)
 //   &motion=0                 no scripted motion (default: on in the demo)
 //   &ball=<id> / &leftBall=   show that ball for this load (see pointing-look.service)
@@ -16,6 +18,8 @@
 
 import type { PointingMotionReport } from "@/utils/pointing-motion";
 import { DEFAULT_TRACKBALL_CPI } from "@/components/pointing-viz/ball-gearing";
+import { TOUCHPAD_MM } from "@/components/pointing-viz/webgl/materials";
+import { velocityStateFor } from "@/utils/velocity-scroll";
 
 export type DemoKind = "trackball" | "touchpad" | "none";
 export interface PointingDemo {
@@ -25,6 +29,8 @@ export interface PointingDemo {
     right?: DemoKind;
     sniper: boolean;
     boost: boolean;
+    /** Velocity Scroll held at the moving hand (simulated). */
+    velocity: boolean;
     hand: "left" | "right";
     motion: boolean;
     panel?: "settings" | "fragments";
@@ -45,16 +51,17 @@ export function pointingDemoFromSearch(search: string): PointingDemo | null {
     try { p = new URLSearchParams(search); } catch { return null; }
     const demo = p.get("demo")?.trim().toLowerCase() === "pointing" || p.get("hostDemo")?.trim().toLowerCase() === "pointing";
     const left = kindParam(p.get("left")), right = kindParam(p.get("right"));
-    const sniper = on(p.get("sniper")), boost = on(p.get("boost"));
+    const sniper = on(p.get("sniper")), boost = on(p.get("boost")), velocity = on(p.get("velocity"));
     const panelRaw = p.get("panel")?.trim().toLowerCase();
     const panel = panelRaw === "settings" || panelRaw === "fragments" ? panelRaw : undefined;
-    if (!demo && !left && !right && !sniper && !boost && !p.has("motion") && !panel) return null;
+    if (!demo && !left && !right && !sniper && !boost && !velocity && !p.has("motion") && !panel) return null;
     return {
         demo,
         left: left ?? (demo ? "touchpad" : undefined),
         right: right ?? (demo ? "trackball" : undefined),
         sniper,
         boost,
+        velocity,
         hand: p.get("hand")?.trim().toLowerCase() === "left" ? "left" : "right",
         motion: p.has("motion") ? on(p.get("motion")) : demo,
         panel,
@@ -107,6 +114,24 @@ function emptyHalf() {
 }
 
 /**
+ * Velocity Scroll's scripted offset, mm (+x right, +y toward the user), at t
+ * seconds: it starts away from the anchor (so a still frame shows an offset),
+ * pulls toward the user to near full speed, eases back through the dead zone,
+ * pushes away, and drifts sideways a little. Still (motion off): a fixed offset.
+ */
+export function velocityPath(t: number, kind: "trackball" | "touchpad", moving: boolean): { x: number; y: number } {
+    const reach = kind === "trackball" ? 34 : 14;
+    if (!moving) return { x: kind === "trackball" ? 2.2 : 1.2, y: reach * 0.62 };
+    const T = 9, u = (((t % T) + T) % T) / T;
+    const y = reach * (0.62 * Math.cos(u * Math.PI * 2) + 0.18 * Math.sin(u * Math.PI * 4));
+    const x = reach * 0.16 * Math.sin(u * Math.PI * 2 * 1.5 + 0.6);
+    return { x, y };
+}
+
+/** Where the scripted pad finger touches down, in pad half-extents. */
+export const VELOCITY_PAD_ANCHOR = { x: -0.15, y: -0.1 };
+
+/**
  * A scripted POINTING_MOTION report for the interval (t0, t1] seconds: the
  * moving hand's device moves, the other rests. Touch position is reported for
  * the pad (as future firmware will), so its fingertip lands where the path says.
@@ -118,7 +143,23 @@ export function demoReport(d: PointingDemo, t0: number, t1: number): PointingMot
         const half = side === "left" ? left : right;
         if (!kind || kind === "none") continue;
         half.valid = true;
-        if (!d.motion || side !== d.hand) continue;
+        if (side !== d.hand) continue;
+        if (d.velocity) {
+            // Velocity Scroll: the ball rolls by the offset's change; the finger sits at the anchor plus the offset.
+            const a = velocityPath(t0, kind, d.motion), b = velocityPath(t1, kind, d.motion);
+            if (kind === "trackball") {
+                half.dx = Math.round((b.x - a.x) * DEMO_COUNTS_PER_MM);
+                half.dy = Math.round((b.y - a.y) * DEMO_COUNTS_PER_MM);
+            } else {
+                const fx = VELOCITY_PAD_ANCHOR.x + b.x / (TOUCHPAD_MM.w / 2), fy = VELOCITY_PAD_ANCHOR.y + b.y / (TOUCHPAD_MM.h / 2);
+                half.touchValid = true;
+                half.fingers = 1;
+                half.touchX = Math.round((Math.max(-1, Math.min(1, fx)) * 0.5 + 0.5) * 255);
+                half.touchY = Math.round((Math.max(-1, Math.min(1, fy)) * 0.5 + 0.5) * 255);
+            }
+            continue;
+        }
+        if (!d.motion) continue;
         if (kind === "trackball") {
             const [vx, vy] = fingerPath(t1, side === "right" ? 3.3 : 0);
             const scale = (t1 - t0) * BALL_RADIUS_MM * DEMO_COUNTS_PER_MM;
@@ -138,8 +179,13 @@ export function demoReport(d: PointingDemo, t0: number, t1: number): PointingMot
             }
         }
     }
+    const vsKind = d[d.hand];
+    const velocityScroll = d.velocity && (vsKind === "trackball" || vsKind === "touchpad")
+        ? velocityStateFor(velocityPath(t1, vsKind, d.motion), vsKind === "touchpad" ? d.hand : null)
+        : undefined;
     return {
         sniper: d.sniper, boost: d.boost, autoMouseLayer: false, axisLockEnabled: false, naturalScroll: false, scrollKey: false,
         elapsedMs: Math.round((t1 - t0) * 1000), axisLock: "free", left, right,
+        ...(velocityScroll ? { velocityScroll } : {}),
     };
 }

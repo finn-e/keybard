@@ -16,7 +16,8 @@ import './trainer.css';
  * ?hostOverlay=1&hostDemo=pointing: the Keybard Host overlay as it draws the
  * pointing devices, without a Host or a board, for review. The QWERTY Example
  * with a left touchpad and a right trackball, scripted motion, and the Host's
- * pointing settings from the URL: &showDevices=1|0, &pills=0, &sniper=1, &boost=1.
+ * pointing settings from the URL: &showDevices=1|0, &pills=0, &sniper=1, &boost=1,
+ * &velocity=1 (Velocity Scroll held, with &velViz=).
  */
 export default function HostPointingDemo() {
     const demo = pointingDemo();
@@ -27,7 +28,7 @@ export default function HostPointingDemo() {
         void fetch(demoLayoutUrl).then(r => r.text()).then(t => { if (alive) setBoard(fileService.parseContent(t)); }).catch(() => {});
         return () => { alive = false; };
     }, []);
-    useEffect(() => (demo?.motion ? startDemoFeed(demo, feed) : undefined), [demo, feed]);
+    useEffect(() => (demo?.motion || demo?.velocity ? startDemoFeed(demo, feed) : undefined), [demo, feed]);
     const params = new URLSearchParams(window.location.search);
     const flag = (k: string, dflt: boolean) => (params.has(k) ? !/^(0|false|off|no)$/i.test(params.get(k) ?? '') : dflt);
     const config = { showPointing: flag('showDevices', true), pointingPills: flag('pills', true) };
