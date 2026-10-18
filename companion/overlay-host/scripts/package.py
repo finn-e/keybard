@@ -3,6 +3,7 @@ from pathlib import Path
 import hashlib
 import json
 import os
+import re
 import subprocess
 import zipfile
 
@@ -19,25 +20,35 @@ def build_json():
         except (OSError, subprocess.CalledProcessError): commit = None
     return json.dumps({'version': os.environ.get('KEYBARD_HOST_VERSION') or 'dev', 'keybardCommit': commit[:7] if commit else None})
 
+def base_path_problem(index_html):
+    """Why a web build can't be served from the Host's root, or None. Git Bash rewrites
+    VITE_BASE_PATH=/ into its own folder (/Program Files/Git/), which leaves the overlay blank."""
+    scripts = re.findall(r'<script[^>]*\ssrc="([^"]+)"', index_html)
+    if not scripts or any(not s.startswith('/assets/') for s in scripts):
+        return f'index.html loads {scripts}, not /assets/: build with VITE_BASE_PATH=/ (in Git Bash, also MSYS_NO_PATHCONV=1)'
+    return None
+
 def package():
     if not (DIST / 'index.html').exists(): raise SystemExit('Build Keybard with VITE_BASE_PATH=/ first')
+    problem = base_path_problem((DIST / 'index.html').read_text(encoding='utf-8'))
+    if problem: raise SystemExit(problem)
     if not PARANOID.exists(): raise SystemExit('Build Keybard Paranoid first (npm run build:paranoid)')
     web_files = [p for p in DIST.rglob('*') if p.is_file() and p.suffix != '.zip']
-    destination = DIST / 'KeybardHost-Windows.zip'
+    destination = DIST / 'KeybardOverlay-Windows.zip'
     with zipfile.ZipFile(destination, 'w', zipfile.ZIP_DEFLATED) as archive:
         for folder in ('keybard_host', 'scripts', 'tests'):
             for path in (HOST / folder).rglob('*'):
                 if path.is_file() and '__pycache__' not in path.parts:
-                    archive.write(path, Path('KeybardHost') / path.relative_to(HOST))
-        archive.writestr('KeybardHost/keybard_host/build.json', build_json())
+                    archive.write(path, Path('KeybardOverlay') / path.relative_to(HOST))
+        archive.writestr('KeybardOverlay/keybard_host/build.json', build_json())
         for name in ('Start-Windows.cmd', 'Start-Paranoid.cmd', 'Open-Paranoid.cmd', 'README.md', 'RELEASE-NOTES.md', 'requirements.txt', 'start-linux.sh', 'start-macos.sh'):
-            archive.write(HOST / name, Path('KeybardHost') / name)
+            archive.write(HOST / name, Path('KeybardOverlay') / name)
         for path in web_files:
-            archive.write(path, Path('KeybardHost/web') / path.relative_to(DIST))
+            archive.write(path, Path('KeybardOverlay/web') / path.relative_to(DIST))
         # Paranoid mode serves the single-file build; it is also usable on its own.
-        archive.write(PARANOID, Path('KeybardHost/web-paranoid/index.html'))
-        archive.writestr('KeybardHost/web-paranoid/SHA256SUMS.txt', f'{hashlib.sha256(PARANOID.read_bytes()).hexdigest()}  index.html\n')
-        archive.write(PARANOID, Path('KeybardHost') / PARANOID.name)
+        archive.write(PARANOID, Path('KeybardOverlay/web-paranoid/index.html'))
+        archive.writestr('KeybardOverlay/web-paranoid/SHA256SUMS.txt', f'{hashlib.sha256(PARANOID.read_bytes()).hexdigest()}  index.html\n')
+        archive.write(PARANOID, Path('KeybardOverlay') / PARANOID.name)
     print(destination)
 
 if __name__ == '__main__': package()

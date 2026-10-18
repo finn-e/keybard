@@ -5,7 +5,7 @@ A modern React UI built with Vite and TypeScript for keyboard configuration.
 ## Structure
 
 ```
-keybard-ng/
+keybard/
 ├── src/               # Vite + React + TS
 │   ├── components/    # React components
 │   ├── contexts/      # React contexts (KeyboardContext)

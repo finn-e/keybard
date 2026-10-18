@@ -9,11 +9,14 @@ import { SvilUSB, usbInstance } from "../services/usb.service";
 import { customValueService } from "../services/custom-value.service";
 import { getClosestPresetColor } from "../utils/color-conversion";
 import type { KeyboardInfo } from "../types/keyboard.types";
+import { seedComboNames } from "../utils/combo-names";
+import { recallComboNames, rememberComboNames } from "../utils/combo-name-memory";
 import type { KeyBlockWriter } from "../services/changes.service";
 import { PARANOID, userIsLooking } from "../lib/paranoid";
 import { LinuxHidAccessError } from "../utils/linux-hid-access";
 import { UnsupportedFirmwareError, type UnsupportedFirmwareInfo } from "../utils/unsupported-firmware";
 import { RAW_HID_USAGES } from "../services/hid-report";
+import { usePointingDetection } from "../hooks/usePointingDetection";
 
 interface KeyboardContextType {
     keyboard: KeyboardInfo | null;
@@ -58,6 +61,17 @@ interface KeyboardContextType {
 
 const serializeDraft = (value: unknown) => JSON.stringify(value, (_key, item) => item instanceof Map ? { __map: [...item.entries()] } : item);
 
+/**
+ * The draft compared against the board. On a connected board, combo names are
+ * saved by local backups, never by Apply, so they are not an unsaved edit there.
+ * In an offline layout they are: only an export keeps them.
+ */
+export const draftOf = (kb: KeyboardInfo | null, connected: boolean) => {
+    if (!connected || !kb?.cosmetic?.combos) return serializeDraft(kb);
+    const { combos: _names, ...cosmetic } = kb.cosmetic;
+    return serializeDraft({ ...kb, cosmetic });
+};
+
 const KeyboardContext = createContext<KeyboardContextType | undefined>(undefined);
 
 // The raw HID interfaces Svalboard firmware exposes (also where the report length is read)
@@ -99,7 +113,19 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setConnectionFix(null);
         setConnectionFirmware(null);
     }, []);
+    // The layout as last loaded (file, demo or board), and the version the
+    // combo name memory last saw: edits after a load are compared to it.
+    const loadedLayoutRef = useRef<KeyboardInfo | null>(null);
+    const rememberedRef = useRef<KeyboardInfo | null>(null);
+    useEffect(() => {
+        if (!keyboard) return;
+        const previous = keyboard === loadedLayoutRef.current ? null : rememberedRef.current;
+        rememberedRef.current = keyboard;
+        rememberComboNames(previous, keyboard);
+    }, [keyboard]);
     const [connectionSessionId, setConnectionSessionId] = useState(0);
+    // Counts loads from the board, so late pointing detection starts over on each.
+    const [boardLoad, setBoardLoad] = useState(0);
     const sessionRef = useRef(0);
     // Keymap dimensions as the connected board reported them, for the session that read them.
     const deviceKeymapRef = useRef<{ session: number; layers: number; rows: number; cols: number } | null>(null);
@@ -145,9 +171,11 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }, []);
     const originalRef = useRef(originalKeyboard);
     originalRef.current = originalKeyboard;
+    const connectedRef = useRef(isConnected);
+    connectedRef.current = isConnected;
     const confirmTargetChange = useCallback(() => {
         const dirty = keyboardRef.current && originalRef.current &&
-            serializeDraft(keyboardRef.current) !== serializeDraft(originalRef.current);
+            draftOf(keyboardRef.current, connectedRef.current) !== draftOf(originalRef.current, connectedRef.current);
         return !dirty || window.confirm("You have unsaved edits. Discard them and change the editing target?");
     }, []);
     const nextSession = useCallback(() => {
@@ -314,7 +342,17 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 }
 
                 if (session !== sessionRef.current) return;
+                // A reload of the same board keeps its combo names (they are not
+                // on the board) for the combos that did not change.
+                if (deviceKeymapRef.current?.session === session) {
+                    const names = seedComboNames(keyboardRef.current, loadedInfo);
+                    if (names) loadedInfo.cosmetic = { ...loadedInfo.cosmetic, combos: names };
+                }
+                // Names remembered in this browser fill in the combos that have none.
+                loadedInfo.cosmetic = recallComboNames(loadedInfo).cosmetic;
+                loadedLayoutRef.current = loadedInfo;
                 setKeyboard(loadedInfo);
+                setBoardLoad((n) => n + 1);
                 setConnectionState("connected");
                 setConnectionError(null);
                 setConnectionFirmware(null);
@@ -353,14 +391,17 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         let release: ((discardPending?: boolean) => void) | undefined;
         let changed = false;
         try {
-            const kbinfo = await fileService.loadFile(file);
+            const loaded = await fileService.loadFile(file);
 
             // Offline files own their metadata. Never borrow capabilities or layout
             // structure from a previously connected, possibly unrelated board.
             if (!confirmTargetChange()) return false;
             release = await beginTargetChange();
-            svalService.setupCosmeticLayerNames(kbinfo);
-            keyService.generateAllKeycodes(kbinfo);
+            svalService.setupCosmeticLayerNames(loaded);
+            keyService.generateAllKeycodes(loaded);
+            // Names remembered in this browser come back; the demo's example names give way to them.
+            const kbinfo = recallComboNames(loaded, { replace: source === "demo" });
+            loadedLayoutRef.current = kbinfo;
             if (KeyboardService.isWebHIDSupported()) await usbInstance.close();
             nextSession();
             changed = true;
@@ -464,12 +505,32 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         };
     }, [isConnected, keyboard]);
 
+    // A pointing module the board finds after connect: board state, written into
+    // the draft and the loaded copy alike, so it never reads as an unsaved edit.
+    usePointingDetection({
+        connected: isConnected && connectionState === "connected",
+        boardLoad,
+        getKeyboard: () => keyboardRef.current,
+        apply: useCallback((patch: (kb: KeyboardInfo) => KeyboardInfo) => {
+            const current = keyboardRef.current;
+            if (!current) return;
+            const next = patch(current);
+            if (loadedLayoutRef.current === current) loadedLayoutRef.current = next;
+            setKeyboard(next);
+            setOriginalKeyboard((original) => original ? patch(original) : original);
+        }, [setKeyboard]),
+    });
+
     // Reset keyboard to original state (used by revert)
     const resetToOriginal = useCallback(() => {
         if (originalKeyboard) {
-            setKeyboard(structuredClone(originalKeyboard));
+            // Combo names on a connected board are not part of what Apply reverts.
+            const names = isConnected ? keyboardRef.current?.cosmetic?.combos : undefined;
+            const reverted = structuredClone(originalKeyboard);
+            if (names) reverted.cosmetic = { ...reverted.cosmetic, combos: names };
+            setKeyboard(reverted);
         }
-    }, [originalKeyboard]);
+    }, [originalKeyboard, isConnected]);
 
     // Mark current state as saved (called after push/commit)
     const getKeyboardSnapshot = useCallback(() => keyboardRef.current ? structuredClone(keyboardRef.current) : null, []);
@@ -480,8 +541,8 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Detect if there are unsaved changes by comparing current to original
     const hasUnsavedChanges = React.useMemo(() => {
         if (!keyboard || !originalKeyboard) return false;
-        return serializeDraft(keyboard) !== serializeDraft(originalKeyboard);
-    }, [keyboard, originalKeyboard]);
+        return draftOf(keyboard, isConnected) !== draftOf(originalKeyboard, isConnected);
+    }, [keyboard, originalKeyboard, isConnected]);
 
     useEffect(() => {
         if (!hasUnsavedChanges) return;

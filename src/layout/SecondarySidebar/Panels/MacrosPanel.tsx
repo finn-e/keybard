@@ -18,6 +18,10 @@ interface Props {
     isPicker?: boolean;
 }
 
+/** A text action's chip shows at most this many characters. */
+const TEXT_CHIP_CHARS = 14;
+const shortText = (text: string) => text.length > TEXT_CHIP_CHARS ? `${text.slice(0, TEXT_CHIP_CHARS - 1)}…` : text;
+
 const MacrosPanel: React.FC<Props> = ({ isPicker }) => {
     const { keyboard } = useKeyboard();
     const { assignKeycode } = useKeyBinding();
@@ -112,20 +116,22 @@ const MacrosPanel: React.FC<Props> = ({ isPicker }) => {
             return (
                 <div
                     key={idx}
-                    className="flex items-center justify-center bg-kb-sidebar-dark border border-kb-sidebar-dark rounded text-[10px] px-2 h-[30px] whitespace-nowrap max-w-[100px] overflow-hidden text-ellipsis shadow-sm font-medium text-white cursor-pointer"
+                    title={String(value)}
+                    className="flex shrink-0 items-center justify-center bg-kb-sidebar-dark border border-kb-sidebar-dark rounded text-[10px] px-2 h-[30px] whitespace-nowrap shadow-sm font-medium text-white cursor-pointer"
                     onClick={(e) => {
                         e.stopPropagation();
                         handleEdit(macroIndex, idx);
                     }}
                 >
-                    "{value}"
+                    {/* Shortened in text, not clipped, so the chip is never wider than it shows. */}
+                    "{shortText(String(value))}"
                 </div>
             );
         } else if (type === "delay") {
             return (
                 <div
                     key={idx}
-                    className="flex items-center justify-center bg-kb-sidebar-dark border border-kb-sidebar-dark rounded text-[10px] px-2 h-[30px] shadow-sm font-medium text-white cursor-pointer"
+                    className="flex shrink-0 items-center justify-center bg-kb-sidebar-dark border border-kb-sidebar-dark rounded text-[10px] px-2 h-[30px] whitespace-nowrap shadow-sm font-medium text-white cursor-pointer"
                     onClick={(e) => {
                         e.stopPropagation();
                         handleEdit(macroIndex, idx);
@@ -235,7 +241,7 @@ const MacrosPanel: React.FC<Props> = ({ isPicker }) => {
                     const hasActions = actions.length > 0;
 
                     const rowChildren = hasActions ? (
-                        <div className="flex flex-row items-center gap-1 ml-4 overflow-hidden">
+                        <div className="flex flex-row flex-wrap items-center gap-1 ml-4 min-w-0">
                             {actions.map((action, idx) => (
                                 <React.Fragment key={idx}>
                                     {idx > 0 && <ArrowRight className="w-3 h-3 text-gray-400 dark:text-neutral-400 flex-shrink-0" />}

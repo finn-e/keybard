@@ -1,0 +1,29 @@
+/* Light swatches: what a half's light is doing now (update-flow 5.3). The LED colors are the
+   firmware's, not theme colors: they look the same in light and dark mode. */
+.fw-swatch {
+    display: inline-block;
+    width: 1.25rem;
+    height: 1.25rem;
+    flex: none;
+    border-radius: 9999px;
+    border: 1px solid var(--color-kb-gray-border);
+}
+.fw-swatch[data-light="layer"] { background: var(--color-kb-green); opacity: 0.7; }
+.fw-swatch[data-light="default"] { background: #22c55e; }
+.fw-swatch[data-light="off"] { background: transparent; }
+.fw-swatch[data-light="magenta"] { background: #d000d0; }
+.fw-swatch[data-light="blue-blink"] { background: #2060ff; animation: fw-blink 500ms steps(1, end) infinite; }
+.fw-swatch[data-light="red-slow"] { background: #e02020; animation: fw-blink 1000ms steps(1, end) infinite; }
+.fw-swatch[data-light="rainbow"] {
+    background: conic-gradient(#ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000);
+    animation: fw-spin 2050ms linear infinite;
+}
+@keyframes fw-blink { 0% { opacity: 1; } 50% { opacity: 0.12; } }
+@keyframes fw-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+    .fw-swatch { animation: none !important; }
+    .fw-swatch[data-light="blue-blink"], .fw-swatch[data-light="red-slow"] { outline: 2px dashed currentColor; outline-offset: 2px; }
+}
+.fw-indeterminate { background: linear-gradient(90deg, transparent, var(--color-kb-primary), transparent); background-size: 50% 100%; background-repeat: no-repeat; animation: fw-slide 1.2s linear infinite; }
+@keyframes fw-slide { from { background-position: -50% 0; } to { background-position: 150% 0; } }
+@media (prefers-reduced-motion: reduce) { .fw-indeterminate { animation: none; background: var(--color-kb-primary); opacity: 0.4; } }

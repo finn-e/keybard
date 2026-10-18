@@ -43,7 +43,7 @@ describe('Keybard Paranoid lockdown', () => {
         expect(() => lockDown(page('<style>a{background:url(data:image/png;base64,AA==)}</style><script>const s = "<img src=https://x.example>";</script>'))).not.toThrow();
     });
 
-    it('only lets the page reach itself (the Keybard Host that serves it) or embedded data', () => {
+    it('only lets the page reach itself (the Keybard Overlay that serves it) or embedded data', () => {
         const policy = contentSecurityPolicy(['x']);
         expect(policy).toMatch(/connect-src 'self' data: blob:;/);
         expect(policy).toMatch(/form-action 'none'/);

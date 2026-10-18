@@ -29,11 +29,11 @@ describe('FragmentsPanel with pointing slots', () => {
         const right = container.querySelector('[data-pointing-instance="right_pointing"]')!;
         expect(left).toBeTruthy();
         expect(right).toBeTruthy();
-        expect(left.textContent).toContain('Locked');
+        expect(left.textContent).toContain('Auto-detected');
         expect(left.querySelector('[role="status"]')!.textContent).toBe(
             mocks.keyboard.fragments.pointing_trackpoint.description ?? 'pointing_trackpoint');
         // Not reported yet: listed, not locked, no module named.
-        expect(right.textContent).not.toContain('Locked');
+        expect(right.textContent).not.toContain('Auto-detected');
         expect(right.querySelector('[role="status"]')!.textContent).toBe('Detecting');
         expect(left.querySelector('button, [role="combobox"], select')).toBeNull();
     });
@@ -43,6 +43,17 @@ describe('FragmentsPanel with pointing slots', () => {
         mocks.keyboard = createKbinfoWithFragments();
         const { container } = render(<FragmentsPanel />);
         expect(container.querySelector('[data-pointing-instance]')).toBeNull();
+    });
+
+    it('a finger row says "Auto-detected: …" only for a real detection', async () => {
+        const { createKbinfoWithFragments, FRAGMENT_IDS } = await import('../fixtures/fragments.fixture');
+        mocks.keyboard = createKbinfoWithFragments({ fragmentState: { hwDetection: [[1, FRAGMENT_IDS.FINGER_6KEY]] as any } });
+        const { unmount } = render(<FragmentsPanel />);
+        expect(screen.getAllByText(/^Auto-detected: /)).toHaveLength(1);
+        unmount();
+        mocks.keyboard = createKbinfoWithFragments({ fragmentState: { hwDetection: [[1, 0xff]] as any } });
+        render(<FragmentsPanel />);
+        expect(screen.queryByText(/Auto-detected/)).toBeNull();
     });
 
     it('"Restore default" never writes a selection for a pointing slot', async () => {

@@ -552,7 +552,9 @@ describe('FileService', () => {
       expect(kbinfo.key_overrides).toBeDefined();
       expect(kbinfo.key_overrides[0].trigger).toBe('KC_A');
       expect(kbinfo.key_overrides[0].replacement).toBe('KC_B');
-      expect(kbinfo.key_overrides[0].enabled).toBe(true);
+      // On/off lives only in options bit 7; "on": true defers to options.
+      expect(kbinfo.key_overrides[0]).not.toHaveProperty('enabled');
+      expect(kbinfo.key_overrides[0].options).toBe(0);
     });
   });
 

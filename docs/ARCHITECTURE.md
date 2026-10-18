@@ -81,7 +81,7 @@ KeyBard-NG is a modern web-based keyboard configuration tool for Svalboard-QMK k
 ## Project Structure
 
 ```
-keybard-ng/
+keybard/
 ├── src/
 │   ├── components/     # React components
 │   ├── services/       # Business logic services

@@ -13,7 +13,17 @@ import time
 # so keys could stay lit or patches go blank until the next change. Software rendering hands
 # the window whole frames, and the overlay is small enough that it costs nothing noticeable.
 # Must be set before Qt WebEngine starts.
-WINDOWS_CHROMIUM_FLAGS = ('--disable-gpu', '--disable-gpu-compositing')
+# The last three give WebGL a context, so the overlay draws the pointing devices with the
+# same renderer as Keybard; without them WebGL has none under --disable-gpu and only the flat
+# stand-in ball is drawn. With them, Qt 6.11 on Windows still runs WebGL on the GPU (ANGLE,
+# Direct3D 11), with SwiftShader as the fallback; only compositing stays in software. The
+# renderer copies its pixels out with a readback there, since drawImage from WebGL into a
+# software canvas took 50-110 ms a frame (see src/components/pointing-viz/webgl/renderer.ts).
+# Full GPU compositing measured 60 fps too, but brought back keys left lit (2 in 100 rapid
+# taps), so it stays off. The overlay shows only the Host's own Keybard build, which is what
+# makes the "unsafe" flag acceptable.
+WINDOWS_CHROMIUM_FLAGS = ('--disable-gpu', '--disable-gpu-compositing',
+                          '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader')
 if sys.platform == 'win32':
     _flags = os.environ.get('QTWEBENGINE_CHROMIUM_FLAGS', '').split()
     os.environ['QTWEBENGINE_CHROMIUM_FLAGS'] = ' '.join(_flags + [f for f in WINDOWS_CHROMIUM_FLAGS if f not in _flags])
@@ -26,6 +36,7 @@ from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings, QWebEngi
 from .device.protocol import candidates, hid_backend
 from .device.worker import DeviceWorker
 from .state import DEFAULTS, EFFECTS, PRESETS, HostState, serialize_profile
+from .host_pointing import demo_motion
 from .colors import ColorsPanel
 from .modifiers import ModifierReader
 from .server import REMOTE_ORIGINS, load_paranoid_page, make_server
@@ -153,17 +164,24 @@ class DragHandle(QToolButton):
         self.setAccessibleName('Drag overlay')
         self.setCursor(Qt.SizeAllCursor)
 
+    def target(self):
+        """The window the grip drags: the overlay, or while it's collapsed (hidden) the controls
+        themselves, which carry the hidden overlay along. A hidden window moves without telling
+        anyone, so dragging it left the controls behind until the overlay jumped on expand."""
+        return self.window() if getattr(self.window(), 'collapsed', False) else self.surface
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            if self.surface.windowHandle() and self.surface.windowHandle().startSystemMove():
+            target = self.target()
+            if target.windowHandle() and target.windowHandle().startSystemMove():
                 self.offset = None
             else:
-                self.offset = event.globalPosition().toPoint() - self.surface.pos()
+                self.offset = event.globalPosition().toPoint() - target.pos()
             event.accept()
 
     def mouseMoveEvent(self, event):
         if self.offset is not None and event.buttons() & Qt.LeftButton:
-            self.surface.move(event.globalPosition().toPoint() - self.offset)
+            self.target().move(event.globalPosition().toPoint() - self.offset)
             event.accept()
 
     def mouseReleaseEvent(self, event):
@@ -270,6 +288,13 @@ class OverlayControls(QWidget):
         super().showEvent(event)
         float_window(self)
 
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        # Collapsed, the controls are what moves: keep the hidden overlay under them, where
+        # reposition() would put the controls for it, so expanding shows it right there.
+        if getattr(self, 'collapsed', False):
+            self.surface.move(self.x() + self.width() - self.surface.width(), self.y() + self.height() + 4)
+
     def reposition(self):
         screen = self.surface.screen() or QApplication.primaryScreen()
         area = screen.availableGeometry()
@@ -288,6 +313,10 @@ class Host(QObject):
         self.devices = {}
         self.selected = None
         self.bridge = Bridge()
+        # Pointing: motion waiting to go to the overlay.
+        self.pointing_pending = None
+        self.pointing_sent = 0.0
+        self.demo_pointing = None
         self.bridge.command.connect(self.command)
         # Paranoid mode trusts no website, only the Keybard this host serves itself.
         self.paranoid = paranoid
@@ -325,7 +354,7 @@ class Host(QObject):
         app.styleHints().colorSchemeChanged.connect(lambda _scheme: self.update_icon())
         self.icon_timer = QTimer(self); self.icon_timer.timeout.connect(self.update_icon); self.icon_timer.start(3000)
         menu = QMenu()
-        self.status_action = menu.addAction('Keybard Host · waiting for board'); self.status_action.setEnabled(False)
+        self.status_action = menu.addAction('Keybard Overlay · waiting for board'); self.status_action.setEnabled(False)
         menu.addSeparator(); menu.addAction('Open Keybard', self.open_controls)
         self.show_action = QAction('Show overlay', menu, checkable=True, checked=True)
         self.show_action.triggered.connect(lambda value: self.command(dict(op='show', value=value)))
@@ -336,8 +365,8 @@ class Host(QObject):
         menu.addSeparator()
         menu.addAction('Place at bottom', self.place)
         menu.addSeparator(); menu.addAction('Reload board layout', lambda: self.command(dict(op='reload')))
-        menu.addAction('Quit host', app.quit)
-        self.tray.setContextMenu(menu); info = build_info(); self.tray.setToolTip(f"Keybard Host {info['version']}" + (f" · Keybard {info['keybardCommit']}" if info['keybardCommit'] else ''))
+        menu.addAction('Quit Keybard Overlay', app.quit)
+        self.tray.setContextMenu(menu); info = build_info(); self.tray.setToolTip(f"Keybard Overlay {info['version']}" + (f" · Keybard {info['keybardCommit']}" if info['keybardCommit'] else ''))
         self.tray.activated.connect(lambda reason: self.open_controls() if reason == QSystemTrayIcon.DoubleClick else None)
         self.tray.show()
         # Firmware that reports Shift and Caps Lock (GET_INFO second feature byte,
@@ -439,11 +468,19 @@ class Host(QObject):
         self.hands_menu, self.hands_actions = choices('Hands', ('Both', 'Left', 'Right'), lambda n: self.set_config(hands=n))
         self.held_action = QAction('Highlight held keys', self, checkable=True)
         self.held_action.triggered.connect(lambda value: self.set_config(highlightPressed=value))
+        # Pointing devices: drawn in the overlay (off), sniper and boost pills (on).
+        self.pointing_menu = QMenu('Pointing devices')
+        self.pointing_show_action = self.pointing_menu.addAction('Show pointing devices'); self.pointing_show_action.setCheckable(True)
+        self.pointing_show_action.setToolTip('Draw trackballs and touchpads in the overlay')
+        self.pointing_show_action.triggered.connect(lambda value: self.set_config(showPointing=value))
+        self.pointing_pills_action = self.pointing_menu.addAction('Show sniper and boost'); self.pointing_pills_action.setCheckable(True)
+        self.pointing_pills_action.setToolTip('The sniper and boost pills, even with the devices hidden')
+        self.pointing_pills_action.triggered.connect(lambda value: self.set_config(pointingPills=value))
 
     def add_settings(self, menu):
         menu.addMenu(self.board_menu)
         menu.addSeparator()
-        for item in (self.style_menu, self.halo_action, self.colors_action, self.highlight_menu, self.held_action, self.hands_menu):
+        for item in (self.style_menu, self.halo_action, self.colors_action, self.highlight_menu, self.held_action, self.hands_menu, self.pointing_menu):
             menu.addAction(item) if isinstance(item, QAction) else menu.addMenu(item)
 
     def open_colors(self):
@@ -496,6 +533,9 @@ class Host(QObject):
         for name, action in self.highlight_actions.items(): action.setChecked(config['effect'] == EFFECTS[name]['effect'])
         for name, action in self.hands_actions.items(): action.setChecked(config['hands'] == name)
         self.held_action.setChecked(config['highlightPressed'])
+        for name, key in (('pointing_show_action', 'showPointing'), ('pointing_pills_action', 'pointingPills')):
+            action = getattr(self, name, None)
+            if action is not None: action.setChecked(config[key])
 
     def sample_backdrop(self):
         """Adaptive contrast: send the overlay what's on screen under it; tell it to stop when off."""
@@ -558,6 +598,8 @@ class Host(QObject):
         self.worker.state.connect(self.layers)
         self.worker.pressed.connect(self.pressed)
         self.worker.status.connect(self.status)
+        self.worker.pointing.connect(self.pointing_motion)
+        self.worker.set_pointing_tracking(self.pointing_wanted())
         self.worker.start()
 
     def disconnect(self):
@@ -584,6 +626,7 @@ class Host(QObject):
                 try: self.state.save()
                 except OSError: pass
         self.profile_ready = True
+        if self.worker: self.worker.set_pointing_tracking(self.pointing_wanted())
         self.size_surface()
         self.publish_state()
 
@@ -637,6 +680,7 @@ class Host(QObject):
                 self.generation = self.worker.set_press_tracking(self.state.config['highlightPressed'])
             with self.state.lock: self.state.pressed = []
             self.size_surface()
+            if self.worker: self.worker.set_pointing_tracking(self.pointing_wanted())
         elif op == 'show':
             if value['value']: self.controls.set_collapsed(False)
             self.state.visible = value['value']; self.surface.setVisible(value['value']); self.show_action.setChecked(value['value']); self.controls.setVisible(value['value'])
@@ -658,8 +702,66 @@ class Host(QObject):
             self.worker.reload()
         self.publish_state()
 
+    def pointing_wanted(self):
+        """Read the board's pointing motion only while the overlay draws something with it."""
+        config = self.state.config
+        board = self.state.board
+        has_module = board is None or any((board.get('pointing') or {}).values())
+        return has_module and (config['showPointing'] or config['pointingPills'])
+
+    def pointing_motion(self, motion):
+        """Motion from the board (or the demo): to the overlay at up to 60 Hz."""
+        if self.sender() is not self.worker and self.sender() is not self.demo_pointing: return
+        self.forward_pointing(motion)
+
+    def forward_pointing(self, motion):
+        pending = self.pointing_pending
+        if pending is None:
+            pending = self.pointing_pending = json.loads(json.dumps(motion))
+        else:
+            for side in ('left', 'right'):
+                for key in ('dx', 'dy'): pending[side][key] += motion[side][key]
+                for key in ('valid', 'touchValid', 'touchX', 'touchY', 'fingers', 'scrolling'): pending[side][key] = motion[side][key]
+                for key in ('cpi', 'contacts'):  # the newest only: contacts are where the fingers are now
+                    if key in motion[side]: pending[side][key] = motion[side][key]
+                    else: pending[side].pop(key, None)
+            pending['sniper'], pending['boost'] = motion['sniper'], motion['boost']
+            pending['elapsedMs'] = pending.get('elapsedMs', 0) + motion.get('elapsedMs', 0)
+        config = self.state.config
+        now = time.monotonic()
+        if now - self.pointing_sent < .015: return
+        self.pointing_sent, self.pointing_pending = now, None
+        if self.state.visible and (config['showPointing'] or config['pointingPills']):
+            self.surface.page().runJavaScript("window.dispatchEvent(new CustomEvent('keybard-host-pointing',{detail:" + json.dumps(pending, separators=(',', ':')) + "}))")
+
+    def start_demo_pointing(self):
+        """--demo-pointing: an illustration board with a left touchpad and a right trackball, rolling, sniper on."""
+        from dataclasses import replace
+        from .device.model import demo_profile
+        profile = replace(demo_profile(), pointing=(('left', 'touchpad'), ('right', 'trackball')))
+        with self.state.lock:
+            self.state.board = serialize_profile(profile); self.state.layout_revision += 1
+            self.state.valid = True; self.state.status = 'Pointing demo (no board)'
+        self.profile_ready = True
+        self.auto_connect = False
+        self.size_surface()
+        self.demo_pointing = QTimer(self)
+        started = time.monotonic()
+        last = [started]
+
+        def step():
+            now = time.monotonic()
+            self.last_state = now
+            with self.state.lock: self.state.valid = True
+            motion = demo_motion(now - started, now - last[0]); last[0] = now
+            self.forward_pointing(motion)
+        self.demo_pointing.timeout.connect(step)
+        self.demo_pointing.start(16)
+        self.publish_state()
+
     def shutdown(self):
         self.modifier_timer.stop(); self.modifier_reader.close()
+        if self.demo_pointing is not None: self.demo_pointing.stop()
         self.scan_timer.stop(); self.timer.stop()
         if self.colors_panel is not None: self.colors_panel.close()
         if self.worker:
@@ -677,7 +779,7 @@ def running_mode(url):
 
 def refuse(message):
     from PySide6.QtWidgets import QMessageBox
-    QMessageBox.critical(None, 'Keybard Host (paranoid mode)', message)
+    QMessageBox.critical(None, 'Keybard Overlay (paranoid mode)', message)
 
 
 KEYBARD_URL = 'https://keybard.svalboard.com/#overlay'
@@ -704,10 +806,14 @@ def main():
     parser.add_argument('--allow-origin', action='append', default=[], help='extra hosted Keybard origin allowed to use the host API (testing)')
     parser.add_argument('--paranoid', action='store_true', help='serve Keybard Paranoid and accept no website origins')
     parser.add_argument('--keybard-url', default=KEYBARD_URL, help='Keybard page that Open Keybard opens (testing)')
+    parser.add_argument('--demo-pointing', action='store_true', help='review: an illustration board with pointing devices, rolling, sniper on (no board needed)')
+    parser.add_argument('--show-pointing', action='store_true', help='review: turn on Show pointing devices for this run, without saving it')
     args = parser.parse_args()
     if args.paranoid:
         if args.allow_origin: parser.error('--paranoid accepts no extra origins')
         if args.assets == parser.get_default('assets'): args.assets = args.assets.parent / 'web-paranoid'
+    # 'Keybard Host' is the app's earlier name. It names the settings folder and the lock,
+    # so keep it: settings carry over, and an older copy and this one never run at once.
     app = QApplication(sys.argv[:1]); app.setApplicationName('Keybard Host'); app.setQuitOnLastWindowClosed(False)
     hide_dock_icon()  # macOS: a menu bar app, without a Dock icon
     folder = Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation))
@@ -718,7 +824,7 @@ def main():
         if args.paranoid:
             # Never hand a paranoid start over to a normal host that trusts websites.
             if running_mode(url) is not True:
-                return refuse(f'Another Keybard Host is already running and could not be confirmed to be in paranoid mode on port {args.port}. Quit it from the tray icon, then run Start-Paranoid again.')
+                return refuse(f'Another Keybard Overlay is already running and could not be confirmed to be in paranoid mode on port {args.port}. Quit it from the tray icon, then run Start-Paranoid again.')
             return open_paranoid(url)
         # A paranoid host only ever opens in the contained browser profile.
         if running_mode(url) is True: return open_paranoid(url)
@@ -732,6 +838,8 @@ def main():
     state = HostState(args.settings or folder / 'preferences.json')
     host = Host(app, args.assets, state, args.port, args.allow_origin, args.paranoid, page)
     host.keybard_url = args.keybard_url
+    if args.show_pointing: state.config['showPointing'] = True
+    if args.demo_pointing: host.start_demo_pointing()
     if not args.no_open: host.open_controls()
     sys.exit(app.exec())
 

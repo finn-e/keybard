@@ -1,107 +1,170 @@
-import { Button } from "@/components/ui/button";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
-import OnOffToggle from "@/components/ui/OnOffToggle";
-import { useChanges } from "@/contexts/ChangesContext";
+import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Search, X } from "lucide-react";
+import ExportDialog from "@/components/ExportDialog";
+import { useNavigation } from "@/App";
 import { usePanels } from "@/contexts/PanelsContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
-import { useNavigation } from "@/App";
-import { cn } from "@/lib/utils";
 import { useLayoutImport } from "@/hooks/useLayoutImport";
-import { fileService } from "@/services/file.service";
-import { printService } from "@/services/print.service";
-import { useRef, useState } from "react";
+import { useFirmwareUpdates } from "@/features/firmware/FirmwareUpdateProvider";
+import { DEVELOPER_OPENED_SETTING } from "@/lib/appearance-settings";
+import { cn } from "@/lib/utils";
 import BackupsSection from "./BackupsSection";
 import BoardIdentitySection from "./BoardIdentitySection";
-import FragmentsPanel from "./FragmentsPanel";
-import DynamicMenuPanel from "./DynamicMenuPanel";
-import { selectPointingMenu } from "@/utils/pointing-menu";
-import type { CustomUIMenuItem } from "@/types/keyboard.types";
+import AboutSection from "./settings/AboutSection";
+import FirmwareRow from "./settings/FirmwareRow";
+import SettingRow from "./settings/SettingRow";
+import { onSettingsSectionRequest, takeSettingsSectionRequest } from "./settings/anchor";
+import { SETTINGS_ANCHORS, SETTINGS_PAGE, type SettingsBlock, type SettingsRow, type SettingsSection } from "./settings/layout";
+import { highlightParts, rowKey, searchSettings } from "./settings/search";
 
+const sectionDomId = (id: string) => `settings-section-${id}`;
+
+/** Focus is in a field that takes typed text, where "/" is a character. */
+const isTextField = (target: EventTarget | null) =>
+    target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+
+/**
+ * Settings: one scrolling page of app preferences and board and firmware
+ * management, in three groups (This keyboard, This browser, Keybard). Its
+ * content is declared in settings/layout.ts. A search field at the top
+ * filters it (settings/search.ts).
+ */
 const SettingsPanel = () => {
-    const { getSetting, updateSetting, settingsDefinitions, settingsCategories } = useSettings();
-    const [activeCategory, setActiveCategory] = useState<string>("general");
-    const { keyboard } = useKeyboard();
+    const { getSetting, updateSetting, getSettingDefinition } = useSettings();
+    const { isConnected } = useKeyboard();
     const { setActivePanel } = usePanels();
     const { navigateTo } = useNavigation();
-
-    const pointingMenuIndex = keyboard?.menus?.findIndex(menu => menu.label?.toLowerCase().includes("pointing")) ?? -1;
-    const hasDeveloperControls = pointingMenuIndex >= 0 && selectPointingMenu(
-        (keyboard?.menus?.[pointingMenuIndex]?.content ?? []) as CustomUIMenuItem[], "developer",
-    ).length > 0;
     const fileInputRef = useRef<HTMLInputElement>(null);
-
-    // Export Dialog State
     const [isExportOpen, setIsExportOpen] = useState(false);
-    const [exportFormat, setExportFormat] = useState<"svil" | "vil">("svil");
-    const [includeMacros, setIncludeMacros] = useState(true);
+    const { handleFileImport, reviewFile, importReview } = useLayoutImport();
+    // The update the rail's dot pointed at: marked on the Firmware chip for this visit
+    // (opening Settings clears the rail dot).
+    const firmwareDotNow = !!useFirmwareUpdates()?.status.dot;
+    const [firmwareDot] = useState(firmwareDotNow);
 
-    // Print Dialog State
-    const [isPrintOpen, setIsPrintOpen] = useState(false);
+    const developerOpenedBefore = getSetting(DEVELOPER_OPENED_SETTING, false) === true;
+    const [developerOpen, setDeveloperOpen] = useState(developerOpenedBefore);
+    useEffect(() => {
+        if (developerOpenedBefore) setDeveloperOpen(true);
+    }, [developerOpenedBefore]);
 
-    const { setInstant } = useChanges();
-    const updateBooleanSetting = async (name: string, checked: boolean) => {
-        if (name === 'live-updating' && !await setInstant(checked)) return;
-        updateSetting(name, checked);
+    const searchRef = useRef<HTMLInputElement>(null);
+    const [query, setQuery] = useState("");
+    const matches = useMemo(() => searchSettings(SETTINGS_PAGE, query, getSettingDefinition), [query, getSettingDefinition]);
+    const searching = matches !== null;
+
+    const highlight = useCallback((text: string): ReactNode => {
+        if (!searching) return text;
+        return highlightParts(text, query).map((part, i) =>
+            part.match
+                ? <mark key={i} className="rounded-sm bg-kb-yellow/45 px-px text-kb-ink">{part.text}</mark>
+                : <span key={i}>{part.text}</span>,
+        );
+    }, [searching, query]);
+
+    const clearSearch = (refocus = false) => {
+        setQuery("");
+        if (refocus) searchRef.current?.focus();
     };
 
-    const { handleFileImport, reviewFile, importReview, fileError, setFileError } = useLayoutImport();
+    // "/" or Ctrl+F (Cmd+F) while focus is inside Settings goes to the search field.
+    const onPanelKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+        const find = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f";
+        const slash = e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey && !isTextField(e.target);
+        if (!find && !slash) return;
+        e.preventDefault();
+        e.stopPropagation();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+    };
 
-    const handleExport = async () => {
-        if (!keyboard) {
-            console.error("No keyboard loaded");
-            return;
-        }
+    // Esc clears a search; with the field already empty it does what it did before.
+    const onSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+        if (e.key !== "Escape" || query === "") return;
+        e.preventDefault();
+        e.stopPropagation();
+        clearSearch();
+    };
 
-        try {
-            if (exportFormat === "svil") {
-                // Custom values are already in keyboard.custom_values (loaded at connect time)
-                await fileService.downloadSvil(keyboard, includeMacros);
-            } else {
-                await fileService.downloadVIL(keyboard, includeMacros);
-            }
-            setIsExportOpen(false);
-        } catch (err) {
-            setFileError(err instanceof Error ? err.message : String(err));
+    const toggleSection = (section: SettingsSection) => {
+        if (section.id !== "developer") return;
+        const next = !developerOpen;
+        setDeveloperOpen(next);
+        if (next && !developerOpenedBefore) updateSetting(DEVELOPER_OPENED_SETTING, true);
+    };
+
+    const scrollToSection = (id: string) => {
+        if (id === "developer") setDeveloperOpen(true);
+        const jump = () => document.getElementById(sectionDomId(id))?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+        // A chip jumps on the whole page: clear a search first, then jump once it renders.
+        if (matches) {
+            setQuery("");
+            requestAnimationFrame(jump);
+        } else jump();
+    };
+
+    // Opened at a section from elsewhere (the rail's About item).
+    useEffect(() => {
+        const pending = takeSettingsSectionRequest();
+        if (pending) requestAnimationFrame(() => scrollToSection(pending));
+        return onSettingsSectionRequest((id) => scrollToSection(id));
+    }, []);
+
+    const runAction = (action: string) => {
+        if (action === "import-settings") fileInputRef.current?.click();
+        else if (action === "export-settings") setIsExportOpen(true);
+        else if (action === "open-scan-lab") setActivePanel("scanlab");
+        else if (action === "open-proof-sheet") navigateTo("proof-sheet");
+    };
+
+    const renderBlock = (block: SettingsBlock) => {
+        switch (block) {
+            case "firmware":
+                return <FirmwareRow />;
+            case "board":
+                return isConnected
+                    ? <BoardIdentitySection />
+                    : <p className="px-3 py-2.5 text-sm text-muted-foreground">Connect a keyboard to see its name and serial.</p>;
+            case "backups":
+                return (
+                    <BackupsSection
+                        onRestore={reviewFile}
+                        forceOpen={!!matches?.get("backups")?.rows.has("block:backups")}
+                        highlight={highlight}
+                    />
+                );
+            case "about":
+                return <AboutSection />;
         }
     };
 
-    const handlePrint = () => {
-        if (!keyboard) {
-            console.error("No keyboard loaded");
-            return;
-        }
-
-        const nonEmptyLayers = printService.getNonEmptyLayers(keyboard);
-        if (nonEmptyLayers.length === 0) {
-            console.warn("No non-empty layers to print");
-            return;
-        }
-
-        // Dispatch a custom event that the PrintableKeymap wrapper will listen for
-        window.dispatchEvent(new CustomEvent('keybard-print', {
-            detail: { keyboard, layers: nonEmptyLayers }
-        }));
-
-        setIsPrintOpen(false);
+    const renderRow = (row: SettingsRow) => {
+        if ("block" in row) return <div key={row.block}>{renderBlock(row.block)}</div>;
+        const definition = getSettingDefinition(row.setting);
+        if (!definition) return null;
+        const label = row.label ?? definition.label;
+        return (
+            <SettingRow
+                key={row.setting}
+                definition={definition}
+                label={label}
+                description={row.description ?? definition.description}
+                value={getSetting(definition.name, definition.defaultValue)}
+                onChange={(value) => updateSetting(definition.name, value)}
+                onAction={runAction}
+                highlight={highlight}
+            />
+        );
     };
+
+    const visibleGroups = SETTINGS_PAGE
+        .map((group) => ({ ...group, sections: group.sections.filter((section) => !matches || matches.has(section.id)) }))
+        .filter((group) => group.sections.length > 0);
 
     return (
-        <section className="space-y-3 flex flex-col w-full mx-auto py-4">
+        <div className="@container flex w-full flex-col gap-5 pb-6" onKeyDown={onPanelKeyDown}>
             {importReview}
-            {/* Hidden file input for import */}
             <input
                 type="file"
                 ref={fileInputRef}
@@ -109,245 +172,116 @@ const SettingsPanel = () => {
                 accept=".svil,.viable,.vil,.json"
                 onChange={handleFileImport}
             />
+            <ExportDialog open={isExportOpen} onOpenChange={setIsExportOpen} />
 
-            {/* Export Dialog */}
-            <Dialog open={isExportOpen} onOpenChange={setIsExportOpen}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>Export Configuration</DialogTitle>
-                        <DialogDescription>
-                            Choose the format to save your keyboard configuration. Native .svil preserves Sval features and names. Legacy .vil omits Sval-specific settings, names, colors, and hardware selections.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="flex flex-col gap-4 py-4">
-                        <div className="flex flex-col gap-2">
-                            <Label>Format</Label>
-                            <Select value={exportFormat} onValueChange={(v: "svil" | "vil") => setExportFormat(v)}>
-                                <SelectTrigger aria-label="Export format">
-                                    <SelectValue placeholder="Select format" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="svil">Svalboard (.svil) - Native Format</SelectItem>
-                                    <SelectItem value="vil">Vial (.vil) - Legacy Compatibility</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                            <Switch id="include-macros" checked={includeMacros} onCheckedChange={(c: boolean) => setIncludeMacros(c)} />
-                            <label
-                                htmlFor="include-macros"
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                            >
-                                Include Macros
-                            </label>
-                        </div>
-                    </div>
-                    {fileError && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{fileError}</p>}
-                    <DialogFooter>
-                        <Button type="button" variant="secondary" onClick={() => setIsExportOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button type="button" onClick={handleExport}>
-                            Export
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <div className="sticky top-0 z-10 -mx-1 flex flex-col gap-2 bg-kb-surface px-1 pt-1.5 pb-1">
+                <div role="search" className="relative">
+                    <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                        ref={searchRef}
+                        type="text"
+                        inputMode="search"
+                        enterKeyHint="search"
+                        autoComplete="off"
+                        spellCheck={false}
+                        aria-label="Search settings"
+                        aria-keyshortcuts="/ Control+F"
+                        placeholder="Search settings"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={onSearchKeyDown}
+                        className="h-9 w-full rounded-md border border-input bg-kb-surface pl-8 pr-8 text-sm text-kb-ink placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    />
+                    {query !== "" && (
+                        <button
+                            type="button"
+                            aria-label="Clear search"
+                            onClick={() => clearSearch(true)}
+                            className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-kb-ink"
+                        >
+                            <X aria-hidden="true" className="h-4 w-4" />
+                        </button>
+                    )}
+                </div>
+                <nav aria-label="Settings sections" className="flex flex-row flex-wrap gap-1.5">
+                    {SETTINGS_ANCHORS.map(({ id, label }) => (
+                        <button
+                            key={id}
+                            type="button"
+                            onClick={() => scrollToSection(id)}
+                            aria-label={id === "firmware" && firmwareDot ? `${label}, update available` : undefined}
+                            className={cn(
+                                "inline-flex items-center gap-1.5 rounded-full border border-kb-gray-border bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-kb-ink",
+                                matches && !matches.has(id) && "opacity-50",
+                            )}
+                        >
+                            {label}
+                            {id === "firmware" && firmwareDot && <span aria-hidden="true" data-testid="firmware-chip-dot" className="h-1.5 w-1.5 rounded-full bg-kb-primary" />}
+                        </button>
+                    ))}
+                </nav>
+            </div>
 
-            {/* Print Dialog */}
-            <Dialog open={isPrintOpen} onOpenChange={setIsPrintOpen}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>Print Keyboard Layout</DialogTitle>
-                        <DialogDescription>
-                            Print all layers that contain configured keys (excluding empty KC_NO and transparent KC_TRNS only layers).
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="flex flex-col gap-4 py-4">
-                        {keyboard && (
-                            <div className="text-sm text-muted-foreground">
-                                <p><strong>Keyboard:</strong> {keyboard.cosmetic?.name || keyboard.name || 'Unknown'}</p>
-                                <p><strong>Non-empty layers:</strong> {printService.getNonEmptyLayers(keyboard).length} of {keyboard.keymap?.length || 0}</p>
-                            </div>
-                        )}
-                    </div>
-                    <DialogFooter>
-                        <Button type="button" variant="secondary" onClick={() => setIsPrintOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button type="button" onClick={handlePrint}>
-                            Print
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            <div className="flex flex-row gap-2 justify-stretch align-stretch mb-3 w-full px-4">
-                {settingsCategories.map((category) => (
+            {searching && visibleGroups.length === 0 && (
+                <div role="status" className="panel-layer-item flex flex-col items-start gap-1.5 rounded-lg px-3 py-4">
+                    <p className="text-sm text-kb-ink">Nothing in Settings matches &ldquo;{query.trim()}&rdquo;.</p>
+                    <p className="text-xs text-muted-foreground">Layers, pointing and other board configuration live in their own panels on the rail.</p>
                     <button
                         type="button"
-                        aria-pressed={activeCategory === category.name}
-                        key={category.name}
-                        onClick={() => setActiveCategory(category.name)}
-                        className={cn(
-                            "w-0 min-w-0 flex-1 flex items-center gap-2 flex-col cursor-pointer py-3 rounded-lg transition-all",
-                            activeCategory === category.name ? "bg-kb-active text-kb-active-fg hover:bg-kb-active/80 hover:text-kb-active-fg" : "text-muted-foreground hover:bg-muted bg-muted/60"
-                        )}
+                        onClick={() => clearSearch(true)}
+                        className="mt-1 text-xs font-medium text-kb-ink underline underline-offset-2"
                     >
-                        {category.icon && <category.icon className="h-4 w-4" />}
-                        <span className="text-xs font-medium text-center break-words">{category.label}</span>
+                        Clear search
                     </button>
-                ))}
-            </div>
-            <div className=" flex flex-col gap-2">
-                {activeCategory === "fragments" ? (
-                    <FragmentsPanel />
-                ) : activeCategory === "backups" ? (
-                    <div className="flex flex-col px-1 gap-2">
-                        <BackupsSection onRestore={reviewFile} />
-                    </div>
-                ) : (
-                    <div className="flex flex-col px-1 gap-2">
-                        {activeCategory === "general" && <BoardIdentitySection />}
-                        {activeCategory === "developer" && hasDeveloperControls && (
-                            <DynamicMenuPanel menuIndex={pointingMenuIndex} section="developer" embedded />
-                        )}
-                        {settingsCategories
-                            .find((cat) => cat.name === activeCategory)
-                            ?.settings.map((se) => {
-                                const setting = settingsDefinitions.find((s) => s.name === se);
-                                if (!setting) return null;
+                </div>
+            )}
 
-                                if (setting.type === "boolean") {
-                                    if (setting.name === "typing-binds-key") {
-                                        return (
-                                            <div className="flex flex-row flex-wrap items-center justify-between p-3 gap-3 panel-layer-item group/item" key={setting.name}>
-                                                <div className="flex flex-col items-start gap-3 flex-1 basis-44 min-w-0">
-                                                    <span className="text-md text-left">{setting.label}</span>
-                                                    <span className="text-xs text-muted-foreground">{setting.description}</span>
-                                                </div>
-                                                <OnOffToggle
-                                                    label={setting.label}
-                                                    description={setting.description}
-                                                    value={getSetting(setting.name, setting.defaultValue) as boolean}
-                                                    onToggle={(checked) => {
-                                                        void updateBooleanSetting(setting.name, checked);
-                                                    }}
-                                                />
-                                            </div>
-                                        );
-                                    }
-                                    return (
-                                        <div className="flex flex-row flex-wrap items-center justify-between p-3 gap-3 panel-layer-item group/item" key={setting.name}>
-                                            <div className="flex flex-col items-start gap-3 flex-1 basis-44 min-w-0">
-                                                <span className="text-md text-left">{setting.label}</span>
-                                                <span className="text-xs text-muted-foreground">{setting.description}</span>
-                                            </div>
-                                            <Switch
-                                                aria-label={setting.label}
-                                                aria-description={setting.description}
-                                                checked={getSetting(setting.name, setting.defaultValue) as boolean}
-                                                onCheckedChange={(checked) => {
-                                                    void updateBooleanSetting(setting.name, checked);
-                                                }}
-                                            />
-                                        </div>
-                                    );
-                                }
-                                if (setting.type === "select") {
-                                    return (
-                                        <div className="flex flex-row flex-wrap items-center justify-between p-3 gap-3 panel-layer-item group/item" key={setting.name}>
-                                            <div className="flex flex-col items-start gap-3 flex-1 basis-44 min-w-0">
-                                                <div className="text-md text-left">{setting.label}</div>
-                                                {setting.description && setting.description !== "" && <span className="text-xs text-muted-foreground">{setting.description}</span>}
-                                            </div>
-                                            <select
-                                                aria-label={setting.label}
-                                                aria-description={setting.description}
-                                                value={getSetting(setting.name, setting.defaultValue) as string}
-                                                onChange={(e) => {
-                                                    updateSetting(setting.name, e.target.value);
-                                                }}
-                                                className="max-w-full h-8 px-3 font-bold rounded-md pr-3 cursor-pointer active:border-none focus:border-none"
-                                            >
-                                                {setting.items?.map((item) => (
-                                                    <option key={item.value} value={item.value}>
-                                                        {item.label}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    );
-                                }
-                                if (setting.type === "action") {
-                                    return (
+            {visibleGroups.map((group) => (
+                <section key={group.id} aria-labelledby={`settings-group-${group.id}`} className="flex flex-col gap-3">
+                    <h3 id={`settings-group-${group.id}`} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {group.title}
+                    </h3>
+                    {group.sections.map((section) => {
+                        const match = matches?.get(section.id);
+                        const expanded = !section.collapsible || !!match || (section.id === "developer" && developerOpen);
+                        const bodyId = `${sectionDomId(section.id)}-body`;
+                        const rows = match ? section.rows.filter((row) => match.rows.has(rowKey(row))) : section.rows;
+                        return (
+                            <section
+                                key={section.id}
+                                id={sectionDomId(section.id)}
+                                aria-labelledby={`${sectionDomId(section.id)}-title`}
+                                className="scroll-mt-32 flex flex-col"
+                            >
+                                {section.collapsible ? (
+                                    <h4 id={`${sectionDomId(section.id)}-title`} className="text-sm font-semibold text-kb-ink">
                                         <button
                                             type="button"
-                                            aria-label={setting.label}
-                                            aria-description={setting.description}
-                                            className="flex flex-row items-center text-left justify-between p-3 gap-3 panel-layer-item group/item cursor-pointer hover:bg-accent hover:text-accent-foreground rounded-md"
-                                            key={setting.name}
-                                            onClick={() => {
-                                                console.log(`Action ${setting.action} triggered`);
-                                                if (setting.action === "import-settings") {
-                                                    fileInputRef.current?.click();
-                                                } else if (setting.action === "export-settings") {
-                                                    setIsExportOpen(true);
-                                                } else if (setting.action === "print-keymap") {
-                                                    setIsPrintOpen(true);
-                                                } else if (setting.action === "open-qmk-settings") {
-                                                    setActivePanel("qmksettings");
-                                                } else if (setting.action === "open-scan-lab") {
-                                                    setActivePanel("scanlab");
-                                                } else if (setting.action === "open-proof-sheet") {
-                                                    navigateTo("proof-sheet");
-                                                }
-                                            }}
+                                            aria-expanded={expanded}
+                                            aria-controls={bodyId}
+                                            onClick={() => toggleSection(section)}
+                                            className="flex w-full flex-row items-center justify-between gap-2 py-1 text-left"
                                         >
-                                            <div className="flex flex-col gap-2">
-                                                <span className="text-md text-left">{setting.label}</span>
-                                                {setting.description ? <span className="text-xs text-muted-foreground">{setting.description}</span> : undefined}
-                                            </div>
-                                            <span aria-hidden="true" className="text-xs text-muted-foreground">&rsaquo;</span>
+                                            <span>{highlight(section.title)}</span>
+                                            <ChevronDown aria-hidden="true" className={cn("h-4 w-4 transition-transform", expanded && "rotate-180")} />
                                         </button>
-                                    );
-                                }
-                                if (setting.type === "slider") {
-                                    return (
-                                        <div className="flex flex-col gap-2 p-3 panel-layer-item group/item w-full" key={setting.name}>
-                                            <span className="text-md text-left">{setting.label}</span>
-                                            <span className="text-xs text-muted-foreground">{setting.description}</span>
-                                            <div className="flex flex-row items-center justify-between">
-                                                <Slider
-                                                    aria-label={setting.label}
-                                                    aria-description={setting.description}
-                                                    value={[getSetting(setting.name, setting.defaultValue) as number]}
-                                                    onValueChange={(values) => updateSetting(setting.name, values[0])}
-                                                    min={setting.min}
-                                                    max={setting.max}
-                                                    step={setting.step}
-                                                    key={setting.name}
-                                                    className="flex-grow"
-                                                />
-                                                <Input
-                                                    aria-label={setting.label}
-                                                    aria-description={setting.description}
-                                                    type="number"
-                                                    value={getSetting(setting.name, setting.defaultValue) as number}
-                                                    onChange={(e) => updateSetting(setting.name, parseInt(e.target.value) || 0)}
-                                                    className="w-22 ml-4 text-right select-text"
-                                                />
-                                            </div>
-                                        </div>
-                                    );
-                                }
-
-                                return null;
-                            })}
-                    </div>
-                )}
-            </div>
-        </section>
+                                    </h4>
+                                ) : (
+                                    <h4 id={`${sectionDomId(section.id)}-title`} className="py-1 text-sm font-semibold text-kb-ink">
+                                        {highlight(section.title)}
+                                    </h4>
+                                )}
+                                {expanded && (
+                                    <div id={bodyId} className="panel-layer-item flex flex-col divide-y divide-kb-gray-border rounded-lg">
+                                        {rows.map(renderRow)}
+                                    </div>
+                                )}
+                            </section>
+                        );
+                    })}
+                </section>
+            ))}
+        </div>
     );
 };
 

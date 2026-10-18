@@ -1,0 +1,108 @@
+import type { SettingDefinition } from "@/types/settings.types";
+import type { SettingsBlock, SettingsGroup, SettingsRow, SettingsSection } from "./layout";
+
+/**
+ * Settings search. A query is split into words; a row matches when every word
+ * appears in its label, description, option names or synonyms, or in its
+ * section's title or synonyms. A section whose own title or synonyms match
+ * shows all its rows; otherwise it shows only the rows that match.
+ */
+
+/** Words people search with that are not on screen, by section. */
+export const SECTION_SYNONYMS: Record<string, string[]> = {
+    firmware: [],
+    board: ["keyboard", "device"],
+    backups: ["backup", "back up"],
+    appearance: ["look", "display"],
+    editing: ["editor", "keymap"],
+    about: [],
+    developer: ["dev", "debug"],
+};
+
+/** Synonyms for one setting row, by setting name. */
+export const ROW_SYNONYMS: Record<string, string[]> = {
+    theme: ["dark mode", "theme", "light mode", "night", "color scheme", "appearance"],
+    "key-size": ["zoom", "scale", "bigger", "smaller"],
+    "panel-position": ["sidebar", "bottom", "dock", "layout"],
+    "typing-binds-key": ["keyboard input", "type to assign", "modifiers"],
+    "serial-assignment": ["next key", "order", "sequence", "auto advance"],
+    "international-keyboards": ["language", "locale", "layout", "qwertz", "azerty", "colemak", "keymap"],
+    "combo-indicators": ["corner", "fold", "marker"],
+    "colorblind-combo-colors": ["color blind", "accessibility", "texture", "contrast"],
+    "show-alt-repeat": ["rail", "repeat"],
+    import: ["open", "load", "restore", "svil", "vil"],
+    export: ["save", "download", "print", "svil", "vil"],
+};
+
+/** Synonyms for a block row (rendered by the page itself). */
+export const BLOCK_SYNONYMS: Record<SettingsBlock, string[]> = {
+    firmware: ["update", "upgrade", "install", "flash", "version", "release", "qmk", "wipe", "reset", "bootloader"],
+    board: ["board name", "serial", "rename", "identity"],
+    backups: ["backups", "back up now", "restore", "recover", "undo", "history", "snapshot", "backup folder"],
+    about: ["version", "help", "manual", "docs", "community", "discord", "support", "release notes", "credits"],
+};
+
+export const normalize = (text: string) => text.toLowerCase().replace(/\s+/g, " ").trim();
+
+export const queryTerms = (query: string): string[] => normalize(query).split(" ").filter(Boolean);
+
+const containsAll = (haystack: string, terms: string[]) => terms.every((t) => haystack.includes(t));
+
+export type DefinitionLookup = (name: string) => SettingDefinition | undefined;
+
+export const rowKey = (row: SettingsRow) => ("block" in row ? `block:${row.block}` : row.setting);
+
+/** All the text a row can be found by, lowercased. */
+export function rowHaystack(row: SettingsRow, lookup: DefinitionLookup): string {
+    if ("block" in row) return normalize([row.block, ...BLOCK_SYNONYMS[row.block]].join(" | "));
+    const def = lookup(row.setting);
+    return normalize([
+        row.label ?? def?.label ?? "",
+        row.description ?? def?.description ?? "",
+        def?.label ?? "",
+        ...(def?.items?.map((i) => i.label) ?? []),
+        ...(ROW_SYNONYMS[row.setting] ?? []),
+    ].join(" | "));
+}
+
+export function sectionHaystack(section: SettingsSection): string {
+    return normalize([section.title, ...(SECTION_SYNONYMS[section.id] ?? [])].join(" | "));
+}
+
+export interface SectionMatch {
+    /** Rows to show, by rowKey. */
+    rows: Set<string>;
+}
+
+/**
+ * Which sections and rows a query shows. Null for an empty query (show
+ * everything). A section is in the map only if something in it matches.
+ */
+export function searchSettings(page: SettingsGroup[], query: string, lookup: DefinitionLookup): Map<string, SectionMatch> | null {
+    const terms = queryTerms(query);
+    if (terms.length === 0) return null;
+    const result = new Map<string, SectionMatch>();
+    for (const group of page) {
+        for (const section of group.sections) {
+            const sectionText = sectionHaystack(section);
+            const all = containsAll(sectionText, terms);
+            const rows = new Set<string>();
+            for (const row of section.rows) {
+                // Each word may be found in the row or in its section.
+                const text = `${rowHaystack(row, lookup)} | ${sectionText}`;
+                if (all || containsAll(text, terms)) rows.add(rowKey(row));
+            }
+            if (rows.size > 0) result.set(section.id, { rows });
+        }
+    }
+    return result;
+}
+
+/** Split text into parts, marking the ones that match a query term. */
+export function highlightParts(text: string, query: string): Array<{ text: string; match: boolean }> {
+    const terms = queryTerms(query).sort((a, b) => b.length - a.length);
+    if (terms.length === 0 || !text) return [{ text, match: false }];
+    const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const re = new RegExp(`(${escaped.join("|")})`, "gi");
+    return text.split(re).filter((p) => p !== "").map((p) => ({ text: p, match: terms.includes(p.toLowerCase()) }));
+}

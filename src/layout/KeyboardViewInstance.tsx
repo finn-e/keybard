@@ -16,6 +16,7 @@ import { useLayoutSettings } from "@/contexts/LayoutSettingsContext";
 import { svalService } from "@/services/sval.service";
 import { KEYMAP } from "@/constants/keygen";
 import { usePanels } from "@/contexts/PanelsContext";
+import { useBindingSpotlight } from "@/layout/BindingSpotlight";
 import { LayerReorderDialog } from "@/components/LayerReorderDialog";
 import { useLayerReorder, type LayerMoveConstraints } from "@/hooks/useLayerReorder";
 import { allowedLayerMoves, layerGapTarget, pinnedLayer } from "@/utils/layer-permute";
@@ -57,6 +58,10 @@ interface KeyboardViewInstanceProps {
     baseBadgeOffsetY?: number | null;
     onBaseBadgeOffsetY?: (offset: number | null) => void;
     isLayerDragActive?: boolean;
+    /** Scale of the keyboard so the whole layout fits the canvas width (1 when it fits). */
+    fitScale?: number;
+    /** Tighter rows above the keyboard (the L picker gives the height to its tray). */
+    compact?: boolean;
     hoveredDropLayer?: number | null;
     onLayerDropHover?: (layer: number | null) => void;
     onLayerDrop?: (layer: number) => void;
@@ -109,6 +114,8 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
     isRevealing = false,
     isHiding = false,
     stackIndex = 0,
+    fitScale = 1,
+    compact = false,
     baseBadgeOffsetY = null,
     onBaseBadgeOffsetY,
     isLayerDragActive = false,
@@ -121,6 +128,9 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
     const { clearSelection } = useKeyBinding();
     const { copy, paste, clipboardError } = useLayerClipboardActions();
     const { activePanel } = usePanels();
+    // While a binding editor is open, layer tabs only switch layers (to pick a
+    // key shown on another layer); the rest of the layer controls are covered.
+    const spotlight = useBindingSpotlight();
     const { is3DMode, keyVariant } = useLayoutSettings();
     const badgeRowRef = useRef<HTMLDivElement | null>(null);
     const [badgeOffsetY, setBadgeOffsetY] = useState(() => {
@@ -426,7 +436,7 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
 
         return (
             <ContextMenu key={`${instanceId}-layer-tab-${i}`}>
-                <ContextMenuTrigger asChild>
+                <ContextMenuTrigger asChild disabled={spotlight}>
                     <button
                         ref={(el) => {
                             if (el) {
@@ -440,10 +450,10 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
                         aria-label={isDefault ? `${layerShortName}, default layer` : undefined}
                         onDoubleClick={(e) => {
                             e.stopPropagation();
-                            onToggleLayerOn(i);
+                            if (!spotlight) onToggleLayerOn(i);
                         }}
                         // Drag a tab to a gap between two others to move the layer there.
-                        draggable={canMove && !isLayerDragActive}
+                        draggable={canMove && !isLayerDragActive && !spotlight}
                         onDragStart={(e) => startTabDrag(i, e)}
                         onDragEnd={() => setTabDrag(null)}
                         onMouseEnter={() => {
@@ -651,13 +661,14 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
             {/* Layer Controls Row: Hide-blank-layers toggle + layer tabs + (optional) remove button */}
             {!hideLayerTabs && !isOverviewSceneActive && !show3DScene && (
                 <div
-                    className="flex items-center gap-2 pl-5 pb-2 whitespace-nowrap pointer-events-auto overflow-x-auto overscroll-x-contain [&>*]:shrink-0"
+                    className={cn("flex items-center gap-2 pl-5 whitespace-nowrap pointer-events-auto overflow-x-auto overscroll-x-contain [&>*]:shrink-0", !compact && "pb-2")}
                     style={isPrimary && multiLayerHeaderOffset > 0 ? { marginTop: -multiLayerHeaderOffset } : undefined}
                 >
                     <div className="flex items-center gap-1">
                         <Tooltip delayDuration={500}>
                             <TooltipTrigger asChild>
                                 <button
+                                    data-spotlight-cover=""
                                     onClick={toggleShowLayers}
                                     disabled={activePanel === "matrixtester"}
                                     className={cn(
@@ -723,6 +734,7 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
                                         : "text-gray-500 dark:text-neutral-400 hover:text-gray-800 dark:hover:text-neutral-100 hover:bg-gray-200 dark:hover:bg-neutral-700"
                                 )}
                                 aria-label="Reverse Layer Order"
+                                data-spotlight-cover=""
                             >
                                 {isLayerOrderReversed
                                     ? <SquareArrowRightIcon className="h-5 w-5" />
@@ -744,6 +756,7 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
                                     aria-label="Hide layer view"
                                     disabled={selectedLayer === 0}
                                     data-remove-view={instanceId}
+                                    data-spotlight-cover=""
                                 >
                                     <LayersMinusIcon className="h-5 w-5" />
                                 </button>
@@ -770,13 +783,13 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
                 {/* Layer Name Badge Row */}
                 <div
                     ref={badgeRowRef}
-                    className="relative z-20 pl-5 pt-[7px] pb-2 flex items-center gap-2 pointer-events-auto"
+                    className={cn("relative z-20 pl-5 flex items-center gap-2 pointer-events-auto", compact ? "pt-0 pb-0" : "pt-[7px] pb-2")}
                     style={{
                         transform: `translateY(${effectiveBadgeOffsetY}px)`,
                         transition: effectiveBadgeTransition,
                     }}
                 >
-                    <div style={{ marginLeft: -20 }}>
+                    <div style={{ marginLeft: -20 }} data-spotlight-cover="">
                         <LayerNameBadge
                             selectedLayer={selectedLayer}
                             isActive={isSelectedLayerActive}
@@ -846,7 +859,10 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
                                 ? `rotateX(${scenePose.rotateX}deg) rotateZ(${scenePose.rotateZ}deg) translateZ(${effectiveKeyboardTranslateZ}px)`
                                 : "rotateX(0deg) rotateZ(0deg) translateZ(0px)",
                             transition: effectiveKeyboardTransition,
+                            // The whole layout always fits the canvas width: scaled down when it would not.
+                            zoom: !show3DScene && fitScale < 1 ? fitScale : undefined,
                         }}
+                        data-layout-fit-scale={!show3DScene && fitScale < 1 ? fitScale : undefined}
                     >
                         <Keyboard
                             keyboard={keyboard}
@@ -862,6 +878,8 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
                             isToggling3D={isToggling3D}
                             showDropTargetHighlight={isLayoutDropTarget}
                             isLayerDragActive={isLayerDragActive}
+                            showKeyInspector={isPrimary}
+                            showPointing={isPrimary}
                         />
                     </div>
                 </div>

@@ -9,6 +9,8 @@ import { payloadCapacity } from "./hid-report";
 import LZMA from "js-lzma";
 import { assertSupportedSvilProto } from "@/utils/unsupported-firmware";
 import { parsePointingHardware, SVIL_FLAG2_POINTING_HARDWARE } from "@/utils/pointing-hardware";
+import { parsePointingContacts, SVIL_FLAG2_POINTING_CONTACTS, withPadContacts, type PointingContactsReport } from "@/utils/pointing-contacts";
+import { KEYBARD_MOTION_READER, parsePointingMotion, SVIL_FLAG2_POINTING_MOTION, SVIL_FLAG2_POINTING_MOTION_READERS, type PointingMotionReport } from "@/utils/pointing-motion";
 import type { KeyboardInfo, AltRepeatKeyEntry, LeaderEntry } from "../types/keyboard.types";
 
 // Svil feature flags (from protocol info response)
@@ -252,6 +254,9 @@ export class KeyboardService {
         // shows the change but loses it on restart; only a restart clears this.
         kbinfo.storage_reset = !!(svilInfo[17] & 1);
         kbinfo.storage_write_failed = !!(svilInfo[17] & 2);
+        // Bit 2: the first boot of a different firmware build reset every setting (D39),
+        // until the host clears it (CMD_SVIL_STORAGE_RESET_CLEAR) after acting on it.
+        kbinfo.storage_build_reset = !!(svilInfo[17] & 4);
         // Nothing past here is safe on a board that isn't speaking Sval protocol 3+
         assertSupportedSvilProto(kbinfo.svil_proto);
 
@@ -549,6 +554,51 @@ export class KeyboardService {
     async getFragmentHardware(kbinfo: KeyboardInfo): Promise<Map<number, number>> {
         if (!this.fragment.hasFragments(kbinfo)) return new Map();
         return (await this.fragment.readHardwareDetection()) ?? new Map();
+    }
+
+    /** Whether the board answers POINTING_MOTION (0x2D). */
+    hasPointingMotion(kbinfo: KeyboardInfo | null | undefined): boolean {
+        return ((kbinfo?.feature_flags2 ?? 0) & SVIL_FLAG2_POINTING_MOTION) !== 0;
+    }
+
+    /**
+     * Each hand's pointing motion since the previous read (POINTING_MOTION, 0x2D,
+     * read-and-clear; a read, never a write). Where the board keeps counts per
+     * reader, Keybard reads as reader 1, so Keybard Host polling the same board
+     * doesn't take half of the motion. Null without sending on firmware that
+     * doesn't advertise it, and null on a failed or empty read.
+     */
+    async getPointingMotion(kbinfo: KeyboardInfo): Promise<PointingMotionReport | null> {
+        if (!this.hasPointingMotion(kbinfo)) return null;
+        const perReader = ((kbinfo.feature_flags2 ?? 0) & SVIL_FLAG2_POINTING_MOTION_READERS) !== 0;
+        try {
+            const reply = await this.usb.sendSvil(SvilUSB.CMD_SVIL_POINTING_MOTION, perReader ? [KEYBARD_MOTION_READER] : [], { uint8: true }) as Uint8Array;
+            const report = parsePointingMotion(reply, SvilUSB.CMD_SVIL_POINTING_MOTION);
+            if (!report || !this.hasPointingContacts(kbinfo)) return report;
+            return withPadContacts(report, await this.getPointingContacts(kbinfo));
+        } catch {
+            return null;
+        }
+    }
+
+    /** Whether the board reports every touch contact (POINTING_CONTACTS, 0x2F). */
+    hasPointingContacts(kbinfo: KeyboardInfo | null | undefined): boolean {
+        return ((kbinfo?.feature_flags2 ?? 0) & SVIL_FLAG2_POINTING_CONTACTS) !== 0;
+    }
+
+    /**
+     * Every touch contact down now, each on its pad (POINTING_CONTACTS, 0x2F; a
+     * read that clears nothing). Null without sending on firmware that doesn't
+     * advertise it, and null on a failed or empty read.
+     */
+    async getPointingContacts(kbinfo: KeyboardInfo): Promise<PointingContactsReport | null> {
+        if (!this.hasPointingContacts(kbinfo)) return null;
+        try {
+            const reply = await this.usb.sendSvil(SvilUSB.CMD_SVIL_POINTING_CONTACTS, [], { uint8: true }) as Uint8Array;
+            return parsePointingContacts(reply, SvilUSB.CMD_SVIL_POINTING_CONTACTS);
+        } catch {
+            return null;
+        }
     }
 
     /** Whether the board can change its saved default layer (DEFAULT_LAYER_SET). */

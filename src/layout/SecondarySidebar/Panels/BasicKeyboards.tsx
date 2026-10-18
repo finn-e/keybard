@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import QwertyKeyboard from "@/components/Keyboards/QwertyKeyboard";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,9 @@ import { keyService } from "@/services/key.service";
 import { CODEMAP } from "@/constants/keygen";
 import ModifierSideToggle from "@/components/ModifierSideToggle";
 import { getSelectedKeymapKeycode, useModifierSide } from "@/hooks/useModifierSide";
+import { usePickerTray } from "@/contexts/PickerTrayContext";
+import { trayKeyboardScale } from "@/lib/pickerShape";
+import { NUMPAD_COLUMNS, NUMPAD_GAP_PX, NUMPAD_VARIANT_PX, numpadCellSize, numpadVariantFor } from "@/lib/numpadFit";
 
 import { BUTTON_TO_KEYCODE_MAP, LAYOUTS } from "@/components/Keyboards/layouts";
 
@@ -37,9 +41,14 @@ import {
 
 interface Props {
     isPicker?: boolean;
+    /**
+     * With the L-shaped picker, this copy is the one on screen and puts its
+     * keyboard in the tray under the layout; the small pickers stay here.
+     */
+    trayPortal?: boolean;
 }
 
-const BasicKeyboards = ({ isPicker }: Props) => {
+const BasicKeyboards = ({ isPicker, trayPortal = false }: Props) => {
     const [activeModifiers, setActiveModifiers] = useState<Modifier[]>([]);
     const [modifierSide, setModifierSide] = useModifierSide();
     const { assignKeycode, isBinding, selectedTarget } = useKeyBinding();
@@ -48,6 +57,8 @@ const BasicKeyboards = ({ isPicker }: Props) => {
     const { keyVariant, layoutMode, internationalLayout, setInternationalLayout } = useLayoutSettings();
 
     const isHorizontal = layoutMode === "bottombar";
+    const tray = usePickerTray();
+    const inTray = trayPortal && !isHorizontal && !!tray.body && !!tray.header;
 
 
 
@@ -147,24 +158,41 @@ const BasicKeyboards = ({ isPicker }: Props) => {
         label: `F${i + 1}`
     }));
 
-    // Grid column sizing based on keyVariant (in pixels)
-    const numpadKeySize = keyVariant === 'small' ? 30 : keyVariant === 'medium' ? 45 : 60;
+    // The numpad takes the canvas key size when its column has room and
+    // shrinks to the column otherwise, so it never scrolls sideways.
+    const numpadKeySize = NUMPAD_VARIANT_PX[keyVariant];
+    // A callback ref: the numpad's column can mount after this panel does.
+    const [numpadBox, numpadBoxRef] = useState<HTMLDivElement | null>(null);
+    const [numpadWidth, setNumpadWidth] = useState<number | null>(null);
+    useLayoutEffect(() => {
+        if (!numpadBox) return;
+        const measure = () => setNumpadWidth(numpadBox.clientWidth);
+        measure();
+        if (typeof ResizeObserver === "undefined") return;
+        const observer = new ResizeObserver(measure);
+        observer.observe(numpadBox);
+        return () => observer.disconnect();
+    }, [numpadBox]);
+    const numpadCell = numpadCellSize(numpadWidth, numpadKeySize);
+    const numpadVariant = numpadVariantFor(numpadCell, keyVariant);
 
     const renderKeyGrid = (keys: { keycode: string, label: string, useServiceLabel?: boolean }[], gridColSize?: number, variantOverride?: "small" | "medium" | "default") => {
         const effectiveVariant = variantOverride || keyVariant;
-        const keySizeClass = effectiveVariant === 'small' ? 'h-[30px] w-[30px]' : effectiveVariant === 'medium' ? 'h-[45px] w-[45px]' : 'h-[60px] w-[60px]';
+        // A sized grid sets each cell from its column size; otherwise the variant's own size.
+        const keySizeClass = gridColSize ? "" : effectiveVariant === 'small' ? 'h-[30px] w-[30px]' : effectiveVariant === 'medium' ? 'h-[45px] w-[45px]' : 'h-[60px] w-[60px]';
+        const cellStyle = gridColSize ? { width: gridColSize, height: gridColSize } : undefined;
 
         const gridStyle = gridColSize ? {
             display: 'grid',
-            gridTemplateColumns: `repeat(7, ${gridColSize}px)`,
-            gap: '4px'
+            gridTemplateColumns: `repeat(${NUMPAD_COLUMNS}, ${gridColSize}px)`,
+            gap: `${NUMPAD_GAP_PX}px`
         } : undefined;
 
         return (
             <div className={cn(!gridColSize && "flex flex-wrap gap-1")} style={gridStyle}>
                 {keys.map((k, i) => {
                     if (k.keycode === "BLANK") {
-                        return <div key={`blank-${i}`} className={keySizeClass} />;
+                        return <div key={`blank-${i}`} className={keySizeClass} style={cellStyle} />;
                     }
 
                     const finalKeycode = (k.keycode === "BLANK" || k.keycode === "KC_NO" || k.keycode === "KC_TRNS")
@@ -194,6 +222,7 @@ const BasicKeyboards = ({ isPicker }: Props) => {
                                 keySizeClass,
                                 isDoubleHeight ? "row-span-2" : ""
                             )}
+                            style={cellStyle}
                             hoverBorderColor={hoverBorderColor}
                             hoverBackgroundColor={hoverBackgroundColor}
                             hoverLayerColor={layerColorName}
@@ -453,7 +482,28 @@ const BasicKeyboards = ({ isPicker }: Props) => {
                 </div>
             )}
 
-            <div className="flex flex-col gap-2">
+            {inTray ? <>
+                {createPortal(
+                    <select
+                        className="text-sm font-medium text-kb-ink bg-transparent border-none p-0 cursor-pointer outline-none focus:ring-0"
+                        value={internationalLayout}
+                        onChange={(e) => setInternationalLayout(e.target.value)}
+                        aria-label="Keyboard layout"
+                    >
+                        {Object.values(LAYOUTS).map((kb: any) => (
+                            <option key={kb.value} value={kb.value}>
+                                {kb.label}
+                            </option>
+                        ))}
+                    </select>,
+                    tray.header!,
+                )}
+                {createPortal(
+                    <QwertyKeyboard onKeyPress={handleKeyboardInput} activeModifiers={activeModifiers} modifierSide={modifierSide} hideLanguageSelector disableTooltip={true}
+                        fit={{ maxHeight: tray.keyboardHeight, scaleFor: trayKeyboardScale }} />,
+                    tray.body!,
+                )}
+            </> : <div className="flex flex-col gap-2">
                 <div className="flex flex-row items-center justify-start">
                     <select
                         className="font-semibold text-lg text-kb-ink bg-transparent border-none p-0 cursor-pointer outline-none focus:ring-0"
@@ -468,20 +518,21 @@ const BasicKeyboards = ({ isPicker }: Props) => {
                     </select>
                 </div>
                 <QwertyKeyboard onKeyPress={handleKeyboardInput} activeModifiers={activeModifiers} modifierSide={modifierSide} hideLanguageSelector disableTooltip={true} />
-            </div>
+            </div>}
 
             <section className="flex flex-col gap-2">
                 <div className="flex items-center gap-3">
                     <span className="font-semibold text-lg text-kb-ink">Modifiers</span>
                     <ModifierSideToggle side={modifierSide} onChange={setModifierSide} />
                 </div>
-                <div className="flex flex-wrap items-center gap-1">
+                {/* One line at any panel width: the five buttons share it equally. */}
+                <div className="grid grid-cols-5 gap-1" data-modifier-buttons="">
                     <Button
                         type="button"
                         variant={activeModifiers.length === 0 ? "default" : "secondary"}
                         size="sm"
                         className={cn(
-                            "rounded-md h-8 transition-all text-sm font-bold border-none w-[84px]",
+                            "rounded-md h-8 min-w-0 px-1 transition-all text-sm font-bold border-none",
                             activeModifiers.length === 0 ? "bg-kb-active text-kb-active-fg shadow-sm" : "bg-kb-gray-medium text-slate-700 dark:text-neutral-200 hover:bg-kb-surface dark:hover:bg-neutral-700"
                         )}
                         onClick={handleClearModifiers}
@@ -498,7 +549,7 @@ const BasicKeyboards = ({ isPicker }: Props) => {
                                 variant={isActive ? "default" : "secondary"}
                                 size="sm"
                                 className={cn(
-                                    "rounded-md h-8 transition-all text-sm font-bold border-none w-[84px]",
+                                    "rounded-md h-8 min-w-0 px-1 transition-all text-sm font-bold border-none",
                                     isActive ? "bg-kb-active text-kb-active-fg shadow-sm" : "bg-kb-gray-medium text-slate-700 dark:text-neutral-200 hover:bg-kb-surface dark:hover:bg-neutral-700"
                                 )}
                                 onClick={() => handleModifierToggle(modifier)}
@@ -576,7 +627,7 @@ const BasicKeyboards = ({ isPicker }: Props) => {
                 </div>
                 <div className="flex flex-col gap-2">
                     <span className="font-semibold text-lg text-kb-ink">Numpad</span>
-                    <div className="max-w-full overflow-x-auto">{renderKeyGrid(numpadKeys, numpadKeySize)}</div>
+                    <div ref={numpadBoxRef} className="w-full min-w-0" data-numpad-box="">{renderKeyGrid(numpadKeys, numpadCell, numpadVariant)}</div>
                 </div>
                 <div className="flex flex-col gap-2">
                     <span className="font-semibold text-lg text-kb-ink">Function Keys</span>
