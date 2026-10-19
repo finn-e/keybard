@@ -96,7 +96,8 @@ def parse_pointing_contacts(data):
     """A POINTING_CONTACTS reply's payload (after the command echo) as a dict, or None.
 
     format(1) flags(1) age_ms(1) n(1), then n x 4 bytes: [0] bits 0-3 contact ID, bit 4
-    tip, bit 5 confidence, bit 6 right pad; [1..3] x | y << 12 little-endian, x 0..2047
+    tip, bit 5 confidence, bit 6 right pad, bit 7 a finger the touchpad left out (its ID is
+    from a space of its own; it comes back with leftOut=True); [1..3] x | y << 12 little-endian, x 0..2047
     across that pad, y 0..1791 down it. n is at most MAX_CONTACTS; a reply must hold every
     contact it counts. Contacts lifting (tip clear) are left out; x and y come back as -1..1
     from the pad's left and top edges.
@@ -116,6 +117,8 @@ def parse_pointing_contacts(data):
         w = int.from_bytes(data[5 + 4 * i:8 + 4 * i], "little")
         contact = dict(id=b & 15, x=round(pad_unit(w & 0xFFF, PAD_COUNTS_X), 4),
                        y=round(pad_unit((w >> 12) & 0xFFF, PAD_COUNTS_Y), 4), confident=bool(b & 0x20))
+        if b & 0x80:  # a finger the touchpad left out: listed after the rest, IDs of its own
+            contact['leftOut'] = True
         out['right' if b & 0x40 else 'left'].append(contact)
     return out
 

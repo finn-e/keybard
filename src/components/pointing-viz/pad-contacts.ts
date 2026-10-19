@@ -1,7 +1,7 @@
 // Where the drawn touchpad puts its fingers. Pure, so the placement is tested
 // without a canvas.
 
-import type { PadContact } from "@/utils/pointing-contacts";
+import { contactKey, type PadContact } from "@/utils/pointing-contacts";
 
 /** A drawn finger: -1..1 across and down the pad, easing in and out by press. */
 export interface Finger {
@@ -20,10 +20,11 @@ export function syncFingers(fingers: Map<number, Finger>, contacts: readonly Pad
     let changed = false;
     const seen = new Set<number>();
     for (const c of contacts) {
-        seen.add(c.id);
-        const f = fingers.get(c.id);
+        const key = contactKey(c);
+        seen.add(key);
+        const f = fingers.get(key);
         if (!f || !f.down) {
-            fingers.set(c.id, { x: c.x, y: c.y, press: f?.press ?? 0, down: true });
+            fingers.set(key, { x: c.x, y: c.y, press: f?.press ?? 0, down: true });
             changed = true;
         } else if (f.x !== c.x || f.y !== c.y) {
             f.x = c.x;
