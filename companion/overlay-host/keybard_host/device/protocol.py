@@ -35,6 +35,9 @@ HOST_MOTION_READER = 2
 # of every touch contact on its pad (native touchpad builds). Reading clears nothing.
 POINTING_CONTACTS_FLAG2 = 1 << 5
 POINTING_CONTACTS = 0x2F
+# The most contacts a 0x2F reply carries: three fingers on each pad. The count byte says
+# how many follow, so firmware that sends at most 5 reads the same.
+MAX_CONTACTS = 6
 PAD_COUNTS_X, PAD_COUNTS_Y = 2048, 1792
 SHIFT_BITS = 0x22  # left and right Shift in the HID modifier byte
 # Protocol -> command -> exact request argument length. No setter is expressible.
@@ -129,15 +132,19 @@ def parse_pointing_contacts(data):
 
     format(1) flags(1) age_ms(1) n(1), then n x 4 bytes: [0] bits 0-3 contact ID, bit 4
     tip, bit 5 confidence, bit 6 right pad; [1..3] x | y << 12 little-endian, x 0..2047
-    across that pad, y 0..1791 down it. Contacts lifting (tip clear) are left out; x and y
-    come back as -1..1 from the pad's left and top edges.
+    across that pad, y 0..1791 down it. n is at most MAX_CONTACTS; a reply must hold every
+    contact it counts. Contacts lifting (tip clear) are left out; x and y come back as -1..1
+    from the pad's left and top edges.
     """
     data = bytes(data or b"")
-    if len(data) < 24 or data[0] != 1:
+    if len(data) < 4 or data[0] != 1:
+        return None
+    n = min(MAX_CONTACTS, data[3])
+    if len(data) < 4 + 4 * n:
         return None
     flags = data[1]
     out = dict(reporting=bool(flags & 1), pads=dict(left=bool(flags & 2), right=bool(flags & 4)), left=[], right=[])
-    for i in range(min(5, data[3])):
+    for i in range(n):
         b = data[4 + 4 * i]
         if not b & 0x10:
             continue

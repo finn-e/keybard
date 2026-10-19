@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest";
 import { padFromRelative, syncFingers, type Finger } from "@/components/pointing-viz/pad-contacts";
 import { hostPointingEvent } from "@/features/trainer/host-pointing";
 import { PAD_COUNTS_PER_HALF } from "@/features/pointing-demo";
-import { padUnit, parsePointingContacts, withPadContacts, SVIL_FLAG2_POINTING_CONTACTS } from "@/utils/pointing-contacts";
+import { MAX_CONTACTS, padUnit, parsePointingContacts, withPadContacts, SVIL_FLAG2_POINTING_CONTACTS } from "@/utils/pointing-contacts";
 import { parsePointingMotion } from "@/utils/pointing-motion";
 
 /** A 0x2F reply as the firmware packs it (keyboards/svalboard/azoteq/ptp.c, sval_ptp_contacts). */
-function reply(flags: number, contacts: { id: number; right?: boolean; x: number; y: number; tip?: boolean; conf?: boolean }[]): Uint8Array {
-    const r = new Uint8Array(2 + 24);
+// Its length is what a report leaves after the wrapper and echo: 26 bytes on
+// 32-byte reports (room for 5 contacts), 58 on 64-byte ones.
+function reply(flags: number, contacts: { id: number; right?: boolean; x: number; y: number; tip?: boolean; conf?: boolean }[], length = 2 + 24): Uint8Array {
+    const r = new Uint8Array(length);
     r[0] = 0x2f;
     r[1] = 1;
     r[2] = flags;
@@ -77,7 +79,37 @@ describe("POINTING_CONTACTS (0x2F)", () => {
         expect(parsePointingContacts(echo)).toBeNull();
         const format = good.slice(); format[1] = 0;
         expect(parsePointingContacts(format)).toBeNull();
-        expect(parsePointingContacts(good.slice(0, 20))).toBeNull();
+        expect(parsePointingContacts(good.slice(0, 4))).toBeNull();
+        // A reply cut short of the contacts its count names.
+        const two = reply(1, [{ id: 1, x: 1, y: 1 }, { id: 2, x: 2, y: 2 }]);
+        expect(parsePointingContacts(two.slice(0, 5 + 4))).toBeNull();
+        expect(parsePointingContacts(two.slice(0, 5 + 8))).not.toBeNull();
+    });
+
+    it("reads six contacts: three fingers on each pad", () => {
+        expect(MAX_CONTACTS).toBe(6);
+        const six = [0, 1, 2, 3, 4, 5].map((i) => ({ id: i, right: i >= 3, x: 300 * (i + 1), y: 250 * (i + 1) }));
+        const r = parsePointingContacts(reply(7, six, 64 - 6))!;
+        expect(r.left.map((c) => c.id)).toEqual([0, 1, 2]);
+        expect(r.right.map((c) => c.id)).toEqual([3, 4, 5]);
+        close(r.right[2].x, (1800 / 2047) * 2 - 1);
+        close(r.right[2].y, (1500 / 1791) * 2 - 1);
+    });
+
+    it("still reads 5-contact firmware on 32-byte reports", () => {
+        const five = [0, 1, 2, 3, 4].map((i) => ({ id: i, right: i >= 2, x: 100 * i, y: 100 * i }));
+        const r = parsePointingContacts(reply(7, five))!;
+        expect(r.left).toHaveLength(2);
+        expect(r.right).toHaveLength(3);
+        // Six counted where a 32-byte report has room for five: incomplete.
+        const r6 = reply(7, five);
+        r6[4] = 6;
+        expect(parsePointingContacts(r6)).toBeNull();
+    });
+
+    it("reads no more than six contacts, whatever the count says", () => {
+        const seven = [0, 1, 2, 3, 4, 5, 6].map((i) => ({ id: i, x: 10, y: 10 }));
+        expect(parsePointingContacts(reply(3, seven, 64 - 6))!.left).toHaveLength(6);
     });
 
     it("hands each pad's contacts to its hand of the motion report", () => {
@@ -134,5 +166,12 @@ describe("contacts from the Overlay app", () => {
             { id: 4, x: 1, y: 0.9, confident: false },
         ]);
         expect(r.right.contacts).toBeUndefined();
+    });
+
+    it("pass through six contacts on a pad, and no more", () => {
+        const list = [0, 1, 2, 3, 4, 5, 6].map((id) => ({ id, x: 0, y: 0 }));
+        const r = hostPointingEvent({ left: { valid: true, contacts: list }, right: { valid: true, contacts: list.slice(0, 3) } })!;
+        expect(r.left.contacts!.map((c) => c.id)).toEqual([0, 1, 2, 3, 4, 5]);
+        expect(r.right.contacts).toHaveLength(3);
     });
 });

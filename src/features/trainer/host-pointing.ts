@@ -6,7 +6,7 @@
 import { isBallId, type BallId } from '@/components/pointing-viz/webgl/materials';
 import { PARANOID } from '@/lib/paranoid';
 import { appStorage } from '@/utils/app-storage';
-import type { PadContact } from '@/utils/pointing-contacts';
+import { MAX_CONTACTS, type PadContact } from '@/utils/pointing-contacts';
 import type { PointingMotionReport } from '@/utils/pointing-motion';
 import { velocityScrollFromJson } from '@/utils/velocity-scroll';
 import { HOST_ORIGIN } from './host';
@@ -48,10 +48,10 @@ export function hostUid(kbid: string | undefined | null): string | null {
     return null;
 }
 
-/** A hand's contacts from the Host (at most 5; each id 0..15, x and y -1..1). */
+/** A hand's contacts from the Overlay app (at most MAX_CONTACTS; each id 0..15, x and y -1..1). */
 function hostContacts(list: unknown[]): PadContact[] {
     const out: PadContact[] = [];
-    for (const item of list.slice(0, 5)) {
+    for (const item of list.slice(0, MAX_CONTACTS)) {
         if (!item || typeof item !== 'object') continue;
         const c = item as Record<string, unknown>;
         const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
