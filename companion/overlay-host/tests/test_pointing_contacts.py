@@ -13,7 +13,7 @@ def contacts_payload(flags, contacts, length=24):
     out[0], out[1], out[3] = 1, flags, len(contacts)
     for i, c in enumerate(contacts):
         o = 4 + 4 * i
-        out[o] = (c['id'] & 15) | (0 if c.get('tip') is False else 0x10) | (0 if c.get('conf') is False else 0x20) | (0x40 if c.get('right') else 0)
+        out[o] = (c['id'] & 15) | (0 if c.get('tip') is False else 0x10) | (0 if c.get('conf') is False else 0x20) | (0x40 if c.get('right') else 0) | (0x80 if c.get('out') else 0)
         out[o + 1:o + 4] = (c['x'] | c['y'] << 12).to_bytes(3, 'little')
     return bytes(out)
 
@@ -65,6 +65,17 @@ class ContactsTests(unittest.TestCase):
         r = parse_pointing_contacts(contacts_payload(7, six, 64 - 7))
         self.assertEqual([c['id'] for c in r['left']], [0, 1, 2])
         self.assertEqual([c['id'] for c in r['right']], [3, 4, 5])
+        self.assertAlmostEqual(r['right'][2]['x'], 1800 / 2047 * 2 - 1, places=3)
+
+    def test_three_on_each_pad_with_one_left_out(self):
+        # The touchpad reports 5; the sixth finger follows with bit 7 and an ID of its own space.
+        six = [dict(id=0, x=100, y=100), dict(id=1, x=600, y=600), dict(id=2, x=1200, y=1200),
+               dict(id=3, right=True, x=200, y=300), dict(id=4, right=True, x=900, y=900),
+               dict(id=3, right=True, out=True, x=1800, y=1500)]
+        r = parse_pointing_contacts(contacts_payload(7, six, 64 - 7))
+        self.assertEqual(len(r['left']), 3)
+        self.assertEqual([(c['id'], c.get('leftOut', False)) for c in r['right']], [(3, False), (4, False), (3, True)])
+        self.assertTrue(r['right'][2]['confident'])
         self.assertAlmostEqual(r['right'][2]['x'], 1800 / 2047 * 2 - 1, places=3)
 
     def test_five_contact_firmware_on_32_byte_reports(self):

@@ -3,13 +3,13 @@ import { describe, expect, it } from "vitest";
 import { padFromRelative, syncFingers, type Finger } from "@/components/pointing-viz/pad-contacts";
 import { hostPointingEvent } from "@/features/trainer/host-pointing";
 import { PAD_COUNTS_PER_HALF } from "@/features/pointing-demo";
-import { MAX_CONTACTS, padUnit, parsePointingContacts, withPadContacts, SVIL_FLAG2_POINTING_CONTACTS } from "@/utils/pointing-contacts";
+import { MAX_CONTACTS, contactKey, padUnit, parsePointingContacts, withPadContacts, SVIL_FLAG2_POINTING_CONTACTS } from "@/utils/pointing-contacts";
 import { parsePointingMotion } from "@/utils/pointing-motion";
 
 /** A 0x2F reply as the firmware packs it (keyboards/svalboard/azoteq/ptp.c, sval_ptp_contacts). */
 // Its length is what a report leaves after the wrapper and echo: 26 bytes on
 // 32-byte reports (room for 5 contacts), 58 on 64-byte ones.
-function reply(flags: number, contacts: { id: number; right?: boolean; x: number; y: number; tip?: boolean; conf?: boolean }[], length = 2 + 24): Uint8Array {
+function reply(flags: number, contacts: { id: number; right?: boolean; x: number; y: number; tip?: boolean; conf?: boolean; out?: boolean }[], length = 2 + 24): Uint8Array {
     const r = new Uint8Array(length);
     r[0] = 0x2f;
     r[1] = 1;
@@ -17,7 +17,7 @@ function reply(flags: number, contacts: { id: number; right?: boolean; x: number
     r[4] = contacts.length;
     contacts.forEach((c, i) => {
         const o = 5 + 4 * i;
-        r[o] = (c.id & 15) | (c.tip === false ? 0 : 0x10) | (c.conf === false ? 0 : 0x20) | (c.right ? 0x40 : 0);
+        r[o] = (c.id & 15) | (c.tip === false ? 0 : 0x10) | (c.conf === false ? 0 : 0x20) | (c.right ? 0x40 : 0) | (c.out ? 0x80 : 0);
         const w = c.x | (c.y << 12);
         r[o + 1] = w & 0xff; r[o + 2] = (w >> 8) & 0xff; r[o + 3] = (w >> 16) & 0xff;
     });
@@ -94,6 +94,25 @@ describe("POINTING_CONTACTS (0x2F)", () => {
         expect(r.right.map((c) => c.id)).toEqual([3, 4, 5]);
         close(r.right[2].x, (1800 / 2047) * 2 - 1);
         close(r.right[2].y, (1500 / 1791) * 2 - 1);
+    });
+
+    it("reads three on each pad when the touchpad left one out (bit 7): a normal finger with its own ID space", () => {
+        // The touchpad reports 5; the sixth finger follows with bit 7 set, and
+        // its ID (3) may equal a reported finger's on the same pad.
+        const r = parsePointingContacts(reply(7, [
+            { id: 0, x: 100, y: 100 }, { id: 1, x: 600, y: 600 }, { id: 2, x: 1200, y: 1200 },
+            { id: 3, right: true, x: 200, y: 300 }, { id: 4, right: true, x: 900, y: 900 },
+            { id: 3, right: true, out: true, x: 1800, y: 1500 },
+        ], 64 - 6))!;
+        expect(r.left).toHaveLength(3);
+        expect(r.right.map((c) => [c.id, c.leftOut ?? false])).toEqual([[3, false], [4, false], [3, true]]);
+        close(r.right[2].x, (1800 / 2047) * 2 - 1);
+        expect(r.right[2].confident).toBe(true);
+        // Drawn as three fingers: the left-out one doesn't replace finger 3.
+        const fingers = new Map<number, Finger>();
+        syncFingers(fingers, r.right);
+        expect([...fingers.values()].filter((f) => f.down)).toHaveLength(3);
+        expect(contactKey(r.right[0])).not.toBe(contactKey(r.right[2]));
     });
 
     it("still reads 5-contact firmware on 32-byte reports", () => {
@@ -173,5 +192,13 @@ describe("contacts from the Overlay app", () => {
         const r = hostPointingEvent({ left: { valid: true, contacts: list }, right: { valid: true, contacts: list.slice(0, 3) } })!;
         expect(r.left.contacts!.map((c) => c.id)).toEqual([0, 1, 2, 3, 4, 5]);
         expect(r.right.contacts).toHaveLength(3);
+    });
+
+    it("keep a left-out contact apart (bit 7 from the board, leftOut from the Overlay app)", () => {
+        const r = hostPointingEvent({ left: { valid: true, contacts: [{ id: 3, x: 0, y: 0 }, { id: 3, x: 0.5, y: 0.5, leftOut: true }] }, right: {} })!;
+        expect(r.left.contacts).toEqual([
+            { id: 3, x: 0, y: 0, confident: true },
+            { id: 3, x: 0.5, y: 0.5, confident: true, leftOut: true },
+        ]);
     });
 });

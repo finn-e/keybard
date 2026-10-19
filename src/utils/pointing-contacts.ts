@@ -20,6 +20,17 @@ export interface PadContact {
     y: number;
     /** Clear: the touchpad has flagged it as a palm. */
     confident: boolean;
+    /**
+     * A finger the touchpad left out (it reports at most 5): the board still
+     * lists it, with bit 7 set and an ID from its own space. Drawn like any
+     * other finger; its ID and this flag together identify it.
+     */
+    leftOut?: boolean;
+}
+
+/** One key per finger: a left-out contact's ID space is its own. */
+export function contactKey(c: Pick<PadContact, "id" | "leftOut">): number {
+    return c.leftOut ? 16 + c.id : c.id;
 }
 
 export interface PointingContactsReport {
@@ -75,6 +86,7 @@ export function parsePointingContacts(reply: Uint8Array, cmd = 0x2f): PointingCo
             x: padUnit(w & 0xfff, PAD_COUNTS_X),
             y: padUnit((w >> 12) & 0xfff, PAD_COUNTS_Y),
             confident: (b & 0x20) !== 0,
+            ...(b & 0x80 ? { leftOut: true } : {}),
         };
         (b & 0x40 ? out.right : out.left).push(contact);
     }
