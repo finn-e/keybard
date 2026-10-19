@@ -1,0 +1,12 @@
+# Small X libraries Qt's X11 plugin and Qt WebEngine need that some desktops leave out.
+# The launcher uses a bundled copy only of the ones the system lacks.
+libxcb-cursor.so.0
+libxcb-icccm.so.4
+libxcb-image.so.0
+libxcb-keysyms.so.1
+libxcb-render-util.so.0
+libxcb-util.so.1
+libxcb-shape.so.0
+libxcb-xkb.so.1
+libxkbcommon-x11.so.0
+libxkbfile.so.1

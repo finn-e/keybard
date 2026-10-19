@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Keybard Overlay
+Comment=Shows your Svalboard layout on top of your desktop
+Exec=keybard-overlay
+Icon=keybard-overlay
+Terminal=false
+Categories=Utility;
+StartupNotify=false

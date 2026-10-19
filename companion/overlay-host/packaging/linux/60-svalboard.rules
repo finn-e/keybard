@@ -1,0 +1,3 @@
+# Keybard Overlay and Keybard: let the logged-in user open Svalboard HID devices.
+# Svalboard USB vendor ID 0x303a, every Svalboard product ID (0x4044-0x404d).
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="404[4-9a-d]", MODE="0660", TAG+="uaccess"

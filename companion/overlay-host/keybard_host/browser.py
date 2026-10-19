@@ -8,6 +8,7 @@ network, and background services (sync, updates, safe-browsing pings) are off.
 """
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -30,8 +31,21 @@ MAC_BROWSERS = (
 )
 
 
-def find_chromium(platform=None):
-    if (platform or sys.platform) == 'darwin':
+# Linux commands, in order of preference.
+LINUX_BROWSERS = (
+    'google-chrome', 'google-chrome-stable', 'microsoft-edge', 'microsoft-edge-stable',
+    'chromium', 'chromium-browser',
+)
+
+
+def find_chromium(platform=None, which=shutil.which):
+    platform = platform or sys.platform
+    if platform.startswith('linux'):
+        for name in LINUX_BROWSERS:
+            path = which(name)
+            if path: return Path(path)
+        return None
+    if platform == 'darwin':
         for root in (Path('/Applications'), Path.home() / 'Applications'):
             for rel in MAC_BROWSERS:
                 path = root / rel

@@ -41,7 +41,7 @@ Paranoid mode is a separate way to run Keybard Overlay, for people who want Keyb
 
 ## Linux and macOS
 
-Linux: copy the web build to `companion/overlay-host/web`, then run `bash companion/overlay-host/start-linux.sh`. On Wayland, placement, stacking and click-through depend on the compositor.
+Linux: copy the web build to `companion/overlay-host/web`, then run `bash companion/overlay-host/start-linux.sh`. To build the self-contained Linux test package (an AppImage and a `.tar.gz` with their own Python and Qt), see `packaging/linux/build.sh`; the tester's instructions are `packaging/linux/README-LINUX.md`. On Wayland, placement, stacking and click-through depend on the compositor.
 
 macOS: see [macOS](#macos) below.
 

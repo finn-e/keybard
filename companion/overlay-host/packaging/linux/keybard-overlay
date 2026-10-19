@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Keybard Overlay for Linux: runs the bundled Python and Qt, nothing installed system-wide.
+#
+#   ./keybard-overlay              start (X11; on Wayland through XWayland)
+#   ./keybard-overlay --wayland    start as a native Wayland window instead
+#   ./keybard-overlay --diagnose   write a report to send back, then exit
+#   ./keybard-overlay --install-desktop-entry   add Keybard Overlay to the app menu
+#   ./keybard-overlay --paranoid   paranoid mode (needs Chrome, Edge or Chromium)
+#
+# Every run is logged to ~/.local/state/keybard-overlay/overlay.log.
+set -u
+HERE=${APPDIR:-$(dirname "$(readlink -f "$0")")}
+PY="$HERE/runtime/bin/python3"
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/keybard-overlay"
+LOG="$STATE/overlay.log"
+mkdir -p "$STATE"
+
+platform=auto diagnose=0 desktop=0 args=()
+for a in "$@"; do
+  case "$a" in
+    --wayland) platform=wayland ;;
+    --x11) platform=xcb ;;
+    --diagnose) diagnose=1 ;;
+    --install-desktop-entry) desktop=1 ;;
+    *) args+=("$a") ;;
+  esac
+done
+
+if [ "$desktop" = 1 ]; then
+  apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+  icons="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/256x256/apps"
+  mkdir -p "$apps" "$icons"
+  cp "$HERE/keybard-overlay.png" "$icons/keybard-overlay.png"
+  exe=${APPIMAGE:-$HERE/keybard-overlay}
+  sed "s|^Exec=.*|Exec=\"$exe\"|" "$HERE/keybard-overlay.desktop" > "$apps/keybard-overlay.desktop"
+  echo "Added Keybard Overlay to the app menu ($apps/keybard-overlay.desktop)."
+  exit 0
+fi
+
+# Native Wayland doesn't let an app keep its window on top or place it, so a Wayland
+# session that also offers X11 (XWayland) runs the overlay there unless told otherwise.
+# QT_QPA_PLATFORM, when already set, always wins.
+if [ -z "${QT_QPA_PLATFORM:-}" ]; then
+  if [ "$platform" = wayland ]; then export QT_QPA_PLATFORM=wayland
+  elif [ "$platform" = xcb ] || [ -n "${DISPLAY:-}" ]; then export QT_QPA_PLATFORM=xcb
+  fi
+fi
+export KEYBARD_OVERLAY_PLATFORM="$platform"
+
+# Qt's X11 plugin needs a few small X libraries that some desktops leave out. Use the
+# bundled copy only of the ones this system lacks.
+fallback="$STATE/lib"
+rm -rf "$fallback"; mkdir -p "$fallback"
+cache=$( (ldconfig -p || /sbin/ldconfig -p) 2>/dev/null )
+for f in "$HERE"/lib-fallback/*.so*; do
+  [ -e "$f" ] || continue
+  n=${f##*/}
+  case "$cache" in *"$n "*) ;; *) ln -s "$f" "$fallback/$n" ;; esac
+done
+export LD_LIBRARY_PATH="$fallback${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# Qt WebEngine's sandbox needs unprivileged user namespaces. Ubuntu 24.04 and later
+# restrict them for apps without an AppArmor profile, and WebEngine then can't start.
+# The overlay only ever loads its own built-in Keybard page from 127.0.0.1.
+restricted=0
+[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ] && restricted=1
+[ "$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null)" = 0 ] && restricted=1
+if [ "$restricted" = 1 ] && [ -z "${QTWEBENGINE_DISABLE_SANDBOX:-}" ]; then
+  export QTWEBENGINE_DISABLE_SANDBOX=1
+fi
+
+export PYTHONPATH="$HERE/app" PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1
+unset PYTHONHOME
+
+if [ "$diagnose" = 1 ]; then
+  report="$HOME/keybard-overlay-report.txt"
+  {
+    echo "Keybard Overlay diagnostic report, $(date -u '+%Y-%m-%d %H:%M UTC')"
+    echo "Launcher: platform choice=$platform QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-}"
+    echo "Sandbox: userns restricted=$restricted QTWEBENGINE_DISABLE_SANDBOX=${QTWEBENGINE_DISABLE_SANDBOX:-}"
+    echo "Bundled X libraries in use: $(ls "$fallback" | tr '\n' ' ')"
+    echo "Package: ${APPIMAGE:-$HERE}"
+    "$PY" -B -m keybard_host --diagnose "${args[@]}" 2>&1
+    for f in "$LOG" "$LOG.1"; do
+      [ -f "$f" ] || continue
+      echo "== Log $f (last 300 lines)"
+      tail -n 300 "$f"
+    done
+  } > "$report" 2>&1
+  cat "$report"
+  echo
+  echo "Report saved to $report. Please send that file back."
+  exit 0
+fi
+
+[ -f "$LOG" ] && mv -f "$LOG" "$LOG.1"
+{
+  echo "Keybard Overlay started $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+  echo "platform choice=$platform QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-} XDG_SESSION_TYPE=${XDG_SESSION_TYPE:-} XDG_CURRENT_DESKTOP=${XDG_CURRENT_DESKTOP:-}"
+  echo "userns restricted=$restricted QTWEBENGINE_DISABLE_SANDBOX=${QTWEBENGINE_DISABLE_SANDBOX:-} bundled X libs: $(ls "$fallback" | tr '\n' ' ')"
+} > "$LOG"
+"$PY" -B -u -X faulthandler -m keybard_host "${args[@]}" 2>&1 | tee -a "$LOG"
+exit "${PIPESTATUS[0]}"
