@@ -2,7 +2,8 @@
 from threading import Event, Lock
 import time
 from PySide6.QtCore import QThread, Signal
-from .protocol import SvalReader, ProtocolError, Cancelled, candidates, hid_backend, DEFAULT_LAYER_STATE_FLAG, POINTING_MOTION_FLAG2, UnsupportedCommand
+from .protocol import (SvalReader, ProtocolError, Cancelled, candidates, hid_backend, DEFAULT_LAYER_STATE_FLAG,
+                       POINTING_MOTION_FLAG2, POINTING_MOTION_READERS_FLAG2, UnsupportedCommand)
 
 
 class DeviceWorker(QThread):
@@ -16,7 +17,9 @@ class DeviceWorker(QThread):
     def __init__(self, selected, expected_uid=None, parent=None):
         super().__init__(parent)
         self.selected = selected
-        self.expected_uid = expected_uid  # Pinned after first successful handshake.
+        # The definition UID last seen. A different one after a reconnect is new firmware on
+        # the same board (same serial): its layout is read again, as on every connect.
+        self.expected_uid = expected_uid
         self.stop_event = Event()
         self.reload_event = Event()
         self.refresh_event = Event()
@@ -24,14 +27,21 @@ class DeviceWorker(QThread):
         self.press_enabled = False
         self.press_generation = 0
         self.pointing_enabled = False
+        self.pointing_watch = False
 
     # About 60 reads a second; the firmware counts motion only while someone reads within 1.5 s.
     POINTING_INTERVAL = .016
+    # Watching only (the overlay draws no pointing): enough to tell the board is in use. Only on
+    # firmware that keeps the Overlay's own motion counts, so Keybard's are never taken.
+    WATCH_INTERVAL = .25
     # How often to look again for a pointing module the board didn't know yet (one 0x18 read).
     SETTLE_INTERVAL = 1.0
 
-    def set_pointing_tracking(self, enabled):
+    def set_pointing_tracking(self, enabled, watch=False):
+        """enabled: read motion for the overlay to draw. watch: otherwise read it now and then,
+        to see the board is in use (only where the board keeps per-reader counts)."""
         self.pointing_enabled = bool(enabled)
+        self.pointing_watch = bool(watch)
 
     def set_press_tracking(self, enabled):
         with self.press_lock:
@@ -71,9 +81,6 @@ class DeviceWorker(QThread):
                 reader = SvalReader(device, cancelled=self.stop_event.is_set)
                 unavailable_generation = None
                 version, uid = reader.info()
-                if self.expected_uid is not None and uid != self.expected_uid:
-                    self.status.emit("Stopped · reconnected board definition UID changed; select it again")
-                    return
                 self.expected_uid = uid
                 self.reload_event.set()
                 refresh_after, refresh_failures = 0.0, 0
@@ -126,8 +133,10 @@ class DeviceWorker(QThread):
                         settle_next = time.monotonic() + self.SETTLE_INTERVAL
                         if reader.pointing_settled():
                             self.refresh_event.set()
-                    if self.pointing_enabled and pointing_supported and time.monotonic() >= pointing_next:
-                        pointing_next = time.monotonic() + self.POINTING_INTERVAL
+                    watching = (not self.pointing_enabled and self.pointing_watch
+                                and reader.feature_flags2 & POINTING_MOTION_READERS_FLAG2)
+                    if (self.pointing_enabled or watching) and pointing_supported and time.monotonic() >= pointing_next:
+                        pointing_next = time.monotonic() + (self.WATCH_INTERVAL if watching else self.POINTING_INTERVAL)
                         motion = None
                         try:
                             motion = reader.pointing_motion()

@@ -158,11 +158,13 @@ class SettingsTests(unittest.TestCase):
             state = HostState(path)
             state.set_pointing_look({'uid': '42', 'right': 'red', 'gloss': 0.5})
             state.board = {'uid': '42'}
-            self.assertEqual(state.snapshot()['pointingLook'], {'right': 'red', 'gloss': 0.5})
+            # Keybard's fixed gloss and sparkle, whatever an older Keybard saved.
+            fixed = {'gloss': 1.0, 'sparkle': 0.75}
+            self.assertEqual(state.snapshot()['pointingLook'], dict(fixed, right='red'))
             again = HostState(path); again.board = {'uid': '42'}
-            self.assertEqual(again.snapshot()['pointingLook'], {'right': 'red', 'gloss': 0.5})
+            self.assertEqual(again.snapshot()['pointingLook'], dict(fixed, right='red'))
             again.board = {'uid': '7'}
-            self.assertEqual(again.snapshot()['pointingLook'], {})
+            self.assertEqual(again.snapshot()['pointingLook'], fixed)
 
     def test_demo_motion_shape(self):
         m = demo_motion(3.0, .016)
