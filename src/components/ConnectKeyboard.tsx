@@ -112,13 +112,11 @@ const ConnectKeyboard = () => {
             const response = await fetch(demoLayoutUrl);
             if (!response.ok) throw new Error("Failed to fetch demo file");
             // ?demo=combos: the same layout with a few combos, tap dances and macros.
-            const blob = choice === "combos"
-                ? new Blob([withDemoFeatures(await response.text())], { type: "application/octet-stream" })
-                : await response.blob();
-            // Generate a proper filename from the URL or name
+            // Read as text (the layout is JSON), so the file is built from a string on every runtime.
+            const text = await response.text();
             // The bundled file's real name; in Keybard Paranoid the URL is a data: URL.
             const filename = "sval-default.svil";
-            const file = new File([blob], filename, { type: "application/octet-stream" });
+            const file = new File([choice === "combos" ? withDemoFeatures(text) : text], filename, { type: "application/octet-stream" });
             await loadFromFile(file, "demo");
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to load demo");
