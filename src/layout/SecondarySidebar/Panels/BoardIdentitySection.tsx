@@ -21,6 +21,7 @@ export default function BoardIdentitySection() {
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const [needsRestart, setNeedsRestart] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -62,6 +63,16 @@ export default function BoardIdentitySection() {
             setMessage("Couldn't save the name. Check the keyboard connection and try again.");
         } finally {
             setBusy(false);
+        }
+    };
+
+    const copySerial = async () => {
+        try {
+            await navigator.clipboard.writeText(info.serial);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1500);
+        } catch {
+            setMessage("Couldn't copy the serial. Select it and copy it instead.");
         }
     };
 
@@ -117,22 +128,28 @@ export default function BoardIdentitySection() {
                         </span>
                     </div>
                     {needsRestart && (
-                        <div className="flex flex-row items-center justify-between gap-2 text-xs">
-                            <span>Saved. Restart the keyboard for your computer to show the new name.</span>
-                            <Button size="sm" variant="outline" disabled={busy} onClick={restart}>
-                                Restart keyboard
-                            </Button>
-                        </div>
+                        <span role="status" className="text-xs">Saved. Restart the keyboard for your computer to show the new name.</span>
                     )}
                 </>
             ) : (
                 <span className="text-xs text-muted-foreground">This keyboard's flash has no room for a name.</span>
             )}
             <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-                <span>
-                    Serial <span className="font-mono">{info.serial}</span>
-                </span>
+                <div className="flex flex-row flex-wrap items-center gap-2">
+                    <span>
+                        Serial <span className="font-mono">{info.serial}</span>
+                    </span>
+                    <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={copySerial} aria-label="Copy serial">
+                        {copied ? "Copied" : "Copy"}
+                    </Button>
+                </div>
                 {info.serialSource === SerialSource.Random && <span>Generated on this keyboard (its flash chip has no ID).</span>}
+            </div>
+            <div className="flex flex-row items-center justify-between gap-2 border-t border-kb-gray-border pt-3">
+                <span className="text-xs text-muted-foreground">Disconnects the keyboard for a few seconds.</span>
+                <Button size="sm" variant={needsRestart ? "default" : "outline"} disabled={busy} onClick={restart}>
+                    Restart keyboard
+                </Button>
             </div>
         </div>
     );

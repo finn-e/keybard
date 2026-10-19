@@ -1,6 +1,6 @@
-name: Package Keybard Host release
+name: Package Keybard Overlay release
 
-# Every release tag packages Keybard Host (the CMD/ZIP package, keybard-paranoid.html
+# Every release tag packages Keybard Overlay (the CMD/ZIP package, keybard-paranoid.html
 # and checksums) into a GitHub release named after the tag:
 #
 #   x tags (x3, x3.1): a published GitHub prerelease, for the bleeding edge.
@@ -11,7 +11,7 @@ name: Package Keybard Host release
 # Both must be on main. Tag rules: .github/scripts/release-tag.sh. To package an
 # existing tag again (delete its release first):
 #
-#   gh workflow run keybard-host-release.yml -R svalboard/keybard -f tag=<tag>
+#   gh workflow run keybard-overlay-release.yml -R svalboard/keybard -f tag=<tag>
 
 on:
   push:
@@ -75,11 +75,11 @@ jobs:
             echo "## This build"
             echo
             echo "- Bundles Keybard built from commit \`$KEYBARD_COMMIT\` (each Keybard page shows its commit in the corner)."
-            echo "- Keybard Host reports its release and bundled Keybard in Keybard's Overlay dialog and in its tray tooltip."
+            echo "- Keybard Overlay reports its release and bundled Keybard in Keybard's Overlay dialog and in its tray tooltip."
           } >> dist/RELEASE-NOTES.md
       - name: Checksum
         working-directory: dist
-        run: sha256sum KeybardHost-Windows.zip > SHA256SUMS.txt
+        run: sha256sum KeybardOverlay-Windows.zip > SHA256SUMS.txt
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -93,6 +93,6 @@ jobs:
             kind=(--prerelease)
           fi
           gh release create "$RELEASE_TAG" \
-            dist/KeybardHost-Windows.zip dist/keybard-paranoid.html dist/SHA256SUMS.txt \
-            --verify-tag "${kind[@]}" --title "Keybard Host $RELEASE_TAG" \
+            dist/KeybardOverlay-Windows.zip dist/keybard-paranoid.html dist/SHA256SUMS.txt \
+            --verify-tag "${kind[@]}" --title "Keybard Overlay $RELEASE_TAG" \
             --notes-file dist/RELEASE-NOTES.md

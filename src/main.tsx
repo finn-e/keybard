@@ -1,4 +1,5 @@
 import HostOverlay from "./features/trainer/HostOverlay";
+import HostPointingDemo from "./features/trainer/HostPointingDemo";
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -7,6 +8,8 @@ import 'virtual:paranoid-fonts';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {new URLSearchParams(window.location.search).has("hostOverlay") ? <HostOverlay /> : <App />}
+    {new URLSearchParams(window.location.search).has("hostOverlay")
+      ? (new URLSearchParams(window.location.search).get("hostDemo") === "pointing" ? <HostPointingDemo /> : <HostOverlay />)
+      : <App />}
   </React.StrictMode>
 );

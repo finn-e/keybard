@@ -6,39 +6,39 @@ Keybard Paranoid is Keybard as a single HTML file that runs on your own computer
 
 There are two layers. You need both.
 
-1. **The page cannot fetch or load anything.** The file carries a Content Security Policy that blocks fetches, XHR, WebSockets, beacons, fonts, images, frames, workers, preloads and form posts. Scripts run only if their hashes match. Everything Keybard needs is embedded: code, styles, the Inter font, the icon, the example layout and the layer library. The only connection the policy allows is to the Keybard Host serving the page in paranoid mode.
-2. **The browser cannot reach the network.** A page's policy cannot stop navigations: redirects, prerendering, downloads and new windows can still carry data out. So the launchers open Chrome or Edge in a separate profile behind a dead proxy (`--proxy-server=127.0.0.1:9`). Every request that isn't loopback fails, navigations included. WebRTC is limited to proxied traffic, which means none, and background browser services are off. Chromium always bypasses proxies for loopback, so Keybard Host still works. That also means other services listening on your own machine stay reachable from the page.
+1. **The page cannot fetch or load anything.** The file carries a Content Security Policy that blocks fetches, XHR, WebSockets, beacons, fonts, images, frames, workers, preloads and form posts. Scripts run only if their hashes match. Everything Keybard needs is embedded: code, styles, the Inter font, the icon, the example layout and the layer library. The only connection the policy allows is to the Keybard Overlay serving the page in paranoid mode.
+2. **The browser cannot reach the network.** A page's policy cannot stop navigations: redirects, prerendering, downloads and new windows can still carry data out. So the launchers open Chrome or Edge in a separate profile behind a dead proxy (`--proxy-server=127.0.0.1:9`). Every request that isn't loopback fails, navigations included. WebRTC is limited to proxied traffic, which means none, and background browser services are off. Chromium always bypasses proxies for loopback, so Keybard Overlay still works. That also means other services listening on your own machine stay reachable from the page.
 
-Opening the file by double-clicking it, or opening the Host's address in your normal browser, gives you layer 1 only. Extensions installed in a normal profile can also read the page. Use the launchers for both layers.
+Opening the file by double-clicking it, or opening the overlay app's address in your normal browser, gives you layer 1 only. Extensions installed in a normal profile can also read the page. Use the launchers for both layers.
 
 ## What reads your keyboard, and when
 
 - **Keybard Paranoid** asks the board for its active layer only while its window is visible and focused. The Matrix Tester and Scan Lab only read while open and in front of you.
-- **Keybard Host** reads the board continuously while it runs, because the overlay is meant to work while you type in other apps. It reads the active layer and runs periodic device scans, and checks the Shift and Caps Lock state from Windows. Key presses are read only if you turn on held-key highlighting. It never sends anything off your computer, and in paranoid mode it accepts no website at all.
+- **Keybard Overlay** reads the board continuously while it runs, because the overlay is meant to work while you type in other apps. It reads the active layer and runs periodic device scans, and checks the Shift and Caps Lock state from Windows. Key presses are read only if you turn on held-key highlighting. It never sends anything off your computer, and in paranoid mode it accepts no website at all.
 
 ## Use it
 
 ### On its own
 
-1. Extract the Keybard Host ZIP. It contains `keybard-paranoid.html` and `Open-Paranoid.cmd`. You can also download `keybard-paranoid.html` on its own from the release and check it against `SHA256SUMS.txt`.
+1. Extract the Keybard Overlay ZIP. It contains `keybard-paranoid.html` and `Open-Paranoid.cmd`. You can also download `keybard-paranoid.html` on its own from the release and check it against `SHA256SUMS.txt`.
 2. Run **Open-Paranoid.cmd**. It opens the file in the contained Chrome or Edge profile.
 3. Click **Connect Keyboard** and choose your Svalboard.
 
-The Trainer works as a preview. For the desktop overlay, use Keybard Host in paranoid mode.
+The Trainer works as a preview. For the desktop overlay, use Keybard Overlay in paranoid mode.
 
 ### With the Trainer overlay
 
-1. Quit any Keybard Host that is already running (tray icon → Quit).
-2. Run **Start-Paranoid.cmd**. The first run downloads and verifies the Host's private Python/Qt runtime. After that it needs no network.
+1. Quit any Keybard Overlay that is already running (tray icon → Quit).
+2. Run **Start-Paranoid.cmd**. The first run downloads and verifies the overlay app's private Python/Qt runtime. After that it needs no network.
 3. Keybard Paranoid opens at `http://127.0.0.1:5178/` in the contained profile.
 
-In paranoid mode the Host:
+In paranoid mode the overlay app:
 - Refuses every website, including keybard.svalboard.com.
 - Refuses to be framed by any page.
 - Serves only Keybard Paranoid: it checks the page against the checksum shipped with it and its policy at startup, caches it, and serves nothing else.
 - Binds its port exclusively.
-- Will not take over from a Host it can't confirm is in paranoid mode; it tells you to quit that one first.
-- If a paranoid Host is already running, starting Keybard Host normally opens it in the contained profile too.
+- Will not take over from an overlay app it can't confirm is in paranoid mode; it tells you to quit that one first.
+- If a paranoid overlay app is already running, starting Keybard Overlay normally opens it in the contained profile too.
 
 ## Limits worth knowing
 

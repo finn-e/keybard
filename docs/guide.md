@@ -60,7 +60,7 @@ Add **Sniper** keys to slow the cursor and **Boost** keys to speed it up. Either
 
 ## Learn your layout
 
-**Trainer** shows your own layout for the layer you're on. The separate **Keybard Host** app (Windows preview) shows it as a desktop overlay that follows your layers while you work.
+**Trainer** shows your own layout for the layer you're on. The separate **Keybard Overlay** app (Windows preview) shows it as a desktop overlay that follows your layers while you work.
 
 ## Board name
 

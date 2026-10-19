@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { FirmwareUpdateNote, UnsupportedFirmwareCard } from '../../src/components/FirmwareUpdate';
-import { LATEST_FIRMWARE_RELEASE, SVALBOARD_FIRMWARE_URL, describeFirmware, firmwareUpdateNotice, identifyFirmwareRelease } from '../../src/constants/firmware';
+import { UnsupportedFirmwareCard } from '../../src/components/FirmwareUpdate';
+import { LATEST_FIRMWARE_RELEASE, SVALBOARD_FIRMWARE_URL, describeFirmware, identifyFirmwareRelease } from '../../src/constants/firmware';
 
 const mode = vi.hoisted(() => ({ paranoid: false }));
 vi.mock('@/lib/paranoid', () => ({ get PARANOID() { return mode.paranoid; }, userIsLooking: () => true }));
@@ -9,19 +9,18 @@ vi.mock('@/lib/paranoid', () => ({ get PARANOID() { return mode.paranoid; }, use
 describe('UnsupportedFirmwareCard', () => {
     beforeEach(() => { mode.paranoid = false; });
 
-    it('tells a Vial Svalboard owner to save the layout and flash Svalboard QMK', () => {
+    it('tells a Vial Svalboard owner to save the layout, then leads to the manual install', () => {
         render(<UnsupportedFirmwareCard info={{ kind: 'svalboard-vial', reportedVersion: 'v2025-11-01' }} />);
         const card = screen.getByRole('alert');
         expect(card).toHaveTextContent('old Vial firmware (v2025-11-01)');
         expect(card).toHaveTextContent('File > Save current layout');
-        expect(card).toHaveTextContent('Flash both halves');
-        expect(card).toHaveTextContent('RPI-RP2');
-        // The saved layout goes back in through the import control, after connecting
-        expect(card).toHaveTextContent('Import Layout above the keyboard and choose your saved .vil file');
-        expect(card).not.toHaveTextContent('Load File');
-        const link = screen.getByRole('link');
-        expect(link).toHaveAttribute('href', SVALBOARD_FIRMWARE_URL);
-        expect(link).toHaveAttribute('target', '_blank');
+        fireEvent.click(screen.getByRole('button', { name: 'Install by hand' }));
+        const manual = screen.getByTestId('manual-install');
+        expect(manual).toHaveTextContent('Double-tap its reset button');
+        expect(manual).toHaveTextContent('RPI-RP2');
+        expect(screen.getByText(/Import Layout/)).toBeInTheDocument();
+        // No release carried yet: the manual install links the firmware release
+        expect(screen.getByRole('link', { name: 'Svalboard firmware release' })).toHaveAttribute('href', SVALBOARD_FIRMWARE_URL);
     });
 
     it('sends other keyboards elsewhere without the Svalboard download', () => {
@@ -42,36 +41,9 @@ describe('UnsupportedFirmwareCard', () => {
     it('shows the download address as text in Keybard Paranoid', () => {
         mode.paranoid = true;
         render(<UnsupportedFirmwareCard info={{ kind: 'unknown' }} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Install by hand' }));
         expect(screen.queryByRole('link')).not.toBeInTheDocument();
-        expect(screen.getByRole('alert')).toHaveTextContent(SVALBOARD_FIRMWARE_URL);
-    });
-});
-
-describe('firmware update notice', () => {
-    beforeEach(() => { localStorage.clear(); });
-
-    it('only asks boards on an older release, on a live connection, to update', () => {
-        expect(firmwareUpdateNotice({ svil_proto: 3, feature_flags: 0x6f, feature_flags2: 0x01, keycode_version_reported: true })).toBeNull();
-        expect(firmwareUpdateNotice({ svil_proto: 3, feature_flags: 0x6f, keycode_version_reported: true })).toBe('launch');
-        expect(firmwareUpdateNotice({ svil_proto: 3, feature_flags: 0x60, keycode_version_reported: false })).toBe('rc');
-        expect(firmwareUpdateNotice({ svil_proto: 3, feature_flags: 0x0f, keycode_version_reported: false })).toBe('rc0');
-        expect(firmwareUpdateNotice({ svil_proto: 3, feature_flags: 0x60 })).toBeNull(); // loaded file
-        expect(firmwareUpdateNotice({ svil_proto: 4, feature_flags: 0, keycode_version_reported: false })).toBeNull();
-    });
-
-    it('explains what vLaunch2 adds to a board on vLaunch', () => {
-        render(<FirmwareUpdateNote notice="launch" />);
-        expect(screen.getByRole('note')).toHaveTextContent('Newer Svalboard firmware (vLaunch2) is available');
-    });
-
-    it('stays dismissed once dismissed', () => {
-        const { unmount } = render(<FirmwareUpdateNote notice="rc" />);
-        expect(screen.getByRole('note')).toHaveTextContent('Newer Svalboard firmware is available');
-        fireEvent.click(screen.getByRole('button', { name: 'Dismiss firmware notice' }));
-        expect(screen.queryByRole('note')).not.toBeInTheDocument();
-        unmount();
-        render(<FirmwareUpdateNote notice="rc" />);
-        expect(screen.queryByRole('note')).not.toBeInTheDocument();
+        expect(screen.getByTestId('manual-install')).toHaveTextContent(SVALBOARD_FIRMWARE_URL);
     });
 });
 

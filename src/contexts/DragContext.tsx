@@ -26,6 +26,12 @@ export interface DragItem {
     editorType?: string;
     editorId?: number | string;
     editorSlot?: number | string;
+    /**
+     * Blanks the editor slot the item was dragged from. Called when the item
+     * is released somewhere that is not a drop target, the same way a layout
+     * key dragged into blank space becomes KC_NO.
+     */
+    clearSource?: () => void;
 }
 
 interface DragContextType {

@@ -22,7 +22,7 @@ vi.mock('@/services/keyboard.service', () => ({
 
 const kinds = (slots: { side: string; kind: string }[]) => slots.map((s) => `${s.side}:${s.kind}`);
 const tick = () => act(async () => { await vi.advanceTimersByTimeAsync(POINTING_SLOT_RETRY_MS); });
-const setSearch = (search: string) => window.history.replaceState(null, '', `/keybard-ng/${search}`);
+const setSearch = (search: string) => window.history.replaceState(null, '', `/keybard/${search}`);
 
 describe('usePointingSlots', () => {
     beforeEach(() => {

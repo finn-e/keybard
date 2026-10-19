@@ -4,7 +4,7 @@ import type { Preferences } from './core';
 import { appStorage } from '@/utils/app-storage';
 import { PARANOID } from '@/lib/paranoid';
 
-// Keybard Host serves its own copy of Keybard and the host API on this port.
+// The Keybard Overlay app serves its own copy of Keybard and the host API on this port.
 // Any other copy (keybard.svalboard.com) calls it directly on loopback, which
 // the host allows for that origin. Probing loopback can show a browser
 // permission prompt, so hosted pages only connect after the user asks to.
@@ -35,13 +35,13 @@ export function useHost() {
     const busyRef = useRef(false);
     const local = servedByHost() || !!window.__keybardNativeState;
     const base = local ? '' : HOST_ORIGIN;
-    // Keybard Paranoid only talks to the Keybard Host that serves it, never across origins.
+    // Keybard Paranoid only talks to the Keybard Overlay that serves it, never across origins.
     const [attempt, setAttempt] = useState(() => (local || (!PARANOID && rememberedRemote()) ? 1 : 0));
     const asked = useRef(false);
     /** Fetch the host's write token and build; false if it isn't a host this Keybard can use. */
     const bootstrap = useCallback(async (signal?: AbortSignal) => {
         const r = await fetch(`${base}/api/host/bootstrap`, { signal, cache: 'no-store' });
-        if (!r.ok) throw new Error('Host refused the connection');
+        if (!r.ok) throw new Error('The overlay app refused the connection');
         const data = await r.json();
         if (data.apiVersion !== 1) return false;
         token.current = data.token;
@@ -64,7 +64,7 @@ export function useHost() {
         let alive = true, timer: ReturnType<typeof setTimeout>;
         const abort = new AbortController();
         let lastReceived = Date.now();
-        const watchdog = setInterval(() => { if (current.current && Date.now() - lastReceived > 1200) { current.current = null; setState(null); setError('Host connection stale. The preview is paused.'); } }, 200);
+        const watchdog = setInterval(() => { if (current.current && Date.now() - lastReceived > 1200) { current.current = null; setState(null); setError('Connection to the overlay app is stale. The preview is paused.'); } }, 200);
         function receive(data: HostSnapshot) {
             if (!alive || data.apiVersion !== 1) return;
             lastReceived = Date.now();
@@ -84,10 +84,10 @@ export function useHost() {
         async function poll() {
             try {
                 const r = await fetch(`${base}/api/host/state?layout=${current.current?.layoutRevision ?? -1}`, { signal: AbortSignal.any([abort.signal, AbortSignal.timeout(1200)]), cache: 'no-store' });
-                if (!r.ok) throw new Error('Host connection lost');
+                if (!r.ok) throw new Error('Connection to the overlay app lost');
                 receive(await r.json() as HostSnapshot);
             } catch {
-                if (alive) { current.current = null; setState(null); setError('Host connection lost. The preview is paused.'); }
+                if (alive) { current.current = null; setState(null); setError('Connection to the overlay app lost. The preview is paused.'); }
             }
             if (alive && !native) timer = setTimeout(poll, 80);
         }
@@ -98,17 +98,17 @@ export function useHost() {
                 setError(''); void poll();
             } catch {
                 // Browser-only Keybard has no host endpoint; only report it when the user asked to connect.
-                if (alive && asked.current) setError(`Could not reach Keybard Host at ${HOST_ORIGIN}. Start Keybard Host, allow this site to access apps on your device if the browser asks, then try again.`);
+                if (alive && asked.current) setError(`Could not reach the overlay app at ${HOST_ORIGIN}. Start Keybard Overlay, allow this site to access apps on your device if the browser asks, then try again.`);
             }
         })();
         return () => { alive = false; clearTimeout(timer); clearInterval(watchdog); abort.abort(); window.removeEventListener('keybard-host-state', onState); window.removeEventListener('keybard-host-heartbeat', onHeartbeat); };
     }, [attempt, base, local, bootstrap]);
-    /** Connect a hosted Keybard page to a running Keybard Host (user-initiated). */
+    /** Connect a hosted Keybard page to a running Keybard Overlay (user-initiated). */
     const connect = useCallback(() => { if (PARANOID) return; asked.current = true; setError(''); setAttempt(n => n + 1); }, []);
     const command = useCallback(async (value: Record<string, unknown>) => {
         try {
             await post('/api/host/command', () => value); setError('');
-        } catch (e) { setError(e instanceof Error ? e.message : 'Host command failed'); }
+        } catch (e) { setError(e instanceof Error ? e.message : 'The overlay app could not do that'); }
     }, [post]);
     const configure = useCallback(async (config: HostConfig | ((latest: HostConfig) => HostConfig)) => {
         if (!current.current || busyRef.current) return false;
@@ -137,7 +137,7 @@ let refreshToken = '';
 let refreshOp: 'refresh' | 'reload' = 'refresh';
 
 /**
- * Tell Keybard Host the board's layout changed, so its overlay re-reads it. Called once a batch
+ * Tell Keybard Overlay the board's layout changed, so its overlay re-reads it. Called once a batch
  * of writes has reached the board; a burst of edits gives one re-read (about 0.6 s of USB reads).
  * Only where the host is already in use: Keybard served by it, or a hosted page the user
  * connected to it from the Overlay page. Never probes loopback otherwise.

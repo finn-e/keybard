@@ -2,7 +2,7 @@
 from threading import Event, Lock
 import time
 from PySide6.QtCore import QThread, Signal
-from .protocol import SvalReader, ProtocolError, Cancelled, candidates, hid_backend, DEFAULT_LAYER_STATE_FLAG, UnsupportedCommand
+from .protocol import SvalReader, ProtocolError, Cancelled, candidates, hid_backend, DEFAULT_LAYER_STATE_FLAG, POINTING_MOTION_FLAG2, UnsupportedCommand
 
 
 class DeviceWorker(QThread):
@@ -10,6 +10,8 @@ class DeviceWorker(QThread):
     state = Signal(object)
     profile = Signal(object)
     status = Signal(str)
+    # Each hand's pointing motion (POINTING_MOTION, a read), only while the overlay draws pointing.
+    pointing = Signal(object)
 
     def __init__(self, selected, expected_uid=None, parent=None):
         super().__init__(parent)
@@ -21,6 +23,15 @@ class DeviceWorker(QThread):
         self.press_lock = Lock()
         self.press_enabled = False
         self.press_generation = 0
+        self.pointing_enabled = False
+
+    # About 60 reads a second; the firmware counts motion only while someone reads within 1.5 s.
+    POINTING_INTERVAL = .016
+    # How often to look again for a pointing module the board didn't know yet (one 0x18 read).
+    SETTLE_INTERVAL = 1.0
+
+    def set_pointing_tracking(self, enabled):
+        self.pointing_enabled = bool(enabled)
 
     def set_press_tracking(self, enabled):
         with self.press_lock:
@@ -66,6 +77,8 @@ class DeviceWorker(QThread):
                 self.expected_uid = uid
                 self.reload_event.set()
                 refresh_after, refresh_failures = 0.0, 0
+                pointing_next, pointing_supported = 0.0, True
+                settle_next = 0.0
                 retry = .5
                 while not self.stop_event.is_set():
                     if self.reload_event.is_set():
@@ -106,6 +119,23 @@ class DeviceWorker(QThread):
                             unavailable_generation = generation
                         else:
                             self.pressed.emit((generation, positions, time.monotonic()))
+                    # A half that hadn't reported its pointing module at the profile read: look
+                    # again each second, and re-read the profile once it has.
+                    if reader.pointing_unsettled and not self.refresh_event.is_set() and time.monotonic() >= settle_next:
+                        settle_next = time.monotonic() + self.SETTLE_INTERVAL
+                        if reader.pointing_settled():
+                            self.refresh_event.set()
+                    if self.pointing_enabled and pointing_supported and time.monotonic() >= pointing_next:
+                        pointing_next = time.monotonic() + self.POINTING_INTERVAL
+                        motion = None
+                        try:
+                            motion = reader.pointing_motion()
+                        except UnsupportedCommand:
+                            pointing_supported = False
+                        if not reader.feature_flags2 & POINTING_MOTION_FLAG2:
+                            pointing_supported = False  # older firmware: still devices, nothing said
+                        if motion is not None:
+                            self.pointing.emit(motion)
                     self.stop_event.wait(max(0, .008 - (time.monotonic() - cycle_start)))
             except Cancelled:
                 return

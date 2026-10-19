@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
 
-import { SVALBOARD_FIRMWARE_URL, type FirmwareUpdateNotice } from "@/constants/firmware";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { SVALBOARD_FIRMWARE_URL } from "@/constants/firmware";
+import { currentSite, releasesForSite } from "@/constants/firmware-releases";
+import { ManualInstall } from "@/features/firmware/ManualInstall";
+import type { Afterwards } from "@/services/updater/flow";
 import { PARANOID } from "@/lib/paranoid";
 import type { UnsupportedFirmwareInfo } from "@/utils/unsupported-firmware";
 import { cn } from "@/lib/utils";
@@ -16,24 +21,33 @@ export function FirmwareLink() {
     );
 }
 
-const FlashSteps = ({ fromVial }: { fromVial: boolean }) => (
-    <ol className="list-decimal space-y-1 pl-5">
-        {fromVial && (
-            <li>
-                Keep your layout: in Vial, choose <strong>File &gt; Save current layout</strong> to save a .vil file.
-            </li>
-        )}
-        <li>
-            Download the <span className="font-mono">.uf2</span> files from <FirmwareLink />: pick the image that matches each half's sensor type and side (left or right).
-        </li>
-        <li>
-            Flash both halves: double-tap a half's reset button so it shows up as a drive named <span className="font-mono">RPI-RP2</span>, then copy its <span className="font-mono">.uf2</span> onto that drive. Repeat for the other half.
-        </li>
-        <li>
-            Connect again.{fromVial && <> Then click <strong>Import Layout</strong> above the keyboard and choose your saved .vil file.</>}
-        </li>
-    </ol>
-);
+/** The guided manual install (M), in its own dialog: the way onto firmware Keybard updates. */
+function ManualInstallButton({ fromVial }: { fromVial: boolean }) {
+    const [open, setOpen] = useState(false);
+    const [afterwards, setAfterwards] = useState<Afterwards>("defaults");
+    const release = releasesForSite(currentSite())[0] ?? null;
+    return (
+        <>
+            <Button size="sm" variant="kb-primary" className="self-start" onClick={() => setOpen(true)}>Install by hand</Button>
+            <Dialog open={open} onOpenChange={setOpen}>
+                <DialogContent className="sm:max-w-[520px]" onInteractOutside={(e) => e.preventDefault()}>
+                    <DialogTitle className="sr-only">Install firmware by hand</DialogTitle>
+                    <DialogDescription className="sr-only">Download the firmware and copy it onto each half</DialogDescription>
+                    <ManualInstall
+                        release={release}
+                        backup={null}
+                        afterwards={afterwards}
+                        onAfterwards={setAfterwards}
+                        connected={false}
+                        onConnect={() => setOpen(false)}
+                        onClose={() => setOpen(false)}
+                    />
+                    {fromVial && <p className="text-sm">Then click <strong>Import Layout</strong> above the keyboard and choose your saved .vil file.</p>}
+                </DialogContent>
+            </Dialog>
+        </>
+    );
+}
 
 /** Why the keyboard couldn't connect, and how to get it onto firmware Keybard can use. */
 export function UnsupportedFirmwareCard({ info, className, onDismiss }: { info: UnsupportedFirmwareInfo; className?: string; onDismiss?: () => void }) {
@@ -47,7 +61,8 @@ export function UnsupportedFirmwareCard({ info, className, onDismiss }: { info: 
                     <p>
                         This Svalboard is running the old Vial firmware{info.reportedVersion && <> (<span className="font-mono">{info.reportedVersion}</span>)</>}. Keybard needs Svalboard QMK firmware.
                     </p>
-                    <FlashSteps fromVial />
+                    <p>First keep your layout: in Vial, choose <strong>File &gt; Save current layout</strong> to save a .vil file.</p>
+                    <ManualInstallButton fromVial />
                 </>
             );
             break;
@@ -56,7 +71,7 @@ export function UnsupportedFirmwareCard({ info, className, onDismiss }: { info: 
             body = (
                 <>
                     <p>This Svalboard runs a pre-release Svalboard QMK build (Sval protocol {info.svilProto ?? "?"}) that this Keybard can't edit safely.</p>
-                    <FlashSteps fromVial={false} />
+                    <ManualInstallButton fromVial={false} />
                 </>
             );
             break;
@@ -78,8 +93,8 @@ export function UnsupportedFirmwareCard({ info, className, onDismiss }: { info: 
             title = "Keyboard firmware not recognized";
             body = (
                 <>
-                    <p>The keyboard didn't answer like Svalboard QMK firmware. If it is a Svalboard, it is probably still running the old Vial firmware:</p>
-                    <FlashSteps fromVial />
+                    <p>The keyboard didn't answer like Svalboard QMK firmware. If it is a Svalboard, it is probably still running the old Vial firmware. Save your layout in Vial first (<strong>File &gt; Save current layout</strong>).</p>
+                    <ManualInstallButton fromVial />
                 </>
             );
     }
@@ -94,37 +109,7 @@ export function UnsupportedFirmwareCard({ info, className, onDismiss }: { info: 
                     </button>
                 )}
             </p>
-            <div className="space-y-2">{body}</div>
-        </div>
-    );
-}
-
-const NOTICE_TEXT: Record<FirmwareUpdateNotice, string> = {
-    rc0: "Newer Svalboard firmware is available. It lets the overlay follow your layers, and applies more of the QMK settings you save here.",
-    rc: "Newer Svalboard firmware is available. It applies more of the QMK settings you save here, such as tap-hold timing.",
-    launch: "Newer Svalboard firmware (vLaunch2) is available. It keeps your settings more reliably, and lets you choose the default layer here.",
-};
-
-const dismissKey = (notice: FirmwareUpdateNotice) => `keybard:firmware-notice-dismissed:${notice}`;
-
-function isDismissed(notice: FirmwareUpdateNotice): boolean {
-    try { return localStorage.getItem(dismissKey(notice)) === "1"; } catch { return false; }
-}
-
-/** Non-blocking "newer firmware available" note for a board on a release candidate. */
-export function FirmwareUpdateNote({ notice }: { notice: FirmwareUpdateNotice }) {
-    const [dismissed, setDismissed] = useState(() => isDismissed(notice));
-    if (dismissed) return null;
-    const dismiss = () => {
-        try { localStorage.setItem(dismissKey(notice), "1"); } catch { /* still hide it for this session */ }
-        setDismissed(true);
-    };
-    return (
-        <div role="note" aria-label="Firmware update available" className="flex items-start gap-2 whitespace-normal rounded-md border border-kb-gray-border bg-kb-surface p-3 text-sm text-kb-ink shadow-sm">
-            <p className="flex-1">{NOTICE_TEXT[notice]} Get it from <FirmwareLink />.</p>
-            <button type="button" onClick={dismiss} aria-label="Dismiss firmware notice" title="Dismiss" className="rounded p-0.5 text-kb-ink hover:bg-kb-gray-medium cursor-pointer">
-                <X className="h-4 w-4" />
-            </button>
+            <div className="flex flex-col gap-2">{body}</div>
         </div>
     );
 }
