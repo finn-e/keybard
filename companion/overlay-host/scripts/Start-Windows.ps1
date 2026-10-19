@@ -62,8 +62,8 @@ try {
         Start-Process -FilePath (Join-Path $runtimeDir 'pythonw.exe') -ArgumentList $hostArgs -WorkingDirectory $projectDir
         exit 0
     }
-    if ($LASTEXITCODE -ne 0) { throw "Keybard Host exited with code $LASTEXITCODE" }
+    if ($LASTEXITCODE -ne 0) { throw "Keybard Overlay exited with code $LASTEXITCODE" }
 } catch {
-    Write-Host "Keybard Host: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Keybard Overlay: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }

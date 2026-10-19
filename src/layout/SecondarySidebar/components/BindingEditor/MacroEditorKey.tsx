@@ -31,6 +31,8 @@ const MacroEditorKey: FC<Props> = ({ label, binding, index, onDelete, onDrop, on
                         onClick?.();
                     }}
                     onClear={onDelete}
+                    // onDelete removes the whole action, so a drag-off does not.
+                    clearOnDragOff={false}
                     onDrop={onDrop}
                     size="w-[60px] h-[60px]"
                     trashOffset="-left-10"

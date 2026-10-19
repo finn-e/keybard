@@ -21,19 +21,7 @@ import { cn } from "@/lib/utils";
 import { svalService } from "@/services/sval.service";
 import { KEYMAP } from "@/constants/keygen";
 
-import { fileService } from "@/services/file.service";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
+import ExportDialog from "@/components/ExportDialog";
 
 import { FC, useState, useEffect, useRef } from "react";
 import { usePanels } from "@/contexts/PanelsContext";
@@ -54,6 +42,8 @@ interface LayerSelectorProps {
     onToggleLayerOn: (layer: number) => void;
     isAllTransparencyActive: boolean;
     onToggleAllTransparency: () => void;
+    /** Tighter spacing above the toolbar (the L picker gives the height to its tray). */
+    compact?: boolean;
 }
 
 interface OverviewStateSnapshot {
@@ -82,7 +72,8 @@ const LayerSelector: FC<LayerSelectorProps> = ({
     layerActiveState,
     onToggleLayerOn,
     isAllTransparencyActive,
-    onToggleAllTransparency
+    onToggleAllTransparency,
+    compact = false,
 }) => {
     const { keyboard, isConnected, connect, resetToOriginal, activeLayerIndex, loadedFrom } = useKeyboard();
     const firmware = isConnected && keyboard ? describeFirmware(keyboard) : null;
@@ -101,29 +92,8 @@ const LayerSelector: FC<LayerSelectorProps> = ({
     // Import/Export / Connect state
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isExportOpen, setIsExportOpen] = useState(false);
-    const [exportFormat, setExportFormat] = useState<"svil" | "vil">("svil");
-    const [includeMacros, setIncludeMacros] = useState(true);
 
-    const { handleFileImport, importReview, setFileError } = useLayoutImport();
-
-    const handleExport = async () => {
-        if (!keyboard) {
-            console.error("No keyboard loaded");
-            return;
-        }
-
-        try {
-            if (exportFormat === "svil") {
-                // Custom values are already in keyboard.custom_values (loaded at connect time)
-                await fileService.downloadSvil(keyboard, includeMacros);
-            } else {
-                await fileService.downloadVIL(keyboard, includeMacros);
-            }
-            setIsExportOpen(false);
-        } catch (err) {
-            setFileError(err instanceof Error ? err.message : String(err));
-        }
-    };
+    const { handleFileImport, importReview } = useLayoutImport();
 
     // Track container width for collapsing behavior
     const containerRef = useRef<HTMLDivElement>(null);
@@ -319,7 +289,7 @@ const LayerSelector: FC<LayerSelectorProps> = ({
             ref={containerRef}
             className={cn(
                 "w-full flex-shrink-0 relative z-20 transition-all duration-200",
-                showFullBar ? "pt-[22px]" : "pt-0"
+                showFullBar ? (compact ? "pt-1" : "pt-[22px]") : "pt-0"
             )}
             onClick={(e) => e.stopPropagation()}
         >
@@ -339,7 +309,7 @@ const LayerSelector: FC<LayerSelectorProps> = ({
                 <div className="flex flex-col w-full bg-transparent">
                     <div className="relative w-full bg-transparent">
                         {/* Top Row: Connect/Import/Export + Live Controls + Tab Icon + Tabs */}
-                        <div className="flex items-center gap-2 pl-5 py-2 whitespace-nowrap bg-transparent overflow-x-auto overscroll-x-contain [&>*]:shrink-0">
+                        <div className={cn("flex items-center gap-2 pl-5 whitespace-nowrap bg-transparent overflow-x-auto overscroll-x-contain [&>*]:shrink-0", compact ? "py-1" : "py-2")}>
 
                             {isVerticallyConstrained && <button type="button" aria-label="Hide editor controls" title="Hide editor controls"
                                 className="rounded p-1 text-gray-500 dark:text-neutral-400 hover:bg-gray-200 dark:hover:bg-neutral-700 focus-visible:outline-2"
@@ -356,43 +326,8 @@ const LayerSelector: FC<LayerSelectorProps> = ({
                                 onChange={handleFileImport}
                             />
 
-                            {/* Export Dialog */}
-                            <Dialog open={isExportOpen} onOpenChange={setIsExportOpen}>
-                                <DialogContent className="sm:max-w-[425px]">
-                                    <DialogHeader>
-                                        <DialogTitle>Export Keyboard Configuration</DialogTitle>
-                                        <DialogDescription>
-                                            Choose the format and options for exporting your keyboard configuration.
-                                        </DialogDescription>
-                                    </DialogHeader>
-                                    <div className="grid gap-4 py-4">
-                                        <div className="grid grid-cols-4 items-center gap-4">
-                                            <Label htmlFor="format" className="text-right">Format</Label>
-                                            <Select value={exportFormat} onValueChange={(v) => setExportFormat(v as "svil" | "vil")}>
-                                                <SelectTrigger aria-label="Export format" className="col-span-3">
-                                                    <SelectValue placeholder="Select format" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="svil">.svil (Recommended)</SelectItem>
-                                                    <SelectItem value="vil">.vil (Vial compatible)</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div className="grid grid-cols-4 items-center gap-4">
-                                            <Label htmlFor="macros" className="text-right">Include Macros</Label>
-                                            <Switch
-                                                id="macros"
-                                                checked={includeMacros}
-                                                onCheckedChange={setIncludeMacros}
-                                            />
-                                        </div>
-                                    </div>
-                                    <DialogFooter>
-                                        <Button variant="outline" onClick={() => setIsExportOpen(false)}>Cancel</Button>
-                                        <Button onClick={handleExport}>Export</Button>
-                                    </DialogFooter>
-                                </DialogContent>
-                            </Dialog>
+                            {/* Export Dialog: the same one Settings opens */}
+                            <ExportDialog open={isExportOpen} onOpenChange={setIsExportOpen} />
 
                             {/* Connect / Update Button Group */}
                             {!isConnected ? (

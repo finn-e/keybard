@@ -1,7 +1,7 @@
 """Decode bounded firmware definitions and select populated Svalboard positions."""
 import json
 import lzma
-from .geometry import KEYS, keys_for_positions
+from .geometry import KEYS, compose, keys_for_positions
 
 MAX_DEFINITION_BYTES = 1024 * 1024
 
@@ -56,6 +56,7 @@ def geometry_from_definition(definition, hardware=(), selections=()):
     if len(hardware) != len(instances) or len(selections) != len(instances):
         raise ValueError("Fragment state does not match board definition")
     positions = set()
+    selected = []  # (kle, placement, matrix_map) per keyed instance, for Keybard's composition
     keyless = keyless_instances(definition)
     for index, instance in enumerate(instances):
         if not isinstance(instance, dict):
@@ -95,4 +96,11 @@ def geometry_from_definition(definition, hardware=(), selections=()):
             if pos in positions:
                 raise ValueError("Overlapping fragment matrix positions")
             positions.add(pos)
+        selected.append((fragments[name].get("kle"), option.get("placement"), matrix_map))
+    # Lay the keys out as Keybard does when every fragment has its KLE; else the schematic.
+    if all(isinstance(kle, list) and isinstance(placement, dict) for kle, placement, _ in selected):
+        try:
+            return compose(selected)
+        except ValueError:
+            pass
     return keys_for_positions(positions)

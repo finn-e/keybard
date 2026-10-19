@@ -16,6 +16,9 @@
                     if (ns.charAt(0) === "%") ns = "";
                     var raw = window.localStorage.getItem((ns ? ns + ":" : "") + "keyboard-settings");
                     var pref = raw ? (JSON.parse(raw) || {}).theme : undefined;
+                    // A ?theme=light|dark review link forces the theme for this load (src/lib/deepLinks.ts).
+                    var forced = /[?&]theme=(light|dark)(&|$)/i.exec(window.location.search);
+                    if (forced) pref = forced[1].toLowerCase();
                     var dark = pref === "dark" ||
                         (pref === "system" && typeof window.matchMedia === "function" &&
                             window.matchMedia("(prefers-color-scheme: dark)").matches);

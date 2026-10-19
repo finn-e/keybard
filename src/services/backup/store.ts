@@ -1,6 +1,14 @@
 // Persistence for backups. IndexedDB in the app, an in-memory twin in tests.
 
-export type SnapshotKind = "connected" | "edited";
+/**
+ * connected: right after a board connects. edited: after edits settle.
+ * pre-update: taken by a firmware install before anything is sent ("Before <release>").
+ * manual: the user's own "Back up now". The last two are kept until the user deletes them.
+ */
+export type SnapshotKind = "connected" | "edited" | "pre-update" | "manual";
+
+/** Kinds retention never removes. */
+export const PINNED_SNAPSHOT_KINDS: readonly SnapshotKind[] = ["pre-update", "manual"];
 
 export interface SnapshotMeta {
     id: string;
@@ -18,6 +26,9 @@ export interface SnapshotMeta {
     summary: string;
     /** Size of the uncompressed .svil in bytes. */
     size: number;
+    /** pre-update: the release installed before, and the one being installed. */
+    fromTag?: string;
+    toTag?: string;
 }
 
 export interface BackupStore {

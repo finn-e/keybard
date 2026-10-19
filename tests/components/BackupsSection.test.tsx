@@ -16,22 +16,24 @@ const mocks = vi.hoisted(() => ({
     queue: vi.fn(), sync: vi.fn(), commit: vi.fn(), upload: vi.fn(), download: vi.fn(),
     backups: {} as Record<string, unknown>,
 }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/ClustersPanel', () => ({ default: () => <p>Hardware rows</p> }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/TypingBehaviorPanel', () => ({ default: () => <p>Typing behavior rows</p> }));
 vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ keyboard: mocks.keyboard, setKeyboard: vi.fn(), isConnected: true, loadFromFile: vi.fn(), setIsImporting: vi.fn() }) }));
 vi.mock('@/contexts/ChangesContext', () => ({ useChanges: () => ({ queue: mocks.queue, todo: {}, isInstant: mocks.instant, isSaving: false, commit: mocks.commit, setInstant: vi.fn() }) }));
 vi.mock('@/contexts/BackupContext', () => ({ useBackups: () => mocks.backups }));
 vi.mock('@/contexts/LayoutSettingsContext', () => ({ useLayoutSettings: () => ({ layoutMode: mocks.mode }) }));
 vi.mock('@/contexts/PanelsContext', () => ({ usePanels: () => ({ setActivePanel: vi.fn() }) }));
 vi.mock('@/App', () => ({ useNavigation: () => ({ navigateTo: vi.fn() }) }));
+// Backups is in the Firmware and backups card, left open in this browser.
 vi.mock('@/contexts/SettingsContext', () => ({ useSettings: () => ({
-    getSetting: vi.fn(), updateSetting: vi.fn(), settingsDefinitions: [],
-    settingsCategories: [{ name: 'general', label: 'General', settings: [] }, { name: 'backups', label: 'Backups', settings: [] }],
+    getSetting: (name: string) => (name === 'settings-firmware-open' ? 'open' : undefined),
+    updateSetting: vi.fn(), getSettingDefinition: () => undefined,
 }) }));
 vi.mock('@/services/file.service', () => ({ fileService: { uploadFile: mocks.upload, downloadSvil: vi.fn(), downloadSvilText: mocks.download } }));
 vi.mock('@/services/import.service', () => ({ importService: { syncWithKeyboard: mocks.sync } }));
 vi.mock('@/services/keyboard.service', () => ({ keyboardService: {} }));
 vi.mock('../../src/layout/SecondarySidebar/Panels/BoardIdentitySection', () => ({ default: () => null }));
-vi.mock('../../src/layout/SecondarySidebar/Panels/FragmentsPanel', () => ({ default: () => null }));
-vi.mock('../../src/layout/SecondarySidebar/Panels/DynamicMenuPanel', () => ({ default: () => null }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/settings/FirmwareRow', () => ({ default: () => null }));
 
 const backups = (over: Record<string, unknown> = {}) => ({
     available: true,
@@ -51,7 +53,10 @@ const backups = (over: Record<string, unknown> = {}) => ({
     ...over,
 });
 
-const openBackups = () => { render(<SettingsPanel />); fireEvent.click(screen.getByRole('button', { name: 'Backups' })); };
+// Backups is a section of the one Settings page; its list starts collapsed.
+const disclosure = () => screen.getByRole('button', { name: /^Backups, / });
+const openBackups = () => { render(<SettingsPanel />); fireEvent.click(disclosure()); };
+const boardRegions = () => screen.getAllByRole('region').filter((r) => /^Backups of /.test(r.getAttribute('aria-label') ?? ''));
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -64,7 +69,7 @@ describe('Settings > Backups', () => {
     it.each(['sidebar', 'bottombar'])('lists snapshots by board, connected board first (%s)', (mode) => {
         mocks.mode = mode;
         openBackups();
-        const groups = screen.getAllByRole('region');
+        const groups = boardRegions();
         expect(groups[0]).toHaveAccessibleName('Backups of Travel');
         expect(groups[1]).toHaveAccessibleName('Backups of Desk');
         const rows = within(groups[0]).getAllByTestId('backup-row');
@@ -76,7 +81,7 @@ describe('Settings > Backups', () => {
 
     it('restores through the import review, staging changes for Apply', async () => {
         openBackups();
-        const travel = screen.getAllByRole('region')[0];
+        const travel = boardRegions()[0];
         fireEvent.click(within(travel).getAllByRole('button', { name: /Restore backup/ })[0]);
         expect(await screen.findByRole('dialog')).toBeVisible();
         expect(mocks.upload).toHaveBeenCalledTimes(1);
@@ -118,5 +123,74 @@ describe('Settings > Backups', () => {
         openBackups();
         expect(screen.getByRole('button', { name: 'Choose backup folder' })).toBeVisible();
         expect(screen.queryByRole('button', { name: 'Resume backups' })).toBeNull();
+    });
+
+    it('pins Before <release> and manual backups at the top of a board, labelled, beyond the row limit', () => {
+        const many = Array.from({ length: 10 }, (_, i) => snap({ id: `e${i}`, boardKey: 'sval:BBBB', boardName: 'Travel', savedAt: now - 10_000 - i }));
+        mocks.backups = backups({ snapshots: [
+            ...many,
+            snap({ id: 'pre', boardKey: 'sval:BBBB', boardName: 'Travel', kind: 'pre-update', fromTag: 'v3', toTag: 'x4', savedAt: now - 900_000 }),
+            snap({ id: 'man', boardKey: 'sval:BBBB', boardName: 'Travel', kind: 'manual', savedAt: now - 800_000 }),
+        ] });
+        openBackups();
+        const rows = within(boardRegions()[0]).getAllByTestId('backup-row');
+        expect(rows[0]).toHaveTextContent('Backed up');
+        expect(rows[1]).toHaveTextContent('Before x4');
+        expect(rows[0]).toHaveAttribute('data-pinned', 'true');
+        expect(rows[2]).toHaveTextContent('Edited');
+        expect(rows).toHaveLength(2 + 8); // the pins, then the usual eight
+        expect(screen.getByRole('button', { name: 'Show all (10)' })).toBeVisible();
+    });
+
+    it('backs up the connected board now', async () => {
+        const backUpNow = vi.fn(async () => undefined);
+        mocks.backups = backups({ backUpNow });
+        openBackups();
+        fireEvent.click(screen.getByRole('button', { name: 'Back up now' }));
+        await waitFor(() => expect(backUpNow).toHaveBeenCalled());
+        expect(await screen.findByText(/^Saved Today/)).toBeVisible();
+    });
+
+    it('starts collapsed, with the count and newest backup in its header and Back up now in reach', () => {
+        render(<SettingsPanel />);
+        expect(disclosure()).toHaveAttribute('aria-expanded', 'false');
+        expect(disclosure()).toHaveAccessibleName(/^Backups, 3 backups, latest Today /);
+        expect(screen.queryAllByTestId('backup-row')).toHaveLength(0);
+        expect(screen.queryByRole('button', { name: 'Choose backup folder' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Back up now' })).toBeVisible();
+        fireEvent.click(disclosure());
+        expect(disclosure()).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getAllByTestId('backup-row')).toHaveLength(3);
+    });
+
+    it('starts collapsed again the next time Settings opens', () => {
+        const view = render(<SettingsPanel />);
+        fireEvent.click(disclosure());
+        view.unmount();
+        render(<SettingsPanel />);
+        expect(disclosure()).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('says when there are no backups yet', () => {
+        mocks.backups = backups({ snapshots: [] });
+        render(<SettingsPanel />);
+        expect(disclosure()).toHaveAccessibleName('Backups, No backups yet');
+    });
+
+    it('opens for a search that finds it, and collapses when the search clears', () => {
+        render(<SettingsPanel />);
+        const search = screen.getByRole('textbox', { name: 'Search settings' });
+        fireEvent.change(search, { target: { value: 'restore' } });
+        expect(disclosure()).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getAllByTestId('backup-row')).toHaveLength(3);
+        fireEvent.keyDown(search, { key: 'Escape' });
+        expect(search).toHaveValue('');
+        expect(disclosure()).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('offers Back up now only with a board connected', () => {
+        mocks.backups = backups({ board: null });
+        openBackups();
+        expect(screen.queryByRole('button', { name: 'Back up now' })).toBeNull();
     });
 });
