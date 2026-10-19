@@ -17,6 +17,7 @@ Chromium:
   pip install playwright && python -m playwright install chromium
 Exits 1 when a check fails.
 """
+import json
 import os
 import re
 import shutil
@@ -94,8 +95,11 @@ def on_screen(locator):
 def open_example(browser, url: str, theme: str, bottom_bar: bool, size: str):
     context = browser.new_context(viewport={"width": 1440, "height": 900}, reduced_motion="reduce")
     # The theme as Settings saves it.
+    # Builds whose editor has no layout and size buttons keep both in Settings > Appearance.
+    stored = {"theme": theme, "panel-position": "bottombar" if bottom_bar else "sidebar",
+              "key-size": {"Normal": "default", "Medium": "medium", "Small": "small"}[size]}
     context.add_init_script(
-        f"try {{ localStorage.setItem('keyboard-settings', JSON.stringify({{ theme: '{theme}' }})); }} catch {{}}")
+        f"try {{ localStorage.setItem('keyboard-settings', {json.dumps(json.dumps(stored))}); }} catch {{}}")
     page = context.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
@@ -104,8 +108,10 @@ def open_example(browser, url: str, theme: str, bottom_bar: bool, size: str):
     expect(page.get_by_text("Tap Dance Keys").first).to_be_visible(timeout=20000)
     if page.evaluate("document.documentElement.classList.contains('dark')") != (theme == "dark"):
         raise AssertionError(f"the page is not in the {theme} theme")
-    page.get_by_role("button", name="Bottom bar layout" if bottom_bar else "Sidebar layout").click()
-    page.get_by_role("button", name=re.compile(f"^{size}$", re.I)).click()
+    layout_button = page.get_by_role("button", name="Bottom bar layout" if bottom_bar else "Sidebar layout")
+    if layout_button.count():
+        layout_button.click()
+        page.get_by_role("button", name=re.compile(f"^{size}$", re.I)).click()
     return context, page, errors
 
 
@@ -118,9 +124,12 @@ def open_pointing_picker(page: Page):
         add.first.click()
     else:
         on_screen(page.get_by_text("0", exact=True))[0].click()
-    expect(page.get_by_text("Tap Dance Key 0")).to_be_visible(timeout=10000)
+    # The editor's title: "Tap Dance Key 0", or "Editing Tap Dance 0" where the
+    # panel itself becomes the editor and the rail picks the keys.
+    expect(page.get_by_text(re.compile(r"^(Tap Dance Key|Editing Tap Dance) 0$")).first).to_be_visible(timeout=10000)
     page.wait_for_timeout(700)  # the picker slides in
-    tabs = [t for t in on_screen(page.get_by_role("button", name="Pointing Devices")) if t.bounding_box()["x"] > 230]
+    buttons = on_screen(page.get_by_role("button", name="Pointing Devices"))
+    tabs = [t for t in buttons if t.bounding_box()["x"] > 230] or buttons
     if not tabs:
         raise AssertionError("no Pointing Devices tab in the binding editor's picker")
     tabs[-1].click()
