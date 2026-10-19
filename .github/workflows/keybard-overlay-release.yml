@@ -12,6 +12,13 @@ name: Package Keybard Overlay release
 # existing tag again (delete its release first):
 #
 #   gh workflow run keybard-overlay-release.yml -R svalboard/keybard -f tag=<tag>
+#
+# The linux job adds the Linux test package (AppImage, .tar.gz, README-LINUX.md, the
+# udev rule and SHA256SUMS-Linux.txt) to the same release. To try the Linux build
+# from a branch without releasing anything, run a dry run: it builds the branch and
+# keeps the files as workflow artifacts only.
+#
+#   gh workflow run keybard-overlay-release.yml -R <repo> --ref <branch> -f tag=dry-run -f dry_run=true
 
 on:
   push:
@@ -23,13 +30,18 @@ on:
         description: Existing release tag to package, e.g. v3 (release) or x3 (prerelease)
         required: true
         type: string
+      dry_run:
+        description: Linux only, from the chosen branch, kept as workflow artifacts; no release, no tag checks (tag is ignored)
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   package:
-    if: github.repository == 'svalboard/keybard'
+    if: github.repository == 'svalboard/keybard' && !inputs.dry_run
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -96,3 +108,75 @@ jobs:
             dist/KeybardOverlay-Windows.zip dist/keybard-paranoid.html dist/SHA256SUMS.txt \
             --verify-tag "${kind[@]}" --title "Keybard Overlay $RELEASE_TAG" \
             --notes-file dist/RELEASE-NOTES.md
+
+  linux:
+    # Keybard Overlay for Linux, built on Ubuntu 22.04 so it runs on glibc 2.34 and later
+    # systems (Qt's wheels set that floor), and added to the release the package job made.
+    needs: package
+    if: >-
+      always() && (inputs.dry_run == true ||
+      (github.repository == 'svalboard/keybard' && needs.package.result == 'success'))
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+      DRY_RUN: ${{ inputs.dry_run == true && 'true' || '' }}
+      DL: ${{ github.workspace }}/../overlay-linux-downloads
+      OUT: ${{ github.workspace }}/dist-linux
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # A release builds its tag; a dry run builds the branch it was started on.
+          ref: ${{ inputs.dry_run != true && format('refs/tags/{0}', github.event_name == 'push' && github.ref_name || inputs.tag) || '' }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - name: X libraries the package bundles as fallbacks
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-render-util0 libxcb-util1 libxcb-shape0 libxcb-xkb1 libxkbcommon-x11-0 libxkbfile1
+          # Libraries every desktop has but the runner lacks, for the start-up check below.
+          sudo apt-get install -y -qq libegl1 libgl1 libgbm1 libnss3 libasound2 libfontconfig1 \
+            libxkbcommon0 libdbus-1-3 libxcomposite1 libxdamage1 libxrandr2 libxtst6
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.DL }}
+          key: overlay-linux-${{ hashFiles('companion/overlay-host/packaging/linux/fetch.sh', 'companion/overlay-host/packaging/linux/requirements-linux.txt') }}
+      - name: Pinned downloads, SHA-256 checked
+        run: bash companion/overlay-host/packaging/linux/fetch.sh
+      - run: npm ci
+      - run: npm run build:svalboard
+      - run: npm run build:paranoid
+      - name: Package, stamped with the release and the Keybard commit it bundles
+        run: |
+          commit=$(git rev-parse --short=7 HEAD)
+          version=$RELEASE_TAG
+          [ -n "$DRY_RUN" ] && version="dry-run-$commit"
+          KEYBARD_HOST_VERSION=$version KEYBARD_COMMIT=$commit WORK=$RUNNER_TEMP/overlay-linux-work \
+            bash companion/overlay-host/packaging/linux/build.sh
+      - name: The package starts and reports itself
+        run: |
+          tar -xzf "$OUT/KeybardOverlay-Linux-x86_64.tar.gz" -C "$RUNNER_TEMP"
+          QT_QPA_PLATFORM=offscreen "$RUNNER_TEMP/KeybardOverlay/keybard-overlay" --diagnose | tee diagnose.txt
+          grep -q 'Qt WebEngine: importable' diagnose.txt
+          grep -q 'HID backend: hidraw' diagnose.txt
+      - name: Keep the files (dry run)
+        if: env.DRY_RUN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: keybard-overlay-linux
+          path: ${{ env.OUT }}
+          retention-days: 7
+      - name: Add the Linux files to the release
+        if: env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: ${{ env.OUT }}
+        run: |
+          gh release upload "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --clobber \
+            KeybardOverlay-x86_64.AppImage KeybardOverlay-Linux-x86_64.tar.gz \
+            SHA256SUMS-Linux.txt README-LINUX.md 60-svalboard.rules install-udev-rule.sh

@@ -61,6 +61,14 @@ def prepare_overlay_window(widget, platform=None):
     if is_mac(platform): widget.setAttribute(Qt.WA_MacAlwaysShowToolWindow)
 
 
+def overlay_flags(platform=None):
+    flags = Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus
+    # Linux: ask for click-through before the first show. Adding it to a shown X11 window
+    # unmaps and maps it again, and the window manager then drops its stay-on-top state.
+    if (platform or sys.platform).startswith('linux'): flags |= Qt.WindowTransparentForInput
+    return flags
+
+
 class Surface(QWebEngineView):
     geometry_changed = Signal()
 
@@ -80,7 +88,7 @@ class Surface(QWebEngineView):
         super().__init__()
         self.host_port = port
         self.setWindowTitle('Keybard · Overlay')
-        self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus)
+        self.setWindowFlags(overlay_flags())
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         prepare_overlay_window(self)
@@ -966,6 +974,16 @@ def open_paranoid(url):
         refuse('Keybard Paranoid needs Google Chrome or Microsoft Edge, which were not found. Nothing was opened.')
 
 
+def quit_on_signals(app, platform=None):
+    """Linux and macOS: Ctrl+C in the terminal, or a plain kill, quits cleanly. Python only
+    sees a signal between bytecodes, so a timer wakes it while Qt's event loop runs."""
+    if (platform or sys.platform) == 'win32': return None
+    import signal
+    for sig in (signal.SIGINT, signal.SIGTERM): signal.signal(sig, lambda *_: app.quit())
+    timer = QTimer(app); timer.timeout.connect(lambda: None); timer.start(300)
+    return timer
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=5178)
@@ -978,7 +996,12 @@ def main():
     parser.add_argument('--demo-pointing', action='store_true', help='review: an illustration board with pointing devices, rolling, sniper on (no board needed)')
     parser.add_argument('--demo-velocity', action='store_true', help='review: --demo-pointing with Velocity Scroll held on the trackball, its offset moving')
     parser.add_argument('--show-pointing', action='store_true', help='review: turn on Show pointing devices for this run, without saving it')
+    parser.add_argument('--diagnose', action='store_true', help='print a report of the system, display session, Qt and the boards it can see, then exit')
     args = parser.parse_args()
+    if args.diagnose:
+        from .diagnose import report
+        print(report(), end='')
+        return
     if args.paranoid:
         if args.allow_origin: parser.error('--paranoid accepts no extra origins')
         if args.assets == parser.get_default('assets'): args.assets = args.assets.parent / 'web-paranoid'
@@ -1017,6 +1040,7 @@ def main():
     if args.show_pointing: state.config['showPointing'] = True
     if args.demo_pointing or args.demo_velocity: host.start_demo_pointing(velocity=args.demo_velocity)
     if not args.no_open: host.open_controls()
+    quit_on_signals(app)
     sys.exit(app.exec())
 
 if __name__ == '__main__': main()

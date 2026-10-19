@@ -12,6 +12,23 @@ permissions:
   contents: read
 
 jobs:
+  overlay-host:
+    # Keybard Overlay's Python tests, with Qt (offscreen) so the Qt tests run too.
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v5
+    - uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
+    - name: Libraries Qt WebEngine needs
+      run: sudo apt-get update -qq && sudo apt-get install -y -qq libnss3 libasound2t64 libxkbfile1 libegl1 libxkbcommon0
+    - run: pip install -r companion/overlay-host/requirements.txt
+    - name: Python tests
+      env:
+        QT_QPA_PLATFORM: offscreen
+        PYTHONPATH: companion/overlay-host
+      run: python -m unittest discover -s companion/overlay-host/tests -v
+
   test:
     runs-on: ubuntu-latest
 
