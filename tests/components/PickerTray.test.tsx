@@ -34,7 +34,6 @@ vi.mock('../../src/layout/SecondarySidebar/Panels/MousePanel', () => ({ default:
 vi.mock('../../src/layout/SecondarySidebar/Panels/QMKSettingsPanel', () => ({ default: () => <p>QMKSettingsPanel</p> }));
 vi.mock('../../src/layout/SecondarySidebar/Panels/ScanLabPanel', () => ({ default: () => <p>ScanLabPanel</p> }));
 vi.mock('../../src/layout/SecondarySidebar/Panels/TapdancePanel', () => ({ default: () => rows() }));
-vi.mock('../../src/layout/SecondarySidebar/Panels/AboutPanel', () => ({ default: () => <p>AboutPanel</p> }));
 vi.mock('../../src/layout/SecondarySidebar/Panels/QuickStartPanel', () => ({ default: () => <p>QuickStartPanel</p> }));
 
 beforeAll(() => { vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); });
