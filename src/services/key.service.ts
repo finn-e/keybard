@@ -4,6 +4,7 @@ import { CODEMAP, KEYMAP, KEYALIASES } from '../constants/keygen';
 import '../constants/keycode-numbering';
 import type { KeyString, KeyMapEntry } from '../types/keymap';
 import type { KeyboardInfo } from '../types/keyboard.types';
+import { customKeycodeShortName } from '../constants/custom-keycode-labels';
 
 interface KeyParseDesc {
   type: 'layer' | 'macro' | 'tapdance' | 'key';
@@ -29,13 +30,13 @@ export class KeyService {
         KEYMAP[userkey] = {
           code,
           qmkid: custom.name,
-          str: custom.shortName,
+          str: customKeycodeShortName(custom),
           title: custom.title,
         };
         KEYMAP[custom.name] = {
           code,
           qmkid: custom.name,
-          str: custom.shortName,
+          str: customKeycodeShortName(custom),
           title: custom.title,
         };
         KEYALIASES[custom.name] = userkey;
@@ -54,14 +55,14 @@ export class KeyService {
         KEYMAP[qkUserKey] = {
           code,
           qmkid: custom.name,
-          str: custom.shortName,
+          str: customKeycodeShortName(custom),
           title: custom.title,
         };
         // Also register by custom name
         KEYMAP[custom.name] = {
           code,
           qmkid: custom.name,
-          str: custom.shortName,
+          str: customKeycodeShortName(custom),
           title: custom.title,
         };
         KEYALIASES[custom.name] = qkUserKey;
