@@ -150,7 +150,7 @@ def make_server(state, assets, dispatch, port=0, remote_origins=REMOTE_ORIGINS, 
                     return self.reply({'revision': revision})
                 if self.path != '/api/host/command': return self.reply({'error': 'Unknown API'}, 404)
                 op = value.get('op')
-                if op not in ('show', 'place', 'connect', 'disconnect', 'reload', 'refresh', 'scan', 'practice'):
+                if op not in ('show', 'place', 'connect', 'disconnect', 'reload', 'refresh', 'scan', 'practice', 'pointingLook'):
                     raise ValueError('Unknown command')
                 if op == 'show' and type(value.get('value')) is not bool: raise ValueError('Expected boolean')
                 if op == 'practice':
@@ -158,6 +158,9 @@ def make_server(state, assets, dispatch, port=0, remote_origins=REMOTE_ORIGINS, 
                     if not isinstance(hidden, list) or len(hidden) > 60 or any(type(x) is not int or not 0 <= x < 60 for x in hidden): raise ValueError('Invalid hidden keys')
                     if target is not None and (type(target) is not int or not 0 <= target < 60): raise ValueError('Invalid target')
                 if op == 'connect' and not isinstance(value.get('id'), str): raise ValueError('Expected device ID')
+                if op == 'pointingLook':
+                    # How the overlay draws the board's pointing devices; never sent to the board.
+                    state.set_pointing_look(value)
                 dispatch(value)
                 return self.reply({'accepted': True}, 202)
             except RuntimeError as e: return self.reply({'error': str(e)}, 409)

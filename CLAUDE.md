@@ -31,19 +31,19 @@ This applies to all work, no matter how small. Changes only reach `main` through
 
 **Release tags** (`.github/scripts/release-tag.sh` is the rule every workflow uses):
 
-| Tag | Kind | Keybard site | Keybard Host (`keybard-host-release.yml`) |
+| Tag | Kind | Keybard site | Keybard Overlay (`keybard-overlay-release.yml`) |
 |-----|------|--------------|--------------------------------------------|
 | `v<N>`, `v<N>.<M>` (`v3`, `v3.1`) | Full release | keybard.svalboard.com | A draft release; a person tests the Windows ZIP and publishes it |
 | `x<N>`, `x<N>.<M>` (`x3`, `x3.1`) | Prerelease | next.keybard.svalboard.com | A published GitHub prerelease |
 
 - Anything else (`vLaunch2`, `v3-rc1`, `x`, `3`) releases nothing.
 - Both kinds must point at a commit already on `main`; the workflows refuse any other.
-- One name means the same release in every repo: `svalboard/qmk` (firmware), Keybard and Keybard Host. A repo tags only the releases it ships, so a Keybard-only `v3.1` has no firmware tag.
-- Before tagging a full release, set `HOST_RELEASE_TAG` (`src/features/trainer/HostInstall.tsx`) to the same tag; the Host release refuses a `v` tag it doesn't name.
+- One name means the same release in every repo: `svalboard/qmk` (firmware), Keybard and Keybard Overlay. A repo tags only the releases it ships, so a Keybard-only `v3.1` has no firmware tag.
+- Before tagging a full release, set `HOST_RELEASE_TAG` (`src/features/trainer/HostInstall.tsx`) to the same tag; the overlay release refuses a `v` tag it doesn't name.
 - Release builds show their tag as Keybard's version (About panel and the corner badge); other builds show their commit.
 - Releases up to `vLaunch2.3` used the older `vLaunch<N>` and `vNext<N>` tags. Those tags stay as they are; new releases use `v` and `x`.
 
-Keybard Host accepts calls only from exact origins: https://keybard.svalboard.com and https://next.keybard.svalboard.com (`REMOTE_ORIGINS` in `companion/overlay-host/keybard_host/server.py`). Installed Hosts learn a new origin only from a Host update. Never allow a `*.github.io` origin: every Pages site of that account shares it. To try Host features on another site, start the Host with `--allow-origin <origin>`.
+Keybard Overlay accepts calls only from exact origins: https://keybard.svalboard.com and https://next.keybard.svalboard.com (`REMOTE_ORIGINS` in `companion/overlay-host/keybard_host/server.py`). Installed overlay apps learn a new origin only from an overlay app update. Never allow a `*.github.io` origin: every Pages site of that account shares it. To try overlay app features on another site, start the overlay app with `--allow-origin <origin>`.
 
 **ALWAYS run `npm run build` before pushing** to catch TypeScript errors. The CI deploy will fail on TS errors, so catch them locally first. If you touch anything that could reach the network, also run `npm run build:paranoid`.
 
@@ -66,12 +66,13 @@ Keybard (https://keybard.svalboard.com) is a React 19 + TypeScript web applicati
 ## Development Commands
 
 ```bash
-npm run dev            # Dev server at http://localhost:5173/keybard-ng/ (port per branch in vite.config.ts; main uses 5170)
+npm run dev            # Dev server at http://localhost:5173/keybard/ (port per branch in vite.config.ts; main uses 5170)
 npm run build          # Production build (TypeScript check + Vite build)
 npm test               # Run all tests
 npm run test:watch     # Watch mode for development
 npm run test:coverage  # Tests with coverage report (75-90% thresholds)
 npm run test:ui        # Interactive Vitest UI
+npm run test:e2e       # Browser tests of the combo editor (builds, serves, runs Playwright for Python)
 ```
 
 ## Architecture
@@ -393,7 +394,7 @@ The keyboard definition JSON includes a `menus` array that defines dynamic, keyb
 
 ## Browser-Based Test Plan (Claude-in-Chrome)
 
-This test plan can be executed autonomously via Claude-in-Chrome browser automation against `http://localhost:5173/keybard-ng/`. Tests are organized by feature area and include expected results.
+This test plan can be executed autonomously via Claude-in-Chrome browser automation against `http://localhost:5173/keybard/`. Tests are organized by feature area and include expected results.
 
 ### Prerequisites
 - Dev server running: `npm run dev`
@@ -506,7 +507,7 @@ To run these tests via Claude-in-Chrome:
 
 ```
 1. Get tab context: mcp__claude-in-chrome__tabs_context_mcp
-2. Navigate if needed: mcp__claude-in-chrome__navigate (url: "http://localhost:5173/keybard-ng/")
+2. Navigate if needed: mcp__claude-in-chrome__navigate (url: "http://localhost:5173/keybard/")
 3. Find elements: mcp__claude-in-chrome__find (query: "element description")
 4. Click elements: mcp__claude-in-chrome__computer (action: "left_click", ref: "ref_X")
 5. Take screenshots: mcp__claude-in-chrome__computer (action: "screenshot")

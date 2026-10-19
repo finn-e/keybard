@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
-import { useBindingNames } from "@/hooks/useBindingNames";
+import { useBindingNames, type BindingNameKind } from "@/hooks/useBindingNames";
+
+const KIND_LABEL: Record<BindingNameKind, string> = { macro: "Macro", tapdance: "Tap Dance", combo: "Combo" };
 
 /** Editable binding name; action previews and the pencil still open the editor. */
 export function BindingName({ kind, index, name, readOnly = false }: {
-    kind: "macro" | "tapdance";
+    kind: BindingNameKind;
     index: number;
     name?: string;
     readOnly?: boolean;
@@ -13,7 +15,7 @@ export function BindingName({ kind, index, name, readOnly = false }: {
     const [value, setValue] = useState("");
     const busy = useRef(false);
     const button = useRef<HTMLButtonElement>(null);
-    const label = `${kind === "macro" ? "Macro" : "Tap Dance"} ${index}`;
+    const label = `${KIND_LABEL[kind]} ${index}`;
     const finish = (restoreFocus = true) => {
         setEditing(false);
         if (restoreFocus) requestAnimationFrame(() => button.current?.focus());

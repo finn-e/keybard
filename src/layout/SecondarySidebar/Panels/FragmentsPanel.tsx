@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useChanges } from "@/contexts/ChangesContext";
@@ -7,6 +7,7 @@ import { useKeyboard } from "@/contexts/KeyboardContext";
 import { isWidgetInstance } from "@/services/fragment-composer.service";
 import { keyboardService } from "@/services/keyboard.service";
 import type { FragmentInstance, KeyboardInfo } from "@/types/keyboard.types";
+import { PointingBallPicker } from "@/components/pointing-viz/PointingBallPicker";
 
 /**
  * Safely get a value from something that might be a Map or a plain object
@@ -262,7 +263,7 @@ const FragmentsPanel: React.FC = () => {
                 >
                     <div className="flex flex-col items-start gap-1 shrink-0 w-[100px]">
                         <Label className="text-sm font-medium">{label}</Label>
-                        {hwFragmentName && <span className="text-xs text-amber-600 dark:text-amber-400">Locked</span>}
+                        {hwFragmentName && <span className="text-xs text-amber-600 dark:text-amber-400">Auto-detected</span>}
                     </div>
                     <div
                         role="status"
@@ -275,24 +276,38 @@ const FragmentsPanel: React.FC = () => {
             );
         });
 
+    // The preset the current selections already match, if any (locked positions don't count).
+    const selectable = fragmentService.getSelectableInstances(keyboard).filter(({ idx, instance }) => {
+        const hwFragmentId = safeMapGet(keyboard.fragmentState?.hwDetection, idx);
+        return !(hwFragmentId !== undefined && hwFragmentId !== 0xff && instance.allow_override === false);
+    });
+    const activePreset = selectable.length === 0 ? undefined : PRESETS.find(({ preset }) => selectable.every(({ idx, instance }) => {
+        const target = resolvePresetFragmentName(instance, preset);
+        return !target || fragmentService.resolveFragment(keyboard, idx, instance) === target;
+    }))?.preset;
+
     return (
         <div className="flex flex-col">
             <div className="flex flex-col px-4 gap-3 py-2">
-                <div className="flex flex-wrap gap-2">
+                <div role="group" aria-label="Cluster presets" className="inline-flex w-fit max-w-full rounded-full border border-kb-gray-border bg-muted/60 p-0.5">
                     {PRESETS.map(({ preset, label, description }) => (
-                        <Button
+                        <button
                             key={preset}
                             type="button"
-                            variant="default"
-                            size="sm"
-                            className="rounded-full px-4 bg-kb-active text-kb-active-fg hover:bg-gray-800 dark:hover:bg-neutral-300"
+                            className={cn(
+                                "rounded-full px-4 py-1 text-sm font-medium transition-colors disabled:opacity-50",
+                                activePreset === preset
+                                    ? "bg-kb-active text-kb-active-fg"
+                                    : "text-muted-foreground hover:bg-muted hover:text-kb-ink",
+                            )}
                             aria-label={description}
+                            aria-pressed={activePreset === preset}
                             title={description}
                             onClick={() => handleApplyPreset(preset)}
                             disabled={updating !== null}
                         >
                             {label}
-                        </Button>
+                        </button>
                     ))}
                 </div>
                 {leftInstances.length > 0 && (
@@ -319,7 +334,7 @@ const FragmentsPanel: React.FC = () => {
                             if (hwDetected && hwFragmentName) {
                                 const hwDisplayName = fragmentService.getFragmentDisplayName(keyboard, hwFragmentName);
                                 statusText = isLocked
-                                    ? `Locked: ${hwDisplayName}`
+                                    ? `Auto-detected: ${hwDisplayName}`
                                     : `Detected: ${hwDisplayName}`;
                             }
 
@@ -348,7 +363,7 @@ const FragmentsPanel: React.FC = () => {
                                             aria-label={fragmentService.getInstanceDisplayName(instance.id)}
                                             aria-description={statusText || undefined}
                                             className="flex-1 basis-36 min-w-0">
-                                            <SelectValue placeholder="Select fragment" />
+                                            <SelectValue placeholder="Choose one" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {options.map((fragmentName) => (
@@ -362,6 +377,7 @@ const FragmentsPanel: React.FC = () => {
                             );
                         })}
                         {renderPointingRows("left")}
+                        <PointingBallPicker side="left" kbid={keyboard.kbid} />
                     </div>
                 )}
                 {rightInstances.length > 0 && (
@@ -388,7 +404,7 @@ const FragmentsPanel: React.FC = () => {
                             if (hwDetected && hwFragmentName) {
                                 const hwDisplayName = fragmentService.getFragmentDisplayName(keyboard, hwFragmentName);
                                 statusText = isLocked
-                                    ? `Locked: ${hwDisplayName}`
+                                    ? `Auto-detected: ${hwDisplayName}`
                                     : `Detected: ${hwDisplayName}`;
                             }
 
@@ -417,7 +433,7 @@ const FragmentsPanel: React.FC = () => {
                                             aria-label={fragmentService.getInstanceDisplayName(instance.id)}
                                             aria-description={statusText || undefined}
                                             className="flex-1 basis-36 min-w-0">
-                                            <SelectValue placeholder="Select fragment" />
+                                            <SelectValue placeholder="Choose one" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {options.map((fragmentName) => (
@@ -431,6 +447,7 @@ const FragmentsPanel: React.FC = () => {
                             );
                         })}
                         {renderPointingRows("right")}
+                        <PointingBallPicker side="right" kbid={keyboard.kbid} />
                     </div>
                 )}
                 {otherInstances.map(({ idx, instance }) => {
@@ -454,7 +471,7 @@ const FragmentsPanel: React.FC = () => {
                     if (hwDetected && hwFragmentName) {
                         const hwDisplayName = fragmentService.getFragmentDisplayName(keyboard, hwFragmentName);
                         statusText = isLocked
-                            ? `Locked: ${hwDisplayName}`
+                            ? `Auto-detected: ${hwDisplayName}`
                             : `Detected: ${hwDisplayName}`;
                     }
 
@@ -483,7 +500,7 @@ const FragmentsPanel: React.FC = () => {
                                             aria-label={fragmentService.getInstanceDisplayName(instance.id)}
                                             aria-description={statusText || undefined}
                                             className="flex-1 basis-36 min-w-0">
-                                    <SelectValue placeholder="Select fragment" />
+                                    <SelectValue placeholder="Choose one" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {options.map((fragmentName) => (

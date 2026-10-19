@@ -139,6 +139,8 @@ const SidebarItemRow: React.FC<SidebarItemRowProps> = React.memo(
                     isClickable && "cursor-pointer",
                     className
                 )}
+                // The side-panel editor grows out of (and back into) this row.
+                data-binding-row={index}
                 onClick={() => {
                     if (onNameChange) {
                         handleStartEditing();

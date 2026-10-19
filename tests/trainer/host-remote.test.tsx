@@ -34,7 +34,7 @@ it('reports an unreachable host only when the user asked to connect', async () =
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
     const { result } = renderHook(() => useHost());
     act(() => result.current.connect());
-    await waitFor(() => expect(result.current.error).toMatch(/Could not reach Keybard Host/));
+    await waitFor(() => expect(result.current.error).toMatch(/Could not reach the overlay app/));
     expect(localStorage.getItem('keybard-host-remote')).toBeNull();
 });
 

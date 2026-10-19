@@ -12,14 +12,10 @@ import PointingPanel from "./SecondarySidebar/Panels/PointingPanel";
 import OneShotComposerPanel from "./SecondarySidebar/Panels/OneShotComposerPanel";
 import QmkKeyPanel from "./SecondarySidebar/Panels/QmkKeysPanel";
 import MousePanel from "./SecondarySidebar/Panels/MousePanel";
-import QMKSettingsPanel from "./SecondarySidebar/Panels/QMKSettingsPanel";
 import ScanLabPanel from "./SecondarySidebar/Panels/ScanLabPanel";
 import SettingsPanel from "./SecondarySidebar/Panels/SettingsPanel";
 import TapdancePanel from "./SecondarySidebar/Panels/TapdancePanel";
-import AboutPanel from "./SecondarySidebar/Panels/AboutPanel";
 import QuickStartPanel from "./SecondarySidebar/Panels/QuickStartPanel";
-
-import FragmentsPanel from "./SecondarySidebar/Panels/FragmentsPanel";
 import type { CustomUIMenuItem } from "@/types/keyboard.types";
 
 export const getPanelTitle = (panel: string | null | undefined, menus?: CustomUIMenuItem[]): string => {
@@ -50,20 +46,17 @@ export const getPanelTitle = (panel: string | null | undefined, menus?: CustomUI
         leaders: "Leader Sequences",
         layouts: "Layouts",
         pointing: "Pointing Devices",
-        qmksettings: "QMK Settings",
         settings: "Settings",
-        fragments: "Hardware configuration",
         scanlab: "Scan Lab",
         quickstart: "Quick Start",
-        about: "About",
     };
 
     return titles[panel] ?? "Details";
 };
 
-export function PanelContent({ panel, horizontal = false, isPicker = false }: { panel: string | null | undefined; horizontal?: boolean; isPicker?: boolean }) {
+export function PanelContent({ panel, horizontal = false, isPicker = false, trayPortal = false }: { panel: string | null | undefined; horizontal?: boolean; isPicker?: boolean; /** Standard Keys only: put the keyboard in the L-shaped picker's tray. */ trayPortal?: boolean }) {
     if (isPicker) {
-        const pickers = {keyboard: BasicKeyboards, layers: LayersPanel, macros: MacrosPanel, qmk: QmkKeyPanel, oneshot: OneShotComposerPanel, special: SpecialKeysPanel, pointing: PointingPanel, mouse: MousePanel};
+        const pickers = {keyboard: BasicKeyboards, layers: LayersPanel, macros: MacrosPanel, tapdances: TapdancePanel, qmk: QmkKeyPanel, oneshot: OneShotComposerPanel, special: SpecialKeysPanel, pointing: PointingPanel, mouse: MousePanel};
         const Picker = pickers[panel as keyof typeof pickers] ?? BasicKeyboards;
         return <Picker isPicker />;
     }
@@ -74,12 +67,13 @@ export function PanelContent({ panel, horizontal = false, isPicker = false }: { 
     const panels = {
         keyboard: BasicKeyboards, layers: LayersPanel, tapdances: TapdancePanel,
         macros: MacrosPanel, combos: CombosPanel, overrides: OverridesPanel,
-        altrepeat: AltRepeatPanel, leaders: LeadersPanel, fragments: FragmentsPanel,
+        altrepeat: AltRepeatPanel, leaders: LeadersPanel,
         layouts: LayoutsPanel, pointing: PointingPanel, qmk: QmkKeyPanel,
         oneshot: OneShotComposerPanel, special: SpecialKeysPanel, mouse: MousePanel,
-        qmksettings: QMKSettingsPanel, scanlab: ScanLabPanel, settings: SettingsPanel,
-        quickstart: QuickStartPanel, about: AboutPanel,
+        scanlab: ScanLabPanel, settings: SettingsPanel,
+        quickstart: QuickStartPanel,
     };
+    if (panel === "keyboard") return <BasicKeyboards trayPortal={trayPortal} />;
     const Content = panels[panel as keyof typeof panels];
     return Content ? <Content /> : <p className="p-4 text-sm text-muted-foreground">Select a panel to view its settings.</p>;
 }

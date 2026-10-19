@@ -22,7 +22,7 @@ beforeEach(() => { host.state = null; host.error = ''; vi.clearAllMocks(); });
 describe('Desktop overlay dialog', () => {
     it('offers the download and a connection when no Host is connected', () => {
         show();
-        expect(screen.getByText('Keybard Host shows your layout above your other windows.')).toBeTruthy();
+        expect(screen.getByText('The Keybard Overlay app shows your layout above your other windows.')).toBeTruthy();
         expect(screen.getByRole('link', { name: /Download for Windows/ })).toHaveAttribute('href', HOST_DOWNLOAD);
         fireEvent.click(screen.getByRole('button', { name: /Connect/ }));
         expect(host.connect).toHaveBeenCalled();
@@ -31,14 +31,14 @@ describe('Desktop overlay dialog', () => {
     it('names the board and can disconnect; settings are only in the Host', () => {
         host.state = connected();
         show();
-        expect(screen.getByText('Keybard Host is following Svalboard Right.')).toBeTruthy();
+        expect(screen.getByText('The overlay app is following Svalboard Right.')).toBeTruthy();
         expect(screen.queryByRole('button', { name: /settings/i })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: /Disconnect/ }));
         expect(host.command).toHaveBeenCalledWith({ op: 'disconnect' });
     });
 
     it('hides an old connection error once connected', () => {
-        host.state = connected(); host.error = 'Host connection lost. The preview is paused.';
+        host.state = connected(); host.error = 'Connection to the overlay app lost. The preview is paused.';
         show();
         expect(screen.queryByRole('alert')).toBeNull();
     });

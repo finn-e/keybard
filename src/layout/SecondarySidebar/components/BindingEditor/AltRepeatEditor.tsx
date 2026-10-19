@@ -1,4 +1,4 @@
-import { FC, useEffect } from "react";
+import { FC, ReactNode, useEffect, useId, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import OnOffToggle from "@/components/ui/OnOffToggle";
 
@@ -9,6 +9,7 @@ import { DragItem } from "@/contexts/DragContext";
 import { AltRepeatKeyOptions } from "@/types/keyboard.types";
 import { useBindingChanges } from "@/hooks/useBindingChanges";
 import EditorKey from "./EditorKey";
+import { BAR_KEY_PX, BAR_KEY_SIZE, BAR_KEY_VARIANT, BarEnd, BarOptionsButton, BarRow, BarSep, BarSlot } from "./EditorBar";
 
 const OPTIONS = [
     { label: "Default to alternate", bit: AltRepeatKeyOptions.DEFAULT_TO_ALT, description: "Use alternate key as default output" },
@@ -16,7 +17,15 @@ const OPTIONS = [
     { label: "Ignore mod handedness", bit: AltRepeatKeyOptions.IGNORE_MOD_HANDEDNESS, description: "Ignore left/right modifier distinction" },
 ] as const;
 
-const AltRepeatEditor: FC = () => {
+interface Props {
+    /** The compact bar of the side-panel placement, with these controls at the row's end. */
+    bar?: boolean;
+    barEnd?: ReactNode;
+}
+
+const AltRepeatEditor: FC<Props> = ({ bar = false, barEnd }) => {
+    const [optionsOpen, setOptionsOpen] = useState(false);
+    const optionsId = useId();
     const { keyboard, setKeyboard } = useKeyboard();
     const persistBinding = useBindingChanges();
     const { itemToEdit, setPanelToGoBack, setAlternativeHeader, initialEditorSlot } = usePanels();
@@ -91,6 +100,60 @@ const AltRepeatEditor: FC = () => {
     };
 
     if (!altRepeatEntry) return <div className="p-5">Alt-repeat entry not found</div>;
+
+    const optionsList = (
+        <div className="flex flex-col gap-1">
+            {OPTIONS.map((opt) => (
+                <div key={opt.bit} className="flex flex-row items-center justify-between gap-3 py-1">
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="text-sm font-medium text-slate-700 dark:text-neutral-200">{opt.label}</span>
+                        <span className="text-xs text-slate-500 dark:text-neutral-400">{opt.description}</span>
+                    </div>
+                    <OnOffToggle
+                        label={opt.label}
+                        value={(altRepeatEntry?.options & opt.bit) !== 0}
+                        onToggle={(val) => updateOption(opt.bit, val)}
+                    />
+                </div>
+            ))}
+        </div>
+    );
+
+    if (bar) {
+        const slot = (label: string, slotName: "keycode" | "alt_keycode") => (
+            <BarSlot label={label}>
+                <EditorKey
+                    keycode={altRepeatEntry[slotName]}
+                    selected={isSlotSelected(slotName)}
+                    onClick={() => selectAltRepeatKey(altRepeatIndex, slotName)}
+                    onClear={() => clearKey(slotName)}
+                    onDrop={(item) => handleDrop(slotName, item)}
+                    size={BAR_KEY_SIZE}
+                    trashCorner
+                    unitSize={BAR_KEY_PX}
+                    variant={BAR_KEY_VARIANT}
+                    wrapperClassName={`relative ${BAR_KEY_SIZE}`}
+                    editorType="altrepeat"
+                    editorId={itemToEdit!}
+                    editorSlot={slotName}
+                />
+            </BarSlot>
+        );
+        return (
+            <div className="flex flex-col gap-2">
+                <BarRow label="Alt-repeat keys">
+                    {slot("Trigger", "keycode")}
+                    <BarSep><ArrowRight /></BarSep>
+                    {slot("Alternate", "alt_keycode")}
+                    <BarEnd>
+                        <BarOptionsButton open={optionsOpen} onToggle={() => setOptionsOpen(o => !o)} controls={optionsId} />
+                        {barEnd}
+                    </BarEnd>
+                </BarRow>
+                {optionsOpen && <div id={optionsId} className="border-t border-kb-gray-border/40 pt-1">{optionsList}</div>}
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col gap-2 py-6 pl-10 pb-20">

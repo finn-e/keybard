@@ -29,11 +29,11 @@ describe('FragmentsPanel with pointing slots', () => {
         const right = container.querySelector('[data-pointing-instance="right_pointing"]')!;
         expect(left).toBeTruthy();
         expect(right).toBeTruthy();
-        expect(left.textContent).toContain('Locked');
+        expect(left.textContent).toContain('Auto-detected');
         expect(left.querySelector('[role="status"]')!.textContent).toBe(
             mocks.keyboard.fragments.pointing_trackpoint.description ?? 'pointing_trackpoint');
         // Not reported yet: listed, not locked, no module named.
-        expect(right.textContent).not.toContain('Locked');
+        expect(right.textContent).not.toContain('Auto-detected');
         expect(right.querySelector('[role="status"]')!.textContent).toBe('Detecting');
         expect(left.querySelector('button, [role="combobox"], select')).toBeNull();
     });

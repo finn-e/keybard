@@ -13,4 +13,12 @@ describe('dropping a key into blank space', () => {
         blankKeyOnDrop(assign)({ keycode: 'KC_A', label: 'A', type: 'keyboard' } as any);
         expect(assign).not.toHaveBeenCalled();
     });
+
+    it('blanks an editor slot through its own clear', () => {
+        const assign = vi.fn();
+        const clearSource = vi.fn();
+        blankKeyOnDrop(assign)({ keycode: 'KC_A', label: 'A', type: 'keyboard', editorType: 'combo', clearSource } as any);
+        expect(clearSource).toHaveBeenCalledOnce();
+        expect(assign).not.toHaveBeenCalled();
+    });
 });

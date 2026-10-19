@@ -7,11 +7,11 @@ import { PARANOID } from '@/lib/paranoid';
 import { useHost } from './host';
 import { HOST_DOWNLOAD, HostVersion } from './HostInstall';
 
-/** Links that open the overlay dialog: the Host's Open Keybard, and older Hosts' #trainer. */
+/** Links that open the overlay dialog: the overlay app's Open Keybard, and older versions' #trainer. */
 export const overlayRequested = (hash = window.location.hash) => hash === '#overlay' || hash === '#trainer';
 
 /**
- * The desktop overlay is Keybard Host, which reads the board and keeps its own settings.
+ * The desktop overlay is the Keybard Overlay app, which reads the board and keeps its own settings.
  * Keybard only offers the download and connects to it, so the overlay refreshes after edits
  * and uses Keybard's keyboard language.
  */
@@ -22,7 +22,7 @@ export function OverlayDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 }
 
 function OverlayDialogBody() {
-    // Mounted only while open, so Keybard talks to the Host only then.
+    // Mounted only while open, so Keybard talks to the overlay app only then.
     const host = useHost();
     const { internationalLayout } = useLayoutSettings();
     useEffect(() => {
@@ -31,9 +31,9 @@ function OverlayDialogBody() {
     }, [internationalLayout, host.state?.session, host.state?.config.layoutId, host.busy]);
     const board = host.state?.devices.find(d => d.id === host.state?.selectedDevice);
     const description = host.state
-        ? board ? `Keybard Host is following ${board.name}.` : 'Keybard Host is running. Choose a board from its menu.'
-        : PARANOID ? 'Start Keybard Host in paranoid mode (Start-Paranoid.cmd) and use the Keybard it opens.'
-            : 'Keybard Host shows your layout above your other windows.';
+        ? board ? `The overlay app is following ${board.name}.` : 'The overlay app is running. Choose a board from its menu.'
+        : PARANOID ? 'Start the Keybard Overlay app in paranoid mode (Start-Paranoid.cmd) and use the Keybard it opens.'
+            : 'The Keybard Overlay app shows your layout above your other windows.';
     return <>
         <DialogHeader>
             <DialogTitle>Desktop overlay</DialogTitle>

@@ -1,5 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode, useMemo } from "react";
 import { MAX_FINGER_CLUSTER_SQUEEZE_U } from "@/constants/keyboard-visuals";
+import { useOptionalSettings } from "@/contexts/SettingsContext";
+import {
+    DEFAULT_KEY_SIZE, DEFAULT_PANEL_POSITION, isKeySizePreference, isPanelPositionPreference,
+    KEY_SIZE_SETTING, PANEL_POSITION_SETTING,
+} from "@/lib/appearance-settings";
+import { autoKeySizeForWidth } from "@/lib/pickerShape";
 
 export type KeyVariant = "default" | "medium" | "small";
 export type LayoutMode = "sidebar" | "bottombar";
@@ -12,6 +18,8 @@ interface MeasuredDimensions {
     keyboardHeights: { default: number; medium: number; small: number };
     // Raw widths without squeeze reduction - used for squeeze calculation
     rawKeyboardWidths?: { default: number; medium: number; small: number };
+    // Auto picks by width alone (the L picker: the layout keeps the height it needs).
+    widthOnly?: boolean;
 }
 
 interface LayoutSettingsContextType {
@@ -44,14 +52,41 @@ export const LayoutSettingsProvider: React.FC<{ children: ReactNode }> = ({ chil
     const [internationalLayout, setInternationalLayout] = useState<string>("us");
     const [keyVariant, setKeyVariantState] = useState<KeyVariant>("default");
     const [layoutMode, setLayoutModeState] = useState<LayoutMode>("sidebar");
-    const [isAutoLayoutMode, setIsAutoLayoutMode] = useState<boolean>(true);
+    const [isAutoLayoutMode, setIsAutoLayoutModeState] = useState<boolean>(true);
     const [manualLayoutMode, setManualLayoutMode] = useState<LayoutMode>("sidebar");
-    const [isAutoKeySize, setIsAutoKeySize] = useState<boolean>(true);
+    const [isAutoKeySize, setIsAutoKeySizeState] = useState<boolean>(true);
     const [manualKeyVariant, setManualKeyVariant] = useState<KeyVariant>("default");
     const [measuredDimensions, setMeasuredDimensionsState] = useState<MeasuredDimensions | null>(null);
     const [is3DMode, setIs3DMode] = useState<boolean>(false);
     const [isThumb3DOffsetActive, setIsThumb3DOffsetActive] = useState<boolean>(false);
     const [backdropOpacity, setBackdropOpacity] = useState<number>(0.25);
+
+    // Key size and panel position are stored preferences (Settings > Appearance).
+    // Outside a SettingsProvider (isolated renders) they are kept in memory only.
+    const settings = useOptionalSettings();
+    const updateSetting = settings?.updateSetting;
+    const storedKeySize = settings?.isLoaded ? settings.getSetting(KEY_SIZE_SETTING, DEFAULT_KEY_SIZE) : null;
+    const storedPanelPosition = settings?.isLoaded ? settings.getSetting(PANEL_POSITION_SETTING, DEFAULT_PANEL_POSITION) : null;
+
+    useEffect(() => {
+        if (!isKeySizePreference(storedKeySize)) return;
+        if (storedKeySize === "auto") {
+            setIsAutoKeySizeState(true);
+        } else {
+            setManualKeyVariant(storedKeySize);
+            setIsAutoKeySizeState(false);
+        }
+    }, [storedKeySize]);
+
+    useEffect(() => {
+        if (!isPanelPositionPreference(storedPanelPosition)) return;
+        if (storedPanelPosition === "auto") {
+            setIsAutoLayoutModeState(true);
+        } else {
+            setManualLayoutMode(storedPanelPosition);
+            setIsAutoLayoutModeState(false);
+        }
+    }, [storedPanelPosition]);
 
     // Use refs to track current values without triggering re-renders during calculation
     const measuredDimensionsRef = useRef<MeasuredDimensions | null>(null);
@@ -109,7 +144,9 @@ export const LayoutSettingsProvider: React.FC<{ children: ReactNode }> = ({ chil
                 containerWidth >= widths[size] && containerHeight >= heights[size];
 
             let bestSize: KeyVariant = "small";
-            if (fitsAt("default")) {
+            if (measured.widthOnly) {
+                bestSize = autoKeySizeForWidth(containerWidth, widths);
+            } else if (fitsAt("default")) {
                 bestSize = "default";
             } else if (fitsAt("medium")) {
                 bestSize = "medium";
@@ -161,16 +198,28 @@ export const LayoutSettingsProvider: React.FC<{ children: ReactNode }> = ({ chil
     // Wrapper to handle manual mode changes
     const setLayoutMode = useCallback((mode: LayoutMode) => {
         setManualLayoutMode(mode);
-        setIsAutoLayoutMode(false); // Disable auto when user manually selects
+        setIsAutoLayoutModeState(false); // Disable auto when user manually selects
         setLayoutModeState(mode);
-    }, []);
+        updateSetting?.(PANEL_POSITION_SETTING, mode);
+    }, [updateSetting]);
+
+    const setIsAutoLayoutMode = useCallback((auto: boolean) => {
+        setIsAutoLayoutModeState(auto);
+        updateSetting?.(PANEL_POSITION_SETTING, auto ? "auto" : manualLayoutMode);
+    }, [updateSetting, manualLayoutMode]);
 
     // Wrapper to handle manual key variant changes
     const setKeyVariant = useCallback((variant: KeyVariant) => {
         setManualKeyVariant(variant);
-        setIsAutoKeySize(false); // Disable auto when user manually selects
+        setIsAutoKeySizeState(false); // Disable auto when user manually selects
         setKeyVariantState(variant);
-    }, []);
+        updateSetting?.(KEY_SIZE_SETTING, variant);
+    }, [updateSetting]);
+
+    const setIsAutoKeySize = useCallback((auto: boolean) => {
+        setIsAutoKeySizeState(auto);
+        updateSetting?.(KEY_SIZE_SETTING, auto ? "auto" : manualKeyVariant);
+    }, [updateSetting, manualKeyVariant]);
 
     return (
         <LayoutSettingsContext.Provider value={{

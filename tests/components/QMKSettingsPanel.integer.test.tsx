@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import QMKSettingsPanel from '../../src/layout/SecondarySidebar/Panels/QMKSettingsPanel';
+import QMKSettingsPanel from '../../src/layout/SecondarySidebar/Panels/TypingBehaviorPanel';
 const { queue, setKeyboard } = vi.hoisted(() => ({ queue: vi.fn(), setKeyboard: vi.fn() }));
 vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ keyboard: {settings: {7: 200, 8: 0, 21: 0}}, setKeyboard }) }));
 vi.mock('@/contexts/ChangesContext', () => ({ useChanges: () => ({queue}) }));

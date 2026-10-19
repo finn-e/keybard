@@ -33,6 +33,7 @@ export interface KeyboardInfo {
     feature_flags?: number;                  // NEW: Svil feature flags
     keycode_version?: string;                // QMK keycode numbering the keycodes are in, e.g. "0.0.9"
     storage_reset?: boolean;                 // board reset its settings: its storage could not be read
+    storage_build_reset?: boolean;           // board reset its settings on the first boot of a new firmware build (D39)
     pointing_hardware?: PointingHardwareReport; // connected boards: each half's side and trackball sensor (POINTING_HARDWARE)
     storage_write_failed?: boolean;          // board couldn't save a change since it started: changes will be lost on restart
     keycode_version_reported?: boolean;      // Connected boards: whether GET_INFO reported the numbering (vLaunch on)
@@ -58,6 +59,8 @@ export interface KeyboardInfo {
         layer_colors?: Record<string, string>;
         macros?: Record<string, string>;
         tapdances?: Record<string, string>;
+        /** Combo names, keyed by combo index. Kept in Keybard (files and backups), never on the board. */
+        combos?: Record<string, string>;
     };
     keylayout?: Record<string, any>; // Using any for now to match KLE output structure
 
