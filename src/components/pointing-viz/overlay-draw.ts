@@ -1,17 +1,27 @@
 // Canvas drawing over a pointing device: the fingertip contact on the touchpad,
-// the sniper reticle, and the sniper and boost pills that carry the multiplier.
+// the sniper reticle, and the sniper, boost and Velocity Scroll pills.
 // Ported from the round 5 design prototype. Coordinates are CSS px with the
 // device's center at the origin.
 
 export interface PillColors { bg: string; fg: string; shadow?: boolean }
 
-const ease = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
+export const ease = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
 
-const ICON: Record<"sniper" | "boost", (ctx: CanvasRenderingContext2D) => void> = {
+export type PillKind = "sniper" | "boost" | "velocity";
+
+/** What a pill says; sniper and boost add their multiplier. */
+export const PILL_LABEL: Record<PillKind, string> = { sniper: "SNIPER", boost: "BOOST", velocity: "VEL SCROLL" };
+
+const ICON: Record<PillKind, (ctx: CanvasRenderingContext2D) => void> = {
     sniper: (ctx) => { ctx.beginPath(); ctx.arc(12, 12, 10, 0, Math.PI * 2); ctx.moveTo(22, 12); ctx.lineTo(18, 12); ctx.moveTo(6, 12); ctx.lineTo(2, 12); ctx.moveTo(12, 6); ctx.lineTo(12, 2); ctx.moveTo(12, 22); ctx.lineTo(12, 18); ctx.stroke(); },
     boost: (ctx) => {
         if (typeof Path2D === "undefined") return;
         ctx.stroke(new Path2D("M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"));
+    },
+    // the autoscroll mark: an anchor dot with a chevron above and below
+    velocity: (ctx) => {
+        ctx.beginPath(); ctx.arc(12, 12, 2.2, 0, Math.PI * 2); ctx.fillStyle = ctx.strokeStyle; ctx.fill();
+        ctx.beginPath(); ctx.moveTo(7, 7.5); ctx.lineTo(12, 2.5); ctx.lineTo(17, 7.5); ctx.moveTo(7, 16.5); ctx.lineTo(12, 21.5); ctx.lineTo(17, 16.5); ctx.stroke();
     },
 };
 
@@ -37,7 +47,7 @@ export function drawContact(ctx: CanvasRenderingContext2D, hw: number, hh: numbe
 }
 
 // an etched hairline: a soft dark bed under a fine white line, readable on silver and on black pearl
-function strokeHair(ctx: CanvasRenderingContext2D, a: number, w: number) {
+export function strokeHair(ctx: CanvasRenderingContext2D, a: number, w: number) {
     ctx.strokeStyle = `rgba(0,0,0,${0.42 * a})`; ctx.lineWidth = w * 2.8; ctx.stroke();
     ctx.strokeStyle = `rgba(255,255,255,${0.95 * a})`; ctx.lineWidth = w; ctx.stroke();
 }
@@ -90,7 +100,7 @@ export function drawPadReticle(ctx: CanvasRenderingContext2D, hw: number, hh: nu
     ctx.restore();
 }
 
-export interface PillItem { kind: "sniper" | "boost"; amount: number; mult: string }
+export interface PillItem { kind: PillKind; amount: number; mult: string }
 
 /** Pill size for a font size; the layout code uses it to keep the pills clear of keys. */
 export function pillFont(unitPx: number, host: boolean) { return host ? 10.5 : unitPx >= 45 ? 11.5 : 10; }
@@ -108,9 +118,9 @@ export function drawPills(ctx: CanvasRenderingContext2D, items: PillItem[], opts
     ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
     const ls = (v: string) => { try { (ctx as unknown as { letterSpacing: string }).letterSpacing = v; } catch { /* older canvas */ } };
     const dims = shown.map((it) => {
-        ls("0.04em"); const tw = ctx.measureText(it.kind.toUpperCase()).width;
-        ls("0em"); const mw = ctx.measureText(it.mult).width;
-        return { tw, mw, w: tw + mw + fs * 3.6, h: fs * 2.0 };
+        ls("0.04em"); const tw = ctx.measureText(PILL_LABEL[it.kind]).width;
+        ls("0em"); const mw = it.mult ? ctx.measureText(it.mult).width : 0;
+        return { tw, mw, w: tw + mw + fs * (it.mult ? 3.6 : 2.85), h: fs * 2.0 };
     });
     const totalH = dims.reduce((a, d) => a + d.h, 0) + gap * (dims.length - 1);
     let x0: number, y0: number;
@@ -137,9 +147,11 @@ export function drawPills(ctx: CanvasRenderingContext2D, items: PillItem[], opts
         ctx.save(); ctx.translate(x + fs * 0.75, yy + h / 2 - fs * 0.6); const sc = (fs * 1.2) / 24; ctx.scale(sc, sc); ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round"; ICON[it.kind](ctx); ctx.restore();
         ctx.textBaseline = "middle";
         ls("0.04em");
-        ctx.fillText(it.kind.toUpperCase(), x + fs * 2.2, yy + h / 2 + 0.5);
-        ctx.globalAlpha *= 0.8; ls("0em");
-        ctx.fillText(it.mult, x + fs * 2.2 + tw + fs * 0.75, yy + h / 2 + 0.5);
+        ctx.fillText(PILL_LABEL[it.kind], x + fs * 2.2, yy + h / 2 + 0.5);
+        if (it.mult) {
+            ctx.globalAlpha *= 0.8; ls("0em");
+            ctx.fillText(it.mult, x + fs * 2.2 + tw + fs * 0.75, yy + h / 2 + 0.5);
+        }
         y += h + gap;
     });
     ctx.restore();

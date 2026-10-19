@@ -12,6 +12,7 @@ import { BallMenu } from "./BallMenu";
 import { PointingDevice } from "./PointingDevice";
 import { BALL_GLOSS, BALL_SPARKLE, type BallId } from "./webgl/materials";
 import type { PillColors } from "./overlay-draw";
+import { FALLBACK_VELOCITY_COLORS, type VelocityColors } from "./velocity-draw";
 
 
 /** The pill colors from the theme tokens (--kb-pointing-pill-*). */
@@ -25,6 +26,14 @@ export function pillColorsFromTokens(host = false): PillColors {
         fg: cs.getPropertyValue(`${name}-fg`).trim() || fallback.fg,
         shadow: host,
     };
+}
+
+/** Velocity Scroll's color: the speed, from --kb-pointing-velocity. */
+export function velocityColorsFromTokens(host = false): VelocityColors {
+    const fallback = FALLBACK_VELOCITY_COLORS.accent;
+    if (typeof document === "undefined") return { accent: fallback };
+    const cs = getComputedStyle(document.documentElement);
+    return { accent: cs.getPropertyValue(host ? "--kb-pointing-host-velocity" : "--kb-pointing-velocity").trim() || fallback };
 }
 
 interface Props {
@@ -51,6 +60,8 @@ export function PointingLayer({ keyboard, keys, unitPx }: Props) {
     const labels = useMemo(() => ({ sniper: sniperLabel(factors.sniperDivisor), boost: boostLabel(factors.boostFactor) }), [factors]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const pillColors = useMemo(() => pillColorsFromTokens(false), [dark]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const velocityColors = useMemo(() => velocityColorsFromTokens(false), [dark]);
     const demo = pointingDemo();
     const [moving, setMoving] = useState<"left" | "right">(demo?.hand ?? (kinds.right ? "right" : "left"));
     const [menu, setMenu] = useState<{ side: "left" | "right"; x: number; y: number } | null>(null);
@@ -96,6 +107,8 @@ export function PointingLayer({ keyboard, keys, unitPx }: Props) {
                         showModes={modesAt === side}
                         labels={labels}
                         pillColors={pillColors}
+                        velocityColors={velocityColors}
+                        otherKind={placements[side === "left" ? "right" : "left"]?.kind ?? null}
                         onMoved={onMoved}
                         onMenu={(x, y) => setMenu({ side, x, y })}
                     />

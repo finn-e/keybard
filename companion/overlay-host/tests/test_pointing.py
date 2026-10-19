@@ -170,6 +170,31 @@ class SettingsTests(unittest.TestCase):
         m = demo_motion(3.0, .016)
         self.assertTrue(m['sniper'] and m['right']['valid'] and m['left']['valid'])
         self.assertEqual(m['left']['dx'], 0)
+        self.assertNotIn('velocityScroll', m)
+
+    def test_demo_velocity_shape(self):
+        m = demo_motion(0.0, .016, velocity=True)
+        v = m['velocityScroll']
+        self.assertTrue(v['held'] and v['padHand'] is None and not m['sniper'])
+        self.assertGreater(v['offsetMm']['y'], 10)  # starts away from the anchor, toward the user
+        self.assertLess(v['speedNps']['v'], 0)       # which scrolls down
+        self.assertEqual(v['ball']['maxNps'], 60.0)
+
+    def test_velocity_scroll_block(self):
+        # The block at payload 29-52 after the per-reader extension: held, right pad finger,
+        # offset (1.5, -12.34) mm, speed (0, 8.5) notch/s, and both curves.
+        block = bytes((0x56, 0x07)) + b''.join(v.to_bytes(2, 'little', signed=True) for v in (150, -1234, 0, 850))
+        block += b''.join(v.to_bytes(2, 'little') for v in (6000, 80, 1200, 1500, 150, 1600, 1500))
+        m = parse_pointing_motion(motion_payload(left=(1, 0, 0), ext=(2, 0, 0)) + block)
+        v = m['velocityScroll']
+        self.assertEqual((v['held'], v['padHand'], v['lockedAxis']), (True, 'right', 'none'))
+        self.assertEqual(v['offsetMm'], dict(x=1.5, y=-12.34))
+        self.assertEqual(v['speedNps'], dict(h=0.0, v=8.5))
+        self.assertEqual(v['ball'], dict(deadMm=0.8, gain=12.0, exponent=1.5, maxNps=60.0))
+        self.assertEqual(v['pad'], dict(deadMm=1.5, gain=16.0, exponent=1.5, maxNps=60.0))
+        # Firmware without the block (zeros), and 32-byte reports (too short), report none.
+        self.assertNotIn('velocityScroll', parse_pointing_motion(motion_payload(ext=(2, 0, 0)).ljust(57, bytes(1))))
+        self.assertNotIn('velocityScroll', parse_pointing_motion(motion_payload()))
 
     def test_no_github_io_origin(self):
         self.assertFalse(any('github.io' in o for o in REMOTE_ORIGINS))
