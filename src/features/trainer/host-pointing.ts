@@ -57,7 +57,7 @@ function hostContacts(list: unknown[]): PadContact[] {
         const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
         const id = num(c.id), x = num(c.x), y = num(c.y);
         if (id === null || x === null || y === null) continue;
-        out.push({ id: Math.trunc(id) & 15, x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), confident: c.confident !== false });
+        out.push({ id: Math.trunc(id) & 15, x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), confident: c.confident !== false, ...(c.leftOut === true ? { leftOut: true } : {}) });
     }
     return out;
 }
