@@ -11,6 +11,10 @@ You choose what the overlay looks like in the **Overlay** panel of [Keybard](htt
 
 Keybard Overlay is now in your system tray, and it opens Keybard's Overlay dialog on [keybard.svalboard.com](https://keybard.svalboard.com) in your browser.
 
+## Install (Linux, test build)
+
+Download `KeybardOverlay-x86_64.AppImage` (or `KeybardOverlay-Linux-x86_64.tar.gz`), `README-LINUX.md` and `install-udev-rule.sh` with `60-svalboard.rules` from [Releases](https://github.com/svalboard/keybard/releases). Run `sudo ./install-udev-rule.sh` once and replug the board, then start the AppImage (or `./keybard-overlay` in the extracted folder). It brings its own Python and Qt. It is a test build: see `README-LINUX.md` for the known limits and what to check, and `--diagnose` for the report to send back.
+
 ## Set up the overlay
 
 1. In the Overlay dialog, click **Connect**. If the browser asks whether the site can access apps on this device, allow it. Next time it reconnects on its own.

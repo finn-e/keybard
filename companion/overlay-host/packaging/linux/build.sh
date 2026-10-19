@@ -7,9 +7,8 @@
 #
 #   DL=<downloads> OUT=<output dir> bash companion/overlay-host/packaging/linux/build.sh
 #
-# DL holds the python-build-standalone tarball (PYTHON_TARBALL), the pinned wheels
-# for requirements.txt in DL/wheels, appimagetool, and DL/fallback (see below).
-# Nothing is downloaded here.
+# DL holds the pinned downloads that fetch.sh gets (Python, wheels, appimagetool and
+# its runtime, the libxcb-cursor fallback). Nothing is downloaded here.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 HOST=$(cd "$HERE/../.." && pwd)
@@ -34,7 +33,7 @@ mkdir -p "$APP/runtime"
 tar -xzf "$DL/$PYTHON_TARBALL" -C "$APP/runtime" --strip-components=1
 PY="$APP/runtime/bin/python3"
 "$PY" -m pip install -q --no-index --find-links "$DL/wheels" --no-warn-script-location \
-  -r "$HOST/requirements.txt"
+  --require-hashes -r "$HERE/requirements-linux.txt"
 "$PY" -m pip uninstall -q -y pip
 SITE=$("$PY" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
 
@@ -98,9 +97,10 @@ cp -a "$APP" "$APPDIR"
 ln -s keybard-overlay "$APPDIR/AppRun"
 ln -s keybard-overlay.png "$APPDIR/.DirIcon"
 IMG="$NAME-x86_64.AppImage"
-ARCH=x86_64 "$DL/appimagetool" --appimage-extract-and-run --no-appstream "$APPDIR" "$OUT/$IMG" >/dev/null
+ARCH=x86_64 "$DL/appimagetool" --appimage-extract-and-run --no-appstream \
+  --runtime-file "$DL/runtime-x86_64" "$APPDIR" "$OUT/$IMG" >/dev/null
 
 cp "$APP/README-LINUX.md" "$APP/60-svalboard.rules" "$APP/install-udev-rule.sh" "$OUT/"
-(cd "$OUT" && sha256sum "$TAR" "$IMG" README-LINUX.md 60-svalboard.rules install-udev-rule.sh > SHA256SUMS)
+(cd "$OUT" && sha256sum "$TAR" "$IMG" README-LINUX.md 60-svalboard.rules install-udev-rule.sh > SHA256SUMS-Linux.txt)
 ls -la "$OUT"
-cat "$OUT/SHA256SUMS"
+cat "$OUT/SHA256SUMS-Linux.txt"

@@ -1,11 +1,12 @@
-# Keybard Overlay — Windows
+# Keybard Overlay — Windows, and Linux for testers
 
 Keybard Overlay shows your Svalboard layout as a transparent overlay on your desktop. It follows the layer you're on, so you can glance at it while you type in any app. You set it up in the **Overlay** panel of [Keybard](https://keybard.svalboard.com).
 
-This release is a portable ZIP for 64-bit Windows 10 and 11, not a signed installer.
+This release is a portable ZIP for 64-bit Windows 10 and 11, not a signed installer, and a test build for Linux.
 
 ## New in this release
 
+- **Linux, for testers.** Keybard Overlay for 64-bit Linux comes as `KeybardOverlay-x86_64.AppImage` and `KeybardOverlay-Linux-x86_64.tar.gz`, each with its own Python and Qt, so it needs no installs or admin rights to run. It is a test build that hasn't yet been confirmed on many Linux desktops: `README-LINUX.md` says how to run it, the one-time udev rule (`60-svalboard.rules`) that lets it read the board, and what to check. It needs glibc 2.34 or later (Ubuntu 22.04, Debian 12, Fedora 35 or later). On Wayland it runs through XWayland, so it can stay on top; plain GNOME shows no tray icon without the AppIndicator extension; X11 without a compositor shows a black box behind the keys. Checksums are in `SHA256SUMS-Linux.txt`.
 - **Keybard Host is now Keybard Overlay.** Same app, new name. It keeps your settings. The download is now **KeybardOverlay-Windows.zip**.
 
 ## New in vLaunch2.3
