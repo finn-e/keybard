@@ -1,4 +1,4 @@
-import { FC, useEffect } from "react";
+import { FC, ReactNode, useEffect } from "react";
 import { ArrowRight, ArrowRightFromLine } from "lucide-react";
 
 import { useKeyBinding } from "@/contexts/KeyBindingContext";
@@ -9,8 +9,15 @@ import { DragItem } from "@/contexts/DragContext";
 import { cn } from "@/lib/utils";
 import { useBindingChanges } from "@/hooks/useBindingChanges";
 import EditorKey from "./EditorKey";
+import { BAR_KEY_PX, BAR_KEY_SIZE, BAR_KEY_VARIANT, BarEnd, BarRow, BarSep, BarSlot } from "./EditorBar";
 
-const LeaderEditor: FC = () => {
+interface Props {
+    /** The compact bar of the side-panel placement, with these controls at the row's end. */
+    bar?: boolean;
+    barEnd?: ReactNode;
+}
+
+const LeaderEditor: FC<Props> = ({ bar = false, barEnd }) => {
     const { keyboard, setKeyboard } = useKeyboard();
     const persistBinding = useBindingChanges();
     const { itemToEdit, setPanelToGoBack, setAlternativeHeader, initialEditorSlot } = usePanels();
@@ -18,9 +25,9 @@ const LeaderEditor: FC = () => {
     const { layoutMode } = useLayoutSettings();
 
     const isHorizontal = layoutMode === "bottombar";
-    const seqKeySize = isHorizontal ? "w-[45px] h-[45px]" : "w-[50px] h-[50px]";
-    const outputKeySize = isHorizontal ? "w-[45px] h-[45px]" : "w-[50px] h-[50px]";
-    const keyVariant = isHorizontal ? "medium" : "default";
+    const seqKeySize = bar ? BAR_KEY_SIZE : isHorizontal ? "w-[45px] h-[45px]" : "w-[50px] h-[50px]";
+    const outputKeySize = seqKeySize;
+    const keyVariant = bar ? BAR_KEY_VARIANT : isHorizontal ? "medium" : "default";
 
     const leaderIndex = itemToEdit!;
     const leaderEntry = keyboard?.leaders?.[leaderIndex];
@@ -130,8 +137,10 @@ const LeaderEditor: FC = () => {
 
         return (
             <div className="flex flex-col items-center gap-1 relative">
-                <span className={cn("font-medium text-kb-ink", isHorizontal ? "text-[10px]" : "text-xs")}>{seqIndex + 1}</span>
+                {!bar && <span className={cn("font-medium text-kb-ink", isHorizontal ? "text-[10px]" : "text-xs")}>{seqIndex + 1}</span>}
                 <EditorKey
+                    trashCorner={bar}
+                    unitSize={bar ? BAR_KEY_PX : undefined}
                     keycode={keycode}
                     selected={isSelected}
                     onClick={() => selectLeaderKey(leaderIndex, "sequence", seqIndex)}
@@ -183,8 +192,10 @@ const LeaderEditor: FC = () => {
 
         return (
             <div className="flex flex-col items-center gap-1 relative">
-                <span className={cn("font-bold text-slate-600 dark:text-neutral-300", isHorizontal ? "text-xs" : "text-sm")}>Output</span>
+                {!bar && <span className={cn("font-bold text-slate-600 dark:text-neutral-300", isHorizontal ? "text-xs" : "text-sm")}>Output</span>}
                 <EditorKey
+                    trashCorner={bar}
+                    unitSize={bar ? BAR_KEY_PX : undefined}
                     keycode={keycode}
                     selected={isSelected}
                     onClick={() => selectLeaderKey(leaderIndex, "output")}
@@ -209,6 +220,21 @@ const LeaderEditor: FC = () => {
 
     // Count how many sequence keys are filled
     const filledKeys = leaderEntry.sequence?.filter(k => k && k !== "KC_NO").length || 0;
+
+    // Bar: the sequence so far plus one empty slot, then the output; controls at the end.
+    if (bar) {
+        return (
+            <BarRow label="Leader sequence">
+                {[0, 1, 2, 3, 4].filter(idx => idx <= filledKeys).map((idx) => [
+                    idx > 0 && <BarSep key={`sep${idx}`}><ArrowRight /></BarSep>,
+                    <BarSlot key={idx} label={`Key ${idx + 1}`}>{renderSequenceKey(idx)}</BarSlot>,
+                ])}
+                <BarSep><ArrowRightFromLine /></BarSep>
+                <BarSlot label="Output">{renderOutputKey()}</BarSlot>
+                <BarEnd>{barEnd}</BarEnd>
+            </BarRow>
+        );
+    }
 
     // ==========================================
     // HORIZONTAL LAYOUT (Bottom Bar Mode)

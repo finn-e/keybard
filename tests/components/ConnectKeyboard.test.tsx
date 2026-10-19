@@ -98,14 +98,14 @@ describe('ConnectKeyboard: reconnect to permitted keyboards', () => {
         await waitFor(() => expect(navigator.hid.getDevices).toHaveBeenCalled());
     });
 
-    it('explains old Vial firmware with update steps instead of the raw error', async () => {
+    it('explains old Vial firmware with the manual install instead of the raw error', async () => {
         keyboardContext.connectionError = 'This Svalboard is running the old Vial firmware (v2025-11-01).';
         keyboardContext.connectionFirmware = { kind: 'svalboard-vial', reportedVersion: 'v2025-11-01' };
         render(<ConnectKeyboard />);
         const card = screen.getByRole('alert', { name: "Update your Svalboard's firmware" });
         expect(card).toHaveTextContent('old Vial firmware (v2025-11-01)');
         expect(card).toHaveTextContent('File > Save current layout');
-        expect(screen.getByRole('link', { name: /latest Svalboard firmware release/ })).toHaveAttribute('href', 'https://github.com/svalboard/qmk/releases/latest');
+        expect(screen.getByRole('button', { name: 'Install by hand' })).toBeInTheDocument();
         expect(screen.getAllByRole('alert')).toHaveLength(1);
         await waitFor(() => expect(navigator.hid.getDevices).toHaveBeenCalled());
     });
@@ -129,7 +129,7 @@ describe('ConnectKeyboard landing content', () => {
         try {
             render(<ConnectKeyboard />);
             expect(screen.queryByText(/trainer/i)).not.toBeInTheDocument();
-            expect(screen.queryByText(/Keybard Host|owns the board|device editing/i)).not.toBeInTheDocument();
+            expect(screen.queryByText(/Keybard Overlay|owns the board|device editing/i)).not.toBeInTheDocument();
             expect(screen.getByRole('button', { name: 'QWERTY Example' })).toBeInTheDocument();
         } finally {
             delete document.documentElement.dataset.keybardHost;

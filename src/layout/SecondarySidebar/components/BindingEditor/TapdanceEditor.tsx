@@ -1,4 +1,4 @@
-import { FC, useEffect, useState, type ChangeEvent, type KeyboardEvent as InputKeyEvent } from "react";
+import { FC, ReactNode, useEffect, useState, type ChangeEvent, type KeyboardEvent as InputKeyEvent } from "react";
 
 import { Input } from "@/components/ui/input";
 import { useKeyBinding } from "@/contexts/KeyBindingContext";
@@ -13,8 +13,15 @@ import { isTapdanceKeycode } from "@/utils/keys";
 import { DEFAULT_TAPDANCE_TERM_MS, MAX_TAPDANCE_TERM_MS, MIN_TAPDANCE_TERM_MS, clampTapdanceTerm } from "@/utils/tapdance-term";
 
 import EditorKey from "./EditorKey";
+import { BAR_KEY_PX, BAR_KEY_SIZE, BAR_KEY_VARIANT, BarEnd, BarRow, BarSlot } from "./EditorBar";
 
-const TapdanceEditor: FC = () => {
+interface Props {
+    /** The compact bar of the side-panel placement, with these controls at the row's end. */
+    bar?: boolean;
+    barEnd?: ReactNode;
+}
+
+const TapdanceEditor: FC<Props> = ({ bar = false, barEnd }) => {
     const { keyboard, setKeyboard } = useKeyboard();
     const persistBinding = useBindingChanges();
     const { setPanelToGoBack, setAlternativeHeader, itemToEdit, initialEditorSlot } = usePanels();
@@ -231,6 +238,49 @@ const TapdanceEditor: FC = () => {
             </div>
         );
     };
+
+    // Bar: the four slots in one row, the term field and controls at its end.
+    if (bar) {
+        const slot = (label: string, type: "tap" | "hold" | "doubletap" | "taphold") => (
+            <BarSlot label={label}>
+                <EditorKey
+                    keycode={keys[type]}
+                    selected={isSlotSelected(type)}
+                    onClick={() => selectTapdanceKey(itemToEdit!, type)}
+                    onClear={() => updateKeyAssignment(type, "KC_NO")}
+                    onDrop={(item) => handleDrop(type, item)}
+                    size={BAR_KEY_SIZE}
+                    trashCorner
+                    unitSize={BAR_KEY_PX}
+                    variant={BAR_KEY_VARIANT}
+                    wrapperClassName={`relative ${BAR_KEY_SIZE}`}
+                    editorType="tapdance"
+                    editorId={itemToEdit!}
+                    editorSlot={type}
+                />
+            </BarSlot>
+        );
+        return (
+            <BarRow label="Tap dance keys">
+                {slot("Tap", "tap")}
+                {slot("Hold", "hold")}
+                {slot("Tap-Hold", "taphold")}
+                {slot("Double-Tap", "doubletap")}
+                <BarEnd>
+                    <BarSlot label="Term (ms)">
+                        <Input
+                            aria-label="Tapping term in milliseconds"
+                            {...termInputProps}
+                            type="number"
+                            step={25}
+                            className="w-16 h-10 bg-kb-surface text-center text-sm px-1"
+                        />
+                    </BarSlot>
+                    {barEnd}
+                </BarEnd>
+            </BarRow>
+        );
+    }
 
     // Horizontal layout: 2x2 quad of keys + ms input
     if (isHorizontal) {

@@ -8,7 +8,7 @@ name: Deploy Keybard (keybard.svalboard.com)
 # Full releases deploy production: pushing a v tag (v3, v3.1) that is on main
 # builds and deploys it. Merges to main do not deploy anything; prerelease
 # x tags go to the bleeding-edge site (next-deploy.yml). The same tag names the
-# Keybard Host release (keybard-host-release.yml) and, for v<N>, the firmware
+# Keybard Overlay release (keybard-overlay-release.yml) and, for v<N>, the firmware
 # release on svalboard/qmk. Tag rules: .github/scripts/release-tag.sh.
 #
 # To deploy an existing v tag again (for example, to roll back), run this from main:

@@ -8,9 +8,11 @@ import { useLayoutSettings } from "@/contexts/LayoutSettingsContext";
 import { useKeyboard } from "@/contexts/KeyboardContext";
 import { hoverBackgroundClasses, hoverBorderClasses, hoverHeaderClasses } from "@/utils/colors";
 import { getKeyContents } from "@/utils/keys";
+import { customKeycodeShortName } from "@/constants/custom-keycode-labels";
 import { keyService } from "@/services/key.service";
 import { KeyContent } from "@/types/keyboard.types";
 import DescriptionBlock from "@/layout/SecondarySidebar/components/DescriptionBlock";
+import MouseMovementSection from "./MouseMovementSection";
 
 /**
  * Mouse key definition with keycode and display label
@@ -78,7 +80,7 @@ const MousePanel: React.FC<Props> = ({ isPicker }) => {
             .filter((ck) => ck.name.startsWith("SV_"))
             .map((ck) => ({
                 keycode: ck.name,
-                label: (ck.shortName ?? ck.name).replace(/\n/g, " "),
+                label: customKeycodeShortName(ck).replace(/\n/g, " "),
             }));
         return [...STATIC_MOUSE_KEYS, ...customSv];
     }, [keyboard?.custom_keycodes]);
@@ -147,6 +149,7 @@ const MousePanel: React.FC<Props> = ({ isPicker }) => {
                 {renderKeyGroup(mouseWheel, "Wheel")}
                 {renderKeyGroup(mouseAccel, "Accel")}
                 {svalKeys.length > 0 && renderKeyGroup(svalKeys, "Svalboard")}
+                {!isPicker && <MouseMovementSection />}
             </div>
         );
     }
@@ -187,6 +190,7 @@ const MousePanel: React.FC<Props> = ({ isPicker }) => {
                     );
                 })}
                 </div>
+                {!isPicker && <MouseMovementSection />}
             </div>
         </section>
     );

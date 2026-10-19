@@ -1,7 +1,7 @@
 import type { Appearance } from './core';
 
 /**
- * Adaptive contrast: Keybard Host samples the screen under the overlay and
+ * Adaptive contrast: Keybard Overlay samples the screen under the overlay and
  * sends a coarse brightness grid. The grid includes the overlay itself (it stays in
  * screenshots), so each key reads the background from the uncovered cells around it,
  * between and beside the keys, and picks legend and backing colors that stand out.

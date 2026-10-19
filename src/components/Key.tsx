@@ -7,6 +7,44 @@ import { getHeaderIcons, getCenterContent, getTypeIcon } from "@/utils/key-icons
 import { useKeyDrag } from "@/hooks/useKeyDrag";
 import { useLayoutSettings } from "@/contexts/LayoutSettingsContext";
 import { getKeyDisplayText } from "@/utils/key-display";
+import { ComboFold } from "@/components/combo/ComboFold";
+import type { ComboMembership } from "@/utils/combo-membership";
+import type { ComboIndicatorMode } from "@/lib/comboIndicators";
+import type { ComboPalette } from "@/utils/combo-hues";
+
+/** Inspector, combo indicator and preview wiring for a layout key (every layout key has it). */
+export interface KeyComboProps {
+    /** Combos whose folds this key draws, ascending by combo number. Empty for a key in no
+     *  combo, and while combo indicators are off. */
+    memberships: ComboMembership[];
+    /** Combo number -> hue, for the whole keyboard. */
+    hues: ReadonlyMap<number, number>;
+    /** Combos being previewed, if any. */
+    focusSet: ReadonlySet<number> | null;
+    /** Fold size mode and palette (see src/lib/comboIndicators.ts). */
+    mode?: ComboIndicatorMode;
+    palette?: ComboPalette;
+    /** Accessible label. */
+    ariaLabel?: string;
+    /** The layout's one Tab stop (roving tabindex); every other key is tabIndex -1. */
+    tabStop?: boolean;
+    /** Arrow keys, Home and End: move focus to another layout key. */
+    onNavigate?: (key: string) => void;
+    pinned: boolean;
+    onEnter: () => void;
+    onLeave: () => void;
+    onFocus: (el: Element) => void;
+    onBlur: () => void;
+    /** Click, Enter or Space: pin or unpin this key in the inspector. */
+    onToggle: () => void;
+    /** False for a key that only draws the fold (the ghost overlay of a transparent key). */
+    interactive?: boolean;
+    /** Click, Enter or Space on a fold piece: open that combo's editor. Absent (while a binding
+     *  editor is open): the fold is drawing only and clicks on it go to the key. */
+    onOpenCombo?: (index: number) => void;
+    /** Keybard-only combo names, by combo number (the fold pieces' labels). */
+    comboNames?: Readonly<Record<string, string>>;
+}
 
 
 export interface KeyProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onClick' | 'onDoubleClick' | 'title'> {
@@ -42,6 +80,12 @@ export interface KeyProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'on
     dragItemData?: Partial<DragItem>;
     style?: React.CSSProperties;
     unitSize?: number;
+    combo?: KeyComboProps;
+}
+
+/** Focus that came from the keyboard (Tab, arrows), not from a click. */
+function keyboardFocused(el: Element): boolean {
+    try { return el.matches(":focus-visible"); } catch { return true; }
 }
 
 /**
@@ -54,7 +98,7 @@ export const Key = React.forwardRef<HTMLDivElement, KeyProps>((props, ref) => {
         isRelative = false, className = "", headerClassName = "bg-black/30", variant = "default",
         hoverBorderColor, hoverBackgroundColor, hoverLayerColor, disableHover = false,
         hasPendingChange = false, forceLabel = false, dragW, dragH, disableDrag = false,
-        style, unitSize,
+        style, unitSize, combo,
         ...rest
     } = props;
 
@@ -74,6 +118,9 @@ export const Key = React.forwardRef<HTMLDivElement, KeyProps>((props, ref) => {
     const keyData = useMemo(() => {
         return processKeyData(keycode, label, keyContents, forceLabel, internationalLayout);
     }, [label, keyContents, keycode, forceLabel, internationalLayout]);
+
+    const comboInteractive = !!combo && combo.interactive !== false;
+    const comboFocusable = comboInteractive;
 
     // --- Styling logic ---
     const styles = useMemo(() => {
@@ -153,11 +200,12 @@ export const Key = React.forwardRef<HTMLDivElement, KeyProps>((props, ref) => {
                     ),
             // Pending: Thicker Red Border (2px) - Only if NOT selected/active
             hasPendingChange && (!shouldHighlightContainer && !drag.isDragHover) && "border-2 border-red-500",
+            comboFocusable && "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kb-ink",
             className
         );
 
         return { boxStyle, textStyle, bottomTextStyle, containerClasses };
-    }, [x, y, w, h, drag, isRelative, isSmall, isMedium, keyContents, keyData, layerColor, hoverLayerColor, selected, disableHover, hoverBorderColor, hoverBackgroundColor, hasPendingChange, className, style]);
+    }, [x, y, w, h, drag, isRelative, isSmall, isMedium, keyContents, keyData, layerColor, hoverLayerColor, selected, disableHover, hoverBorderColor, hoverBackgroundColor, hasPendingChange, className, style, comboFocusable]);
 
     // Forced height logic for strict grid alignment without !important
     const forcedHeight = isSmall ? "10px" : isMedium ? "14px" : "18px";
@@ -180,7 +228,57 @@ export const Key = React.forwardRef<HTMLDivElement, KeyProps>((props, ref) => {
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation();
         onClick?.(row, col);
+        if (comboInteractive) combo!.onToggle();
     };
+
+    // Inspector and combo preview: hover and focus show this key; the drag handlers still run.
+    const handleMouseEnter = () => {
+        drag.handleMouseEnter();
+        if (comboInteractive) combo!.onEnter();
+    };
+    const handleMouseLeave = () => {
+        drag.handleMouseLeave();
+        if (comboInteractive) combo!.onLeave();
+    };
+    const comboAttrs: React.HTMLAttributes<HTMLDivElement> & { "data-combo-preview"?: string } = comboInteractive ? { "data-combo-preview": "" } : {};
+    if (comboInteractive) {
+        Object.assign(comboAttrs, {
+            tabIndex: combo!.tabStop ? 0 : -1,
+            role: "button",
+            "aria-label": combo!.ariaLabel,
+            "aria-pressed": combo!.pinned,
+            onFocus: (e: React.FocusEvent<HTMLDivElement>) => { if (e.target === e.currentTarget) combo!.onFocus(e.currentTarget); },
+            onBlur: (e: React.FocusEvent<HTMLDivElement>) => { if (e.target === e.currentTarget) combo!.onBlur(); },
+            onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+                if (e.target !== e.currentTarget || e.altKey || e.ctrlKey || e.metaKey) return;
+                const nav = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(e.key);
+                if (!nav && e.key !== "Enter" && e.key !== " ") return;
+                // Only for keyboard focus: a key focused by a click leaves these keys to
+                // "typing binds a key".
+                if (!keyboardFocused(e.currentTarget)) return;
+                // Keep "typing binds a key" from binding these keys to a selected key.
+                e.preventDefault();
+                e.stopPropagation();
+                if (nav) combo!.onNavigate?.(e.key);
+                else combo!.onToggle();
+            },
+        });
+    }
+    const comboFold = combo && combo.memberships.length > 0 ? (
+        <ComboFold
+            memberships={combo!.memberships}
+            size={variant}
+            layerColor={layerColor}
+            hues={combo!.hues}
+            focusSet={combo!.focusSet}
+            mode={combo!.mode}
+            palette={combo!.palette}
+            measureKey={`${keycode}|${label}|${keyContents?.type ?? ""}`}
+            onOpen={comboInteractive ? combo!.onOpenCombo : undefined}
+            tabbable={comboInteractive && !!combo!.tabStop}
+            names={combo!.comboNames}
+        />
+    ) : null;
 
     const handleDoubleClick = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -194,14 +292,16 @@ export const Key = React.forwardRef<HTMLDivElement, KeyProps>((props, ref) => {
             <div
                 ref={ref}
                 className={styles.containerClasses}
+                data-keycap=""
                 style={styles.boxStyle}
                 onClick={handleClick}
                 onDoubleClick={handleDoubleClick}
-                onMouseEnter={drag.handleMouseEnter}
-                onMouseLeave={drag.handleMouseLeave}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
                 onMouseDown={drag.handleMouseDown}
                 onMouseUp={drag.handleMouseUp}
                 title={props.disableTooltip ? undefined : (title || keycode)}
+                {...comboAttrs}
                 {...rest}
             >
                 <span className={headerClass} style={headerStyle}>{keyContents?.layertext}</span>
@@ -211,6 +311,7 @@ export const Key = React.forwardRef<HTMLDivElement, KeyProps>((props, ref) => {
                     </div>
                     {getTypeIcon("layer", variant)}
                 </div>
+                {comboFold}
             </div>
         );
     }
@@ -220,14 +321,16 @@ export const Key = React.forwardRef<HTMLDivElement, KeyProps>((props, ref) => {
         <div
             ref={ref}
             className={styles.containerClasses}
+            data-keycap=""
             style={styles.boxStyle}
             onClick={handleClick}
             onDoubleClick={handleDoubleClick}
-            onMouseEnter={drag.handleMouseEnter}
-            onMouseLeave={drag.handleMouseLeave}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
             onMouseDown={drag.handleMouseDown}
             onMouseUp={drag.handleMouseUp}
             title={props.disableTooltip ? undefined : (title || keycode)}
+            {...comboAttrs}
             {...rest}
         >
             {keyData.topLabel && (
@@ -250,6 +353,7 @@ export const Key = React.forwardRef<HTMLDivElement, KeyProps>((props, ref) => {
                     {keyData.bottomStr}
                 </span>
             )}
+            {comboFold}
         </div>
     );
 });

@@ -136,7 +136,7 @@ void sval_pointing_modes(sval_pointing_modes_t *m);
 
 **Touch fields, phase 1.** The finger count can be reported for the USB half's Azoteq if the driver exposes `number_of_fingers` cheaply. Add a getter in `keyboards/svalboard/azoteq/azoteq.c` and do not add an extra I2C read. Touch valid stays 0.
 
-**Out of scope.** Absolute touch positions (IQS5xx register offsets are unconfirmed). Any finger data from the non-USB half, which would need a new split RPC (KEYBOARD_SYNC_C). Second-finger positions. Keybard Host (Python) support.
+**Out of scope.** Absolute touch positions (IQS5xx register offsets are unconfirmed). Any finger data from the non-USB half, which would need a new split RPC (KEYBOARD_SYNC_C). Second-finger positions. Keybard Overlay (Python) support.
 
 ### B4. Firmware verification
 
@@ -291,7 +291,7 @@ Add a helper `isWidgetInstance(kbinfo, instance)` in `src/services/fragment-comp
 - Viz builders write `tests/components/pointing-viz/<Component>.test.tsx`. Each test renders with a fake `PointingSampleSource` built from `simulateSample` under jsdom, where `getContext` returns null, and asserts: no throw; the aria-label contains the side and the module name; the unsubscribe and cancelAnimationFrame run on unmount; reduced motion schedules no RAF. Pure math helpers kept inside the component file (for example the particle step or the arrow geometry) are exported, prefixed `_test`, and unit-tested for each mode.
 - keybard-slot owns `tests/services/fragment-composer.widgets.test.ts`, `tests/utils/pointing-motion.test.ts`, `tests/hooks/usePointingSlots.test.tsx`, `tests/components/pointing-viz/PointingSlot.test.tsx`, and updates to `tests/fixtures/fragments.fixture.ts`, `tests/components/PointingPanel.test.tsx` and FragmentsPanel tests.
 - Every Keybard builder runs `npx tsc --noEmit -p .` and the tests it touched. keybard-slot also runs `npm run build` and the full `npm test`.
-- The dev server already running on http://localhost:5173/keybard-ng/ must not be restarted or killed. Check the result visually at `?pointingDemo=trackball,touchpad` and `?pointingDemo=trackpoint,trackball&pointingDemoMode=scroll`.
+- The dev server already running on http://localhost:5173/keybard/ must not be restarted or killed. Check the result visually at `?pointingDemo=trackball,touchpad` and `?pointingDemo=trackpoint,trackball&pointingDemoMode=scroll`.
 
 ---
 

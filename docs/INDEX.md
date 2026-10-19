@@ -100,7 +100,7 @@ TypeScript type reference
 ## 📁 Project Structure
 
 ```
-keybard-ng/
+keybard/
 ├── docs/                      # This documentation
 │   ├── INDEX.md              # This index file
 │   ├── ARCHITECTURE.md       # System architecture

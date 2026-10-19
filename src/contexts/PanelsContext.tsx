@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
 import { useSidebar } from "@/components/ui/sidebar";
+import type { PickerMode } from "@/lib/bindingSpotlight";
 
 interface PanelsContextType {
     activePanel: string | undefined | null;
@@ -18,6 +19,9 @@ interface PanelsContextType {
     setBindingTypeToEdit: React.Dispatch<React.SetStateAction<string | null>>;
     initialEditorSlot: any | null;
     setInitialEditorSlot: React.Dispatch<React.SetStateAction<any | null>>;
+    /** The picker category a binding editor fills its slots from; set by the picker tabs and the rail. */
+    pickerMode: PickerMode;
+    setPickerMode: React.Dispatch<React.SetStateAction<PickerMode>>;
 
     name: string;
     state: "expanded" | "collapsed";
@@ -38,6 +42,7 @@ export const PanelsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const [itemToEdit, setItemToEdit] = useState<number | null>(null);
     const [bindingTypeToEdit, setBindingTypeToEdit] = useState<string | null>(null);
     const [initialEditorSlot, setInitialEditorSlot] = useState<any | null>(null);
+    const [pickerMode, setPickerMode] = useState<PickerMode>("keyboard");
 
     const sidebar = useSidebar("details-panel", { defaultOpen: false });
     const { open: detailsOpen, setOpen } = sidebar;
@@ -87,6 +92,8 @@ export const PanelsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 setBindingTypeToEdit,
                 initialEditorSlot,
                 setInitialEditorSlot,
+                pickerMode,
+                setPickerMode,
                 ...sidebar,
             }}
         >

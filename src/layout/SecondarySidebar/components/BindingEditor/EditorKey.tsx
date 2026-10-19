@@ -1,4 +1,4 @@
-import { FC, useState } from "react";
+import { FC, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Key } from "@/components/Key";
 import { useKeyboard } from "@/contexts/KeyboardContext";
@@ -23,6 +23,16 @@ interface EditorKeyProps {
     wrapperClassName?: string; // Class for the wrapper div
     showTrash?: boolean; // Whether the trash icon is enabled (defaults to true if onClear is provided)
     onDrop?: (item: DragItem) => void;
+    /**
+     * Dropping a filled slot outside any drop target blanks it through
+     * onClear, like a layout key dragged into blank space. Defaults to true;
+     * turn it off where onClear removes more than the key (macro actions).
+     */
+    clearOnDragOff?: boolean;
+    /** The clear button sits in the key's top-right corner, inside it (the compact editor bar). */
+    trashCorner?: boolean;
+    /** Key size in px when it differs from the variant's own (the bar's 40px keys). */
+    unitSize?: number;
     // Context for swapping
     editorType?: string;
     editorId?: number | string;
@@ -43,6 +53,9 @@ const EditorKey: FC<EditorKeyProps> = ({
     wrapperClassName = "flex flex-col items-center gap-1 relative",
     showTrash = true,
     onDrop,
+    clearOnDragOff = true,
+    trashCorner = false,
+    unitSize,
     editorType,
     editorId,
     editorSlot
@@ -51,6 +64,9 @@ const EditorKey: FC<EditorKeyProps> = ({
     const { selectedLayer } = useLayer();
     const { isDragging, draggedItem, markDropConsumed } = useDrag();
     const [isDragHover, setIsDragHover] = useState(false);
+    // Read onClear at drop time, not at drag start, so it sees current state.
+    const onClearRef = useRef(onClear);
+    onClearRef.current = onClear;
 
     const layerColorName = keyboard?.cosmetic?.layer_colors?.[selectedLayer] || "primary";
     const hoverBorderColor = hoverBorderClasses[layerColorName] || hoverBorderClasses["primary"];
@@ -59,6 +75,9 @@ const EditorKey: FC<EditorKeyProps> = ({
     const keyContents = getKeyContents(keyboard!, keyService.canonical(keycode));
     const hasContent = (keyContents?.top && keyContents.top !== "KC_NO") ||
         (keyContents?.str && keyContents.str !== "KC_NO" && keyContents.str !== "");
+    const clearSource = hasContent && clearOnDragOff && onClear
+        ? () => onClearRef.current?.()
+        : undefined;
 
     // Determine visual style
     let keyColor: string | undefined;
@@ -123,6 +142,8 @@ const EditorKey: FC<EditorKeyProps> = ({
             {label && <span className={labelClassName}>{label}</span>}
             <div
                 className={`relative ${size} group/editorkey`}
+                data-editor-slot=""
+                data-editor-slot-selected={selected ? "" : undefined}
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
                 onMouseUp={handleMouseUp}
@@ -145,28 +166,31 @@ const EditorKey: FC<EditorKeyProps> = ({
                     hoverBackgroundColor={hoverBackgroundColor}
                     hoverLayerColor={layerColorName}
                     variant={variant}
+                    unitSize={unitSize}
                     disableTooltip={true}
                     disableHover={isDragging}
                     dragItemData={{
                         editorType,
                         editorId,
-                        editorSlot
+                        editorSlot,
+                        clearSource
                     }}
                 />
 
                 {hasContent && showTrash && onClear && (
-                    <div className={`absolute ${trashOffset} top-1/2 -translate-y-1/2 flex items-center justify-center opacity-0 group-hover/editorkey:opacity-100 transition-opacity z-10`}>
+                    <div className={`absolute ${trashCorner ? "top-0.5 right-0.5" : `${trashOffset} top-1/2 -translate-y-1/2`} flex items-center justify-center opacity-0 group-hover/editorkey:opacity-100 focus-within:opacity-100 transition-opacity z-10`}>
                         <DelayedTooltip>
                             <TooltipTrigger asChild>
                                 <button
-                                    className="p-1.5 text-gray-400 dark:text-neutral-400 hover:bg-red-500 hover:text-white rounded-full bg-kb-gray-medium"
+                                    aria-label="Clear key"
+                                    className={`${trashCorner ? "p-0.5" : "p-1.5"} text-gray-400 dark:text-neutral-400 hover:bg-red-500 hover:text-white rounded-full bg-kb-gray-medium`}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onClear();
                                     }}
                                     type="button"
                                 >
-                                    <Trash2 className={trashSize} />
+                                    <Trash2 className={trashCorner ? "w-3 h-3" : trashSize} />
                                 </button>
                             </TooltipTrigger>
                             <TooltipContent>

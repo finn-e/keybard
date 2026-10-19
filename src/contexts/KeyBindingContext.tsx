@@ -7,6 +7,7 @@ import { keyService } from "@/services/key.service";
 import { isTapdanceKeycode } from "@/utils/keys";
 import { isEditorInput } from "@/utils/editor-input";
 import { keyboardService } from "@/services/keyboard.service";
+import { prepareOverrideForEdit } from "@/utils/key-override";
 import { KEYBOARD_EVENT_MAP } from "@/utils/keyboard-mapper";
 import { getOrderedKeyPositions, SerialMode } from "@/utils/serial-assignment";
 import { DEFAULT_TAPDANCE_TERM_MS } from "@/utils/tapdance-term";
@@ -457,6 +458,7 @@ export const KeyBindingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     if (!overrides || !overrides[overrideId]) break;
 
                     const previousValue = overrides[overrideId][overrideSlot];
+                    prepareOverrideForEdit(overrides[overrideId], updatedKeyboard.layers);
                     const keycodeName = typeof keycode === "string" ? keycode : `KC_${keycode}`;
                     overrides[overrideId][overrideSlot] = keycodeName;
 
