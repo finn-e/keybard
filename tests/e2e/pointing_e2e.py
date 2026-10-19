@@ -36,13 +36,13 @@ def device(page: Page, side: str):
     return page.locator(f'[data-pointing-device="{side}"]').first
 
 
-def fingers(page: Page, side: str, want: int) -> str | None:
-    """The drawn finger count on that hand once it settles at want, else what it shows."""
+def fingers_ok(page: Page, side: str, want: int) -> tuple[bool, str | None]:
+    """Whether the hand settles at drawing want fingers, and what it shows."""
     try:
         expect(device(page, side)).to_have_attribute("data-fingers", str(want), timeout=5000)
-        return None
+        return True, str(want)
     except AssertionError:
-        return device(page, side).get_attribute("data-fingers")
+        return False, device(page, side).get_attribute("data-fingers")
 
 
 def run(browser, url, theme, failures):
@@ -63,8 +63,8 @@ def run(browser, url, theme, failures):
                         ("contacts=5", {"left": 5})]:
         context, page, errors = open_demo(browser, url, query, theme)
         for side, n in want.items():
-            got = fingers(page, side, n)
-            check(got is None, f"{query}: the {side} pad draws {got!r} fingers, not {n}")
+            ok, got = fingers_ok(page, side, n)
+            check(ok, f"{query}: the {side} pad draws {got!r} fingers, not {n}")
         failures.extend(f"{theme}, {query}: page error: {e}" for e in errors)
         context.close()
 
