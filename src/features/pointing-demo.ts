@@ -7,6 +7,9 @@
 //   &sniper=1 &boost=1        hold sniper or boost on (simulated; a board reports its own)
 //   &hand=left|right          the hand that moves (default: the right)
 //   &motion=0                 no scripted motion (default: on in the demo)
+//   &contacts=1..6            the touchpads report that many fingers through POINTING_CONTACTS
+//                             (three per pad, left first; with six on two pads, the sixth is
+//                             one the touchpad left out, as the firmware lists it)
 //   &ball=<id> / &leftBall=   show that ball for this load (see pointing-look.service)
 //   &panel=settings|fragments open that side panel on start
 //
@@ -15,6 +18,7 @@
 // devices through one path.
 
 import type { PointingMotionReport } from "@/utils/pointing-motion";
+import { MAX_CONTACTS, PAD_COUNTS_X, PAD_COUNTS_Y, parsePointingContacts, withPadContacts } from "@/utils/pointing-contacts";
 import { DEFAULT_TRACKBALL_CPI } from "@/components/pointing-viz/ball-gearing";
 
 export type DemoKind = "trackball" | "touchpad" | "none";
@@ -28,6 +32,8 @@ export interface PointingDemo {
     hand: "left" | "right";
     motion: boolean;
     panel?: "settings" | "fragments";
+    /** &contacts=N: fingers the touchpads report through POINTING_CONTACTS (simulated). */
+    contacts?: number;
 }
 
 function kindParam(v: string | null): DemoKind | undefined {
@@ -48,7 +54,9 @@ export function pointingDemoFromSearch(search: string): PointingDemo | null {
     const sniper = on(p.get("sniper")), boost = on(p.get("boost"));
     const panelRaw = p.get("panel")?.trim().toLowerCase();
     const panel = panelRaw === "settings" || panelRaw === "fragments" ? panelRaw : undefined;
-    if (!demo && !left && !right && !sniper && !boost && !p.has("motion") && !panel) return null;
+    const contactsRaw = parseInt(p.get("contacts") ?? "", 10);
+    const contacts = Number.isFinite(contactsRaw) && contactsRaw > 0 ? Math.min(MAX_CONTACTS, contactsRaw) : undefined;
+    if (!demo && !left && !right && !sniper && !boost && !p.has("motion") && !panel && !contacts) return null;
     return {
         demo,
         left: left ?? (demo ? "touchpad" : undefined),
@@ -58,6 +66,7 @@ export function pointingDemoFromSearch(search: string): PointingDemo | null {
         hand: p.get("hand")?.trim().toLowerCase() === "left" ? "left" : "right",
         motion: p.has("motion") ? on(p.get("motion")) : demo,
         panel,
+        ...(contacts ? { contacts } : {}),
     };
 }
 
@@ -138,8 +147,39 @@ export function demoReport(d: PointingDemo, t0: number, t1: number): PointingMot
             }
         }
     }
-    return {
+    const report: PointingMotionReport = {
         sniper: d.sniper, boost: d.boost, autoMouseLayer: false, axisLockEnabled: false, naturalScroll: false, scrollKey: false,
         elapsedMs: Math.round((t1 - t0) * 1000), axisLock: "free", left, right,
     };
+    return d.contacts ? withPadContacts(report, parsePointingContacts(demoContactsReply(d, t1))) : report;
+}
+
+/**
+ * A POINTING_CONTACTS (0x2F) reply, command echo first, as the firmware packs it:
+ * d.contacts fingers on the demo's touchpads, three per pad, left first, each
+ * gliding on its own path. The touchpad reports at most 5, so with six on two
+ * pads the sixth comes last with bit 7 set and an ID of its own space.
+ */
+export function demoContactsReply(d: PointingDemo, t: number): Uint8Array {
+    const pads = (["left", "right"] as const).filter((s) => d[s] === "touchpad");
+    const n = pads.length ? Math.min(MAX_CONTACTS, d.contacts ?? 0) : 0;
+    const reply = new Uint8Array(1 + 4 + 4 * MAX_CONTACTS);
+    reply[0] = 0x2f;
+    reply[1] = 1;
+    reply[2] = 0x01 | (d.left === "touchpad" ? 0x02 : 0) | (d.right === "touchpad" ? 0x04 : 0);
+    reply[4] = n;
+    const perPad = pads.length > 1 ? 3 : MAX_CONTACTS;
+    for (let i = 0; i < n; i++) {
+        const pad = pads[Math.min(pads.length - 1, Math.floor(i / perPad))];
+        const leftOut = pads.length > 1 && i >= 5;
+        const k = i % perPad;
+        const x = Math.max(-0.95, Math.min(0.95, -0.55 + 0.55 * k + 0.25 * Math.sin(0.7 * t + i)));
+        const y = Math.max(-0.95, Math.min(0.95, 0.35 * Math.cos(0.5 * t + 2 * i)));
+        const cx = Math.round(((x + 1) / 2) * (PAD_COUNTS_X - 1)), cy = Math.round(((y + 1) / 2) * (PAD_COUNTS_Y - 1));
+        const o = 5 + 4 * i;
+        reply[o] = ((leftOut ? 3 : i) & 0x0f) | 0x10 | 0x20 | (pad === "right" ? 0x40 : 0) | (leftOut ? 0x80 : 0);
+        const w = cx | (cy << 12);
+        reply[o + 1] = w & 0xff; reply[o + 2] = (w >> 8) & 0xff; reply[o + 3] = (w >> 16) & 0xff;
+    }
+    return reply;
 }
