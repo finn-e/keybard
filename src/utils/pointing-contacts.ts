@@ -32,9 +32,14 @@ export interface PointingContactsReport {
     right: PadContact[];
 }
 
-/** Command echo + 24 payload bytes. */
-const REPLY_BYTES = 2 + 24;
-const MAX_CONTACTS = 5;
+/**
+ * The most contacts a reply carries: three fingers on each pad. Firmware that
+ * sends at most 5 says so in its count byte, and its replies parse the same.
+ */
+export const MAX_CONTACTS = 6;
+/** Command echo, then format, flags, age and count. */
+const HEADER_BYTES = 1 + 4;
+const CONTACT_BYTES = 4;
 
 /** A pad count to the drawing's -1..1 range: 0 is one edge, max - 1 the other. */
 export function padUnit(count: number, counts: number): number {
@@ -43,14 +48,17 @@ export function padUnit(count: number, counts: number): number {
 }
 
 /**
- * Parses a POINTING_CONTACTS reply (command echo first). Null unless the echo
- * matches, the format is 1 and the reply is complete.
+ * Parses a POINTING_CONTACTS reply (command echo first). The count byte says
+ * how many contacts follow (up to MAX_CONTACTS), so a 5-contact and a
+ * 6-contact firmware read alike. Null unless the echo matches, the format is 1
+ * and the reply holds every contact its count names.
  */
 export function parsePointingContacts(reply: Uint8Array, cmd = 0x2f): PointingContactsReport | null {
-    if (!reply || reply.length < REPLY_BYTES || reply[0] !== cmd || reply[1] !== POINTING_CONTACTS_FORMAT) return null;
+    if (!reply || reply.length < HEADER_BYTES || reply[0] !== cmd || reply[1] !== POINTING_CONTACTS_FORMAT) return null;
     const p = 1; // payload offset 0 = format byte
     const flags = reply[p + 1];
     const n = Math.min(MAX_CONTACTS, reply[p + 3]);
+    if (reply.length < HEADER_BYTES + CONTACT_BYTES * n) return null;
     const out: PointingContactsReport = {
         reporting: (flags & 0x01) !== 0,
         pads: { left: (flags & 0x02) !== 0, right: (flags & 0x04) !== 0 },
@@ -58,7 +66,7 @@ export function parsePointingContacts(reply: Uint8Array, cmd = 0x2f): PointingCo
         right: [],
     };
     for (let i = 0; i < n; i++) {
-        const o = p + 4 + 4 * i;
+        const o = HEADER_BYTES + CONTACT_BYTES * i;
         const b = reply[o];
         if (!(b & 0x10)) continue; // tip off: lifting
         const w = reply[o + 1] | (reply[o + 2] << 8) | (reply[o + 3] << 16);
