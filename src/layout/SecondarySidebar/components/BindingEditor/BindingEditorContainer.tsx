@@ -488,11 +488,6 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compac
         };
         const flip = (options: number, bit: number, on: boolean) => on ? options | bit : options & ~bit;
         switch (bindingTypeToEdit) {
-            case "tapdances":
-                if (!keyboard.tapdances?.[itemToEdit]) return null;
-                return <BarToggle label="Tap dance enabled" value={keyboard.tapdances[itemToEdit].enabled !== false} onToggle={on => {
-                    const u = structuredClone(keyboard); u.tapdances![itemToEdit].enabled = on; void save(u, "tapdance");
-                }} />;
             case "leaders":
                 if (!keyboard.leaders?.[itemToEdit]) return null;
                 return <BarToggle label="Leader sequence enabled" value={(keyboard.leaders[itemToEdit].options & LeaderOptions.ENABLED) !== 0} onToggle={on => {
