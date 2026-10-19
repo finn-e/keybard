@@ -6,6 +6,8 @@ import { SETTINGS_PAGE } from '../../src/layout/SecondarySidebar/Panels/settings
 import { highlightParts, searchSettings } from '../../src/layout/SecondarySidebar/Panels/settings/search';
 
 const state = vi.hoisted(() => ({ stored: {} as Record<string, string | number | boolean> }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/ClustersPanel', () => ({ default: () => <p>Hardware rows</p> }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/TypingBehaviorPanel', () => ({ default: () => <p>Typing behavior rows</p> }));
 vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ keyboard: null, isConnected: true }) }));
 vi.mock('@/contexts/LayoutSettingsContext', () => ({ useLayoutSettings: () => ({ layoutMode: 'sidebar' }) }));
 vi.mock('@/contexts/PanelsContext', () => ({ usePanels: () => ({ setActivePanel: vi.fn() }) }));
@@ -41,8 +43,8 @@ describe('Settings search', () => {
     it('finds the theme for "dark", highlights it, and hides everything else', () => {
         render(<SettingsPanel />);
         type('dark');
-        expect(sectionTitles()).toEqual(['Appearance']);
-        const appearance = screen.getByRole('region', { name: 'Appearance' });
+        expect(sectionTitles()).toEqual(['Appearance and editing']);
+        const appearance = screen.getByRole('region', { name: 'Appearance and editing' });
         expect(within(appearance).getByRole('combobox', { name: 'Theme' })).toBeVisible();
         expect(within(appearance).queryByRole('combobox', { name: 'Key size' })).toBeNull();
         expect(within(appearance).getByText('dark', { selector: 'mark' })).toBeVisible();
@@ -52,15 +54,15 @@ describe('Settings search', () => {
     it('finds Firmware for "update"', () => {
         render(<SettingsPanel />);
         type('update');
-        expect(sectionTitles()).toEqual(['Firmware']);
+        expect(sectionTitles()).toEqual(['Firmware and backups']);
         expect(screen.getByText('Firmware status')).toBeVisible();
     });
 
     it('finds Backups for "restore", and opens the backups list', () => {
         render(<SettingsPanel />);
-        expect(screen.getByText('Backups list collapsed')).toBeVisible();
+        expect(screen.queryByText('Backups list collapsed')).toBeNull();
         type('restore');
-        expect(sectionTitles()).toEqual(['Backups and files']);
+        expect(sectionTitles()).toEqual(['Firmware and backups']);
         expect(screen.getByText('Backups list open')).toBeVisible();
         expect(screen.getByRole('button', { name: 'Import layout' })).toBeVisible();
         expect(screen.queryByRole('button', { name: 'Export layout' })).toBeNull();
@@ -69,18 +71,19 @@ describe('Settings search', () => {
     it('shows the whole section when its title matches, with the match marked', () => {
         render(<SettingsPanel />);
         type('backup');
-        expect(sectionTitles()).toEqual(['Backups and files']);
+        expect(sectionTitles()).toEqual(['Firmware and backups']);
         expect(screen.getByRole('button', { name: 'Export layout' })).toBeVisible();
-        expect(screen.getByRole('heading', { level: 4 }).querySelector('mark')?.textContent).toBe('Backup');
+        expect(screen.getByText('Firmware status')).toBeVisible();
+        expect(screen.getByRole('heading', { level: 4 }).querySelector('mark')?.textContent).toBe('backup');
     });
 
     it('opens a collapsed section it finds a match in', () => {
         render(<SettingsPanel />);
         expect(screen.queryByRole('button', { name: 'Scan Lab' })).toBeNull();
         type('scan');
-        expect(sectionTitles()).toEqual(['Developer']);
+        expect(sectionTitles()).toEqual(['About']);
         expect(screen.getByRole('button', { name: 'Scan Lab' })).toBeVisible();
-        expect(state.stored['settings-developer-opened']).toBeUndefined();
+        expect(state.stored['settings-about-open']).toBeUndefined();
     });
 
     it('says when nothing matched, and clears from there', () => {
@@ -90,21 +93,21 @@ describe('Settings search', () => {
         expect(screen.getByRole('status')).toHaveTextContent('Nothing in Settings matches “zzzz”.');
         fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: 'Clear search' }));
         expect(search()).toHaveValue('');
-        expect(sectionTitles()).toHaveLength(7);
+        expect(sectionTitles()).toHaveLength(5);
     });
 
     it('clears on Esc', () => {
         render(<SettingsPanel />);
         type('editing');
-        expect(sectionTitles()).toEqual(['Editing']);
+        expect(sectionTitles()).toEqual(['Appearance and editing']);
         fireEvent.keyDown(search(), { key: 'Escape' });
         expect(search()).toHaveValue('');
-        expect(sectionTitles()).toHaveLength(7);
+        expect(sectionTitles()).toHaveLength(5);
     });
 
     it('focuses the field on "/" or Ctrl+F inside Settings, without taking "/" from a text field', () => {
         render(<SettingsPanel />);
-        const chip = within(screen.getByRole('navigation', { name: 'Settings sections' })).getByRole('button', { name: 'About' });
+        const chip = within(screen.getByRole('navigation', { name: 'Settings sections' })).getByRole('button', { name: 'Hardware' });
         chip.focus();
         const slash = fireEvent.keyDown(chip, { key: '/' });
         expect(slash).toBe(false); // default prevented
@@ -132,7 +135,7 @@ describe('Settings search', () => {
         expect(within(nav).getByRole('button', { name: 'Appearance' })).not.toHaveClass('opacity-50');
         fireEvent.click(within(nav).getByRole('button', { name: 'About' }));
         expect(search()).toHaveValue('');
-        expect(sectionTitles()).toHaveLength(7);
+        expect(sectionTitles()).toHaveLength(5);
     });
 });
 
@@ -143,14 +146,37 @@ describe('searchSettings', () => {
 
     it('needs every word, found in the row or its section', () => {
         const hits = searchSettings(SETTINGS_PAGE, 'combo colors', lookup)!;
-        expect([...hits.keys()]).toEqual(['editing']);
-        expect([...hits.get('editing')!.rows]).toEqual(['colorblind-combo-colors']);
+        expect([...hits.keys()]).toEqual(['appearance']);
+        expect([...hits.get('appearance')!.rows]).toEqual(['colorblind-combo-colors']);
         expect(searchSettings(SETTINGS_PAGE, 'appearance size', lookup)!.get('appearance')!.rows.has('key-size')).toBe(true);
     });
 
     it('finds option names and synonyms', () => {
-        expect([...searchSettings(SETTINGS_PAGE, 'azerty', lookup)!.keys()]).toEqual(['editing']);
+        expect([...searchSettings(SETTINGS_PAGE, 'azerty', lookup)!.keys()]).toEqual(['appearance']);
         expect([...searchSettings(SETTINGS_PAGE, 'discord', lookup)!.keys()]).toEqual(['about']);
+    });
+});
+
+describe('Hardware and Typing behavior in search', () => {
+    it.each(['trackball', 'cluster', 'ball color', 'fragments'])('finds Hardware for "%s"', (q) => {
+        render(<SettingsPanel />);
+        type(q);
+        expect(sectionTitles()).toContain('Hardware');
+        expect(screen.getByText('Hardware rows')).toBeVisible();
+    });
+
+    it.each(['tapping term', 'auto shift', 'permissive hold', 'grave escape', 'one shot'])('finds and opens Typing behavior for "%s"', (q) => {
+        render(<SettingsPanel />);
+        expect(screen.queryByText('Typing behavior rows')).toBeNull();
+        type(q);
+        expect(sectionTitles()).toContain('Typing behavior');
+        expect(screen.getByText('Typing behavior rows')).toBeVisible();
+    });
+
+    it('finds each in its own card only', () => {
+        const page = SETTINGS_PAGE;
+        expect([...searchSettings(page, 'touchpad', lookup)!.keys()]).toEqual(['hardware']);
+        expect([...searchSettings(page, 'tapping term', lookup)!.keys()]).toEqual(['typing']);
     });
 });
 

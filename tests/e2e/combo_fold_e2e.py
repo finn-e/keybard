@@ -77,8 +77,21 @@ def editor_number(page: Page):
     return page.locator("aside.detail-panel [data-combo-editor-title]:visible").first.get_by_role("heading", level=2)
 
 
+# Key size lives in Settings > Appearance (stored as "key-size"); the editor
+# has no size buttons. Store it as Settings does and reload the same link.
+SET_SIZE_JS = """size => {
+    const k = 'keyboard-settings';
+    let s = {};
+    try { s = JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch {}
+    s['key-size'] = size;
+    localStorage.setItem(k, JSON.stringify(s));
+}"""
+
+
 def set_size(page: Page, size: str):
-    page.locator(f'button[title="Set key size to {size}"]').first.dispatch_event("click")
+    page.evaluate(SET_SIZE_JS, size)
+    page.reload()
+    hold_key(page).wait_for(timeout=20000)
     page.wait_for_timeout(400)
 
 

@@ -16,14 +16,18 @@ const mocks = vi.hoisted(() => ({
     queue: vi.fn(), sync: vi.fn(), commit: vi.fn(), upload: vi.fn(), download: vi.fn(),
     backups: {} as Record<string, unknown>,
 }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/ClustersPanel', () => ({ default: () => <p>Hardware rows</p> }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/TypingBehaviorPanel', () => ({ default: () => <p>Typing behavior rows</p> }));
 vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ keyboard: mocks.keyboard, setKeyboard: vi.fn(), isConnected: true, loadFromFile: vi.fn(), setIsImporting: vi.fn() }) }));
 vi.mock('@/contexts/ChangesContext', () => ({ useChanges: () => ({ queue: mocks.queue, todo: {}, isInstant: mocks.instant, isSaving: false, commit: mocks.commit, setInstant: vi.fn() }) }));
 vi.mock('@/contexts/BackupContext', () => ({ useBackups: () => mocks.backups }));
 vi.mock('@/contexts/LayoutSettingsContext', () => ({ useLayoutSettings: () => ({ layoutMode: mocks.mode }) }));
 vi.mock('@/contexts/PanelsContext', () => ({ usePanels: () => ({ setActivePanel: vi.fn() }) }));
 vi.mock('@/App', () => ({ useNavigation: () => ({ navigateTo: vi.fn() }) }));
+// Backups is in the Firmware and backups card, left open in this browser.
 vi.mock('@/contexts/SettingsContext', () => ({ useSettings: () => ({
-    getSetting: vi.fn(), updateSetting: vi.fn(), getSettingDefinition: () => undefined,
+    getSetting: (name: string) => (name === 'settings-firmware-open' ? 'open' : undefined),
+    updateSetting: vi.fn(), getSettingDefinition: () => undefined,
 }) }));
 vi.mock('@/services/file.service', () => ({ fileService: { uploadFile: mocks.upload, downloadSvil: vi.fn(), downloadSvilText: mocks.download } }));
 vi.mock('@/services/import.service', () => ({ importService: { syncWithKeyboard: mocks.sync } }));

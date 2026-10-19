@@ -11,7 +11,8 @@
 //                             (three per pad, left first; with six on two pads, the sixth is
 //                             one the touchpad left out, as the firmware lists it)
 //   &ball=<id> / &leftBall=   show that ball for this load (see pointing-look.service)
-//   &panel=settings|fragments open that side panel on start
+//   &panel=settings           open Settings on start; typing, clusters, fragments,
+//                             hardware or about open it at that card
 //
 // The scripted motion is the round 5 prototype's finger paths, turned into the
 // same raw counts POINTING_MOTION reports, so the demo and a board drive the
@@ -20,6 +21,7 @@
 import type { PointingMotionReport } from "@/utils/pointing-motion";
 import { MAX_CONTACTS, PAD_COUNTS_X, PAD_COUNTS_Y, parsePointingContacts, withPadContacts } from "@/utils/pointing-contacts";
 import { DEFAULT_TRACKBALL_CPI } from "@/components/pointing-viz/ball-gearing";
+import { settingsSectionForPanel } from "@/layout/SecondarySidebar/Panels/settings/anchor";
 
 export type DemoKind = "trackball" | "touchpad" | "none";
 export interface PointingDemo {
@@ -31,7 +33,8 @@ export interface PointingDemo {
     boost: boolean;
     hand: "left" | "right";
     motion: boolean;
-    panel?: "settings" | "fragments";
+    /** "settings", or the old panel name of a section of Settings (settings/anchor.ts). */
+    panel?: string;
     /** &contacts=N: fingers the touchpads report through POINTING_CONTACTS (simulated). */
     contacts?: number;
 }
@@ -53,7 +56,7 @@ export function pointingDemoFromSearch(search: string): PointingDemo | null {
     const left = kindParam(p.get("left")), right = kindParam(p.get("right"));
     const sniper = on(p.get("sniper")), boost = on(p.get("boost"));
     const panelRaw = p.get("panel")?.trim().toLowerCase();
-    const panel = panelRaw === "settings" || panelRaw === "fragments" ? panelRaw : undefined;
+    const panel = panelRaw === "settings" || (!!panelRaw && !!settingsSectionForPanel(panelRaw)) ? panelRaw : undefined;
     const contactsRaw = parseInt(p.get("contacts") ?? "", 10);
     const contacts = Number.isFinite(contactsRaw) && contactsRaw > 0 ? Math.min(MAX_CONTACTS, contactsRaw) : undefined;
     if (!demo && !left && !right && !sniper && !boost && !p.has("motion") && !panel && !contacts) return null;

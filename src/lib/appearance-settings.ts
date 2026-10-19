@@ -16,9 +16,3 @@ export const isKeySizePreference = (value: unknown): value is KeySizePreference 
 
 export const isPanelPositionPreference = (value: unknown): value is PanelPositionPreference =>
     value === "auto" || value === "sidebar" || value === "bottombar";
-
-/**
- * Whether someone has opened Settings > Developer in this browser. Developer
- * starts collapsed, and stays expanded once it has been opened.
- */
-export const DEVELOPER_OPENED_SETTING = "settings-developer-opened";

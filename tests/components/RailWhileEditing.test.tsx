@@ -62,7 +62,7 @@ describe('the rail while a binding editor is open', () => {
         settings['show-alt-repeat'] = true;
         renderRail();
         openEditor('combos', 1);
-        for (const name of ['Combos', 'Overrides', 'Alt-Repeat', 'Leaders', 'Layouts', 'Overlay', 'Quick Start', 'About', 'Settings']) {
+        for (const name of ['Combos', 'Overrides', 'Alt-Repeat', 'Leaders', 'Layouts', 'Overlay', 'Quick Start', 'Settings']) {
             fireEvent.click(rail(name));
             expect(panels.itemToEdit).toBe(1);
             expect(panels.activePanel).toBe('combos');
@@ -116,7 +116,7 @@ describe('the rail while a binding editor is open', () => {
         expect(nudged).toHaveBeenCalledTimes(1);
         expect(panels.itemToEdit).toBe(0);
         expect(panels.activePanel).toBe('macros');
-        for (const name of ['Combos', 'Overrides', 'Layouts', 'Settings', 'About']) {
+        for (const name of ['Combos', 'Overrides', 'Layouts', 'Settings']) {
             expect(item(name)).toHaveAttribute('data-spotlight', 'cover');
             expect(item(name)).toHaveAttribute('inert');
         }

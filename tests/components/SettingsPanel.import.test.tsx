@@ -3,6 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import SettingsPanel from '../../src/layout/SecondarySidebar/Panels/SettingsPanel';
 
 const mocks = vi.hoisted(() => ({ connected: true, instant: true, pending: {} as Record<string, unknown>, loadFromFile: vi.fn(), queue: vi.fn(), sync: vi.fn(), commit: vi.fn(), load: vi.fn(), setKeyboard: vi.fn(), keyboard: { rows: 1, cols: 1, layers: 1, keymap: [[4]], name: 'Test keyboard', macros: [], macro_count: 0, settings: {} } }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/ClustersPanel', () => ({ default: () => <p>Hardware rows</p> }));
+vi.mock('../../src/layout/SecondarySidebar/Panels/TypingBehaviorPanel', () => ({ default: () => <p>Typing behavior rows</p> }));
 vi.mock('@/contexts/KeyboardContext', () => ({ useKeyboard: () => ({ keyboard: mocks.keyboard, setKeyboard: mocks.setKeyboard, isConnected: mocks.connected, loadFromFile: mocks.loadFromFile, setIsImporting: vi.fn() }) }));
 vi.mock('@/contexts/ChangesContext', () => ({ useChanges: () => ({ queue: mocks.queue, todo: mocks.pending, isInstant: mocks.instant, isSaving: false, commit: mocks.commit }) }));
 vi.mock('@/contexts/SettingsContext', () => ({ useSettings: () => ({ getSetting: vi.fn(), updateSetting: vi.fn(), getSettingDefinition: () => undefined }) }));
