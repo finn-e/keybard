@@ -19,7 +19,6 @@ import { LayoutSettingsProvider } from "./contexts/LayoutSettingsContext";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { KeyboardProvider, useKeyboard } from "./contexts/KeyboardContext";
 import { notifyHostLayoutChanged } from "./features/trainer/host";
-import { useTapdanceRepair } from "./hooks/useTapdanceRepair";
 
 // Simple page navigation context
 type Page = "main" | "explore" | "proof-sheet";
@@ -79,12 +78,6 @@ function LoadingOverlay() {
     );
 }
 
-// Writes usable tap dance terms once per connect.
-function TapdanceRepair() {
-    useTapdanceRepair();
-    return null;
-}
-
 function AppContent() {
     const { currentPage, goBack } = useNavigation();
 
@@ -121,7 +114,6 @@ function App() {
             <SettingsProvider>
                 <ThemeSync />
                 <ChangesProviderWithKeyboard>
-                    <TapdanceRepair />
                     <BackupProvider>
                         <KeyBindingProvider>
                             <LayoutLibraryProvider>
