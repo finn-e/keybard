@@ -1,4 +1,5 @@
 import { CODEMAP } from "@/constants/keygen";
+import { customKeycodeShortName } from "@/constants/custom-keycode-labels";
 import { keyService } from "@/services/key.service";
 import { KeyboardInfo } from "@/types/keyboard.types";
 
@@ -216,7 +217,7 @@ export function getKeyContents(KBINFO: KeyboardInfo, keystr: any): any {
             const custom = KBINFO.custom_keycodes[userIndex];
             return {
                 type: "user",
-                str: custom.shortName.replace(/\\n/g, "\n"),
+                str: customKeycodeShortName(custom),
                 title: custom.title,
                 top: keystr,
             };
@@ -234,7 +235,7 @@ export function getKeyContents(KBINFO: KeyboardInfo, keystr: any): any {
             const custom = KBINFO.custom_keycodes[userIndex];
             return {
                 type: "user",
-                str: custom.shortName.replace(/\\n/g, "\n"),
+                str: customKeycodeShortName(custom),
                 title: custom.title,
                 top: keystr,
             };

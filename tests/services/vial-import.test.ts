@@ -43,9 +43,9 @@ describe('importing a Svalboard Vial layout', () => {
         expect(kb.macros![0].actions).toEqual([['text', 'hi'], ['tap', 'SV_OUTPUT_STATUS'], ['tap', 'KC_ENTER'], ['delay', 50]]);
     });
 
-    it('turns on only the tap dances and combos that are used', () => {
+    it('turns on every tap dance, and only the combos that are used', () => {
         const kb = fileService.parseContent(vil(SVALBOARD_VIAL_UID));
-        expect(kb.tapdances!.map(td => td.enabled)).toEqual([true, false]);
+        expect(kb.tapdances!.map(td => td.enabled)).toEqual([true, true]);
         expect(kb.combos!.map(combo => combo.options)).toEqual([ComboOptions.ENABLED, 0]);
         expect(kb.key_overrides![0]).toMatchObject({ trigger: 'KC_BSPC', replacement: 'KC_DEL', options: 135 });
     });
