@@ -22,6 +22,7 @@ Exits 1 when a check fails.
 """
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -106,8 +107,10 @@ def on_screen(locator):
 def open_layout(browser, url: str, path: str, theme: str, bottom_bar: bool):
     context = browser.new_context(viewport={"width": 1440, "height": 900}, reduced_motion="reduce")
     # The theme as Settings saves it.
+    # Builds whose editor has no layout buttons keep the panel position in Settings > Appearance.
+    stored = {"theme": theme, "panel-position": "bottombar" if bottom_bar else "sidebar"}
     context.add_init_script(
-        f"try {{ localStorage.setItem('keyboard-settings', JSON.stringify({{ theme: '{theme}' }})); }} catch {{}}")
+        f"try {{ localStorage.setItem('keyboard-settings', {json.dumps(json.dumps(stored))}); }} catch {{}}")
     page = context.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
@@ -117,7 +120,9 @@ def open_layout(browser, url: str, path: str, theme: str, bottom_bar: bool):
     expect(page.get_by_text("Tap Dance Keys").first).to_be_visible(timeout=20000)
     if page.evaluate("document.documentElement.classList.contains('dark')") != (theme == "dark"):
         raise AssertionError(f"the page is not in the {theme} theme")
-    page.get_by_role("button", name="Bottom bar layout" if bottom_bar else "Sidebar layout").click()
+    layout_button = page.get_by_role("button", name="Bottom bar layout" if bottom_bar else "Sidebar layout")
+    if layout_button.count():
+        layout_button.click()
     page.get_by_text("Tap Dance Keys").first.click()
     page.wait_for_timeout(500)
     return context, page, errors
@@ -131,16 +136,25 @@ def open_tapdance(page: Page, idx: int):
     if not keys:
         raise AssertionError(f"tap dance {idx} is not in the Tap Dance Keys panel")
     keys[0].click()
-    expect(page.get_by_text(f"Tap Dance Key {idx}")).to_be_visible(timeout=10000)
+    # "Tap Dance Key 0", or "Editing Tap Dance 0" where the panel itself becomes the editor.
+    expect(title(page, idx)).to_be_visible(timeout=10000)
     page.wait_for_timeout(500)  # the editor slides in
-    fields = on_screen(page.locator(".binding-workspace input[type=number], [aria-label='Binding editor'] input[type=number]"))
+    fields = on_screen(page.locator("input[type=number]"))
     if len(fields) != 1:
         raise AssertionError(f"tap dance {idx}: {len(fields)} term fields in the editor, not 1")
     return fields[0]
 
 
-def close_editor(page: Page):
-    page.get_by_role("button", name="Close binding editor").first.click()
+def title(page: Page, idx: int):
+    return page.get_by_text(re.compile(rf"^(Tap Dance Key|Editing Tap Dance) {idx}$")).filter(visible=True).first
+
+
+def close_editor(page: Page, idx: int = 0):
+    close = page.get_by_role("button", name="Close binding editor")
+    if close.count() and close.first.is_visible():
+        close.first.click()
+    else:  # the panel-as-editor's back arrow, beside the title
+        title(page, idx).locator("xpath=ancestor::*[.//button][1]").get_by_role("button").first.click()
     page.wait_for_timeout(500)
 
 
@@ -151,9 +165,8 @@ def run_flow(page: Page, where: str, failures: list):
 
     term = open_tapdance(page, 0)
     check(term.input_value() == "200", f"tap dance 0 stored at 0 ms opens at {term.input_value()!r} ms, not 200")
-    editor = page.locator(".binding-workspace, [aria-label='Binding editor']").first
-    check(editor.get_by_text("Enabled", exact=True).count() == 0, "the editor still shows Enabled")
-    check(editor.get_by_role("button", name="OFF", exact=True).count() == 0, "the editor still has an OFF switch")
+    check(not on_screen(page.get_by_text("Enabled", exact=True)), "the editor still shows Enabled")
+    check(not on_screen(page.get_by_role("button", name="OFF", exact=True)), "the editor still has an OFF switch")
 
     term.fill("5")
     term.press("Enter")
@@ -161,17 +174,17 @@ def run_flow(page: Page, where: str, failures: list):
     check(term.input_value() == "20", f"5 ms was saved as {term.input_value()!r}, not the 20 ms minimum")
 
     term.fill("275")
-    page.get_by_text("Tap Dance Key 0").click()  # blur
+    term.blur()
     check(term.input_value() == "275", f"275 ms was saved as {term.input_value()!r}")
 
     term.fill("999")
     term.press("Escape")
     check(term.input_value() == "275", f"Escape kept the unsaved edit ({term.input_value()!r})")
 
-    close_editor(page)
+    close_editor(page, 0)
     term = open_tapdance(page, 1)
     check(term.input_value() == "350", f"tap dance 1 reads {term.input_value()!r} ms, not its 350")
-    close_editor(page)
+    close_editor(page, 1)
     term = open_tapdance(page, 0)
     check(term.input_value() == "275", f"tap dance 0 reopened at {term.input_value()!r} ms, not the 275 saved")
 
