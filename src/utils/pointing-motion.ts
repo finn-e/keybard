@@ -3,6 +3,8 @@
 // pointing devices drawn in the layout. See Svalboard QMK
 // keyboards/svalboard/docs/protocol.md, "Pointing motion".
 
+import type { PadContact } from "./pointing-contacts";
+
 /** GET_INFO second feature byte: the board answers POINTING_MOTION (0x2D). */
 export const SVIL_FLAG2_POINTING_MOTION = 0x08;
 /**
@@ -42,6 +44,12 @@ export interface PointingMotionHalf {
     touchY: number;
     /** The hand's sensor CPI when the board reports it (a trackball on newer firmware). */
     cpi?: number;
+    /**
+     * Every finger down on this hand's touchpad, at its place on the pad, when the
+     * board reports contacts (POINTING_CONTACTS, 0x2F, native touchpad). Present
+     * (possibly empty) means the pad is drawn from these and not from dx/dy.
+     */
+    contacts?: PadContact[];
 }
 
 export interface PointingMotionReport {

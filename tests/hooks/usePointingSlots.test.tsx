@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 
-import { POINTING_SLOT_MAX_READS, POINTING_SLOT_RETRY_MS, usePointingSlots } from '../../src/hooks/usePointingSlots';
+import { usePointingSlots } from '../../src/hooks/usePointingSlots';
 import { FragmentComposerService } from '../../src/services/fragment-composer.service';
 import { FragmentService } from '../../src/services/fragment.service';
 import { KleService } from '../../src/services/kle.service';
@@ -21,7 +21,7 @@ vi.mock('@/services/keyboard.service', () => ({
 }));
 
 const kinds = (slots: { side: string; kind: string }[]) => slots.map((s) => `${s.side}:${s.kind}`);
-const tick = () => act(async () => { await vi.advanceTimersByTimeAsync(POINTING_SLOT_RETRY_MS); });
+const tick = () => act(async () => { await vi.advanceTimersByTimeAsync(2000); });
 const setSearch = (search: string) => window.history.replaceState(null, '', `/keybard/${search}`);
 
 describe('usePointingSlots', () => {
@@ -78,41 +78,15 @@ describe('usePointingSlots', () => {
         expect(getFragmentHardware).not.toHaveBeenCalled();
     });
 
-    it('shows "pending" and re-reads 0x18 every second until each slot settles', async () => {
-        replies.push(
-            new Map([[IDX.left, ID.pointing_trackpoint]]),
-            new Map([[IDX.left, ID.pointing_trackpoint], [IDX.right, ID.pointing_none]]),
-        );
-        const { result } = renderHook(() => usePointingSlots());
-        expect(kinds(result.current)).toEqual(['left:pending', 'right:pending']);
-        await tick();
-        expect(kinds(result.current)).toEqual(['left:trackpoint', 'right:pending']);
-        await tick();
-        expect(kinds(result.current)).toEqual(['left:trackpoint']);
-        await tick();
-        await tick();
-        expect(getFragmentHardware).toHaveBeenCalledTimes(2);
-    });
-
-    it('gives up after six reads and keeps a never-reported slot pending, never "none"', async () => {
-        replies.push(new Map([[IDX.left, ID.pointing_unknown]]));
-        const { result } = renderHook(() => usePointingSlots());
-        for (let i = 0; i < POINTING_SLOT_MAX_READS - 1; i++) await tick();
-        expect(kinds(result.current)).toEqual(['left:unknown', 'right:pending']);
-        await tick();
-        expect(kinds(result.current)).toEqual(['left:unknown', 'right:pending']);
-        for (let i = 0; i < 3; i++) await tick();
-        expect(getFragmentHardware).toHaveBeenCalledTimes(POINTING_SLOT_MAX_READS);
-    });
-
-    it('drops the previous session\'s reads on reconnect', async () => {
-        replies.push(new Map([[IDX.left, ID.pointing_trackpoint], [IDX.right, ID.pointing_trackpoint]]));
+    it('shows "pending" until the keyboard carries the detection, and never reads the board itself', async () => {
         const { result, rerender } = renderHook(() => usePointingSlots());
-        await tick();
-        expect(kinds(result.current)).toEqual(['left:trackpoint', 'right:trackpoint']);
-        ctx.connectionSessionId = 2;
-        rerender();
         expect(kinds(result.current)).toEqual(['left:pending', 'right:pending']);
+        await tick();
+        expect(getFragmentHardware).not.toHaveBeenCalled();
+        // The late-detection poller writes into fragmentState.hwDetection.
+        ctx.keyboard = { ...ctx.keyboard, fragmentState: { ...ctx.keyboard.fragmentState, hwDetection: new Map([[IDX.left, ID.pointing_trackpoint], [IDX.right, ID.pointing_none]]) } };
+        rerender();
+        expect(kinds(result.current)).toEqual(['left:trackpoint']);
     });
 
     it('is empty when disconnected (a file-loaded layout shows no slot)', () => {

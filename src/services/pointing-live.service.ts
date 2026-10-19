@@ -154,7 +154,7 @@ export class PointingLiveService {
         this.lastReadAt = now;
         if (!report) { this.misses++; return; }
         this.misses = 0;
-        const moved = (["left", "right"] as const).some((side) => report[side].dx !== 0 || report[side].dy !== 0);
+        const moved = (["left", "right"] as const).some((side) => report[side].dx !== 0 || report[side].dy !== 0 || (report[side].contacts?.length ?? 0) > 0);
         this.quietReads = moved ? 0 : this.quietReads + 1;
         this.last = report;
         for (const l of [...this.listeners]) {

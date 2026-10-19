@@ -254,6 +254,9 @@ const FragmentsPanel: React.FC = () => {
             const hwDetected = hwFragmentId !== undefined && hwFragmentId !== 0xff;
             const hwFragmentName = hwDetected ? fragmentService.getFragmentNameById(keyboard, hwFragmentId) : undefined;
             const value = hwFragmentName ? fragmentService.getFragmentDisplayName(keyboard, hwFragmentName) : "Detecting";
+            // "Auto-detected" only for a real module: never on "Detecting", no module, or an unidentified one.
+            const module = hwFragmentName ? keyboard.fragments?.[hwFragmentName]?.widget?.module : undefined;
+            const found = module === "trackball" || module === "touchpad" || module === "trackpoint";
             const label = formatInstanceLabel(fragmentService.getInstanceDisplayName(instance.id));
             return (
                 <div
@@ -263,7 +266,7 @@ const FragmentsPanel: React.FC = () => {
                 >
                     <div className="flex flex-col items-start gap-1 shrink-0 w-[100px]">
                         <Label className="text-sm font-medium">{label}</Label>
-                        {hwFragmentName && <span className="text-xs text-amber-600 dark:text-amber-400">Auto-detected</span>}
+                        {found && <span className="text-xs text-amber-600 dark:text-amber-400">Auto-detected</span>}
                     </div>
                     <div
                         role="status"
