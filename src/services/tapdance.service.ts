@@ -1,5 +1,6 @@
 import type { KeyboardInfo } from "../types/keyboard.types";
 import { keyService } from "./key.service";
+import { MAX_TAPDANCE_TERM_MS } from "../utils/tapdance-term";
 import { SVIL_TABLE_TAP_DANCE, SvilUSB, checkSvilStatus, readSvilTable, svilIndexArgs } from "./usb.service";
 
 export class TapdanceService {
@@ -44,8 +45,9 @@ export class TapdanceService {
             // tapping_term is 2 bytes: bit 15 = enabled flag, bits 0-14 = timing in ms
             const requestedTerm = td.tapping_term ?? 200;
             if (!Number.isFinite(requestedTerm)) throw new Error("Tap dance timing must be a finite number.");
-            const term = Math.max(0, Math.min(32767, Math.round(requestedTerm)));
-            const termWithEnabled = term | (td.enabled !== false ? 0x8000 : 0);
+            const term = Math.max(0, Math.min(MAX_TAPDANCE_TERM_MS, Math.round(requestedTerm)));
+            // Tap dances are always on: every write sets the enabled bit.
+            const termWithEnabled = term | 0x8000;
             const resp = await this.usb.sendSvil(SvilUSB.CMD_SVIL_TAP_DANCE_SET, [
                 ...svilIndexArgs(this.usb.svilProtocolVersion, td.idx),
                 ...this.LE16(keyService.parse(td.tap)),

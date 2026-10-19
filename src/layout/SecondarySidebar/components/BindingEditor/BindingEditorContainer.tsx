@@ -361,17 +361,6 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compac
                     />
                 </div>
 
-                {bindingTypeToEdit === "tapdances" && keyboard?.tapdances && itemToEdit !== null && (
-                    <div className="mt-[20px]" aria-label="Tap dance enabled">
-                        <span className="text-xs">Enabled</span>
-                        <OnOffToggle label="Tap dance enabled" value={keyboard.tapdances[itemToEdit]?.enabled !== false} onToggle={async enabled => {
-                            const updatedKeyboard = structuredClone(keyboard);
-                            updatedKeyboard.tapdances![itemToEdit].enabled = enabled;
-                            setKeyboard(updatedKeyboard);
-                            await persistBinding(updatedKeyboard, "tapdance", itemToEdit);
-                        }} />
-                    </div>
-                )}
                 {bindingTypeToEdit === "leaders" && keyboard?.leaders && itemToEdit !== null && (
                     <div className="mt-[20px]">
                         <OnOffToggle
@@ -499,11 +488,6 @@ const BindingEditorContainer: FC<Props> = ({ shouldClose, inline = false, compac
         };
         const flip = (options: number, bit: number, on: boolean) => on ? options | bit : options & ~bit;
         switch (bindingTypeToEdit) {
-            case "tapdances":
-                if (!keyboard.tapdances?.[itemToEdit]) return null;
-                return <BarToggle label="Tap dance enabled" value={keyboard.tapdances[itemToEdit].enabled !== false} onToggle={on => {
-                    const u = structuredClone(keyboard); u.tapdances![itemToEdit].enabled = on; void save(u, "tapdance");
-                }} />;
             case "leaders":
                 if (!keyboard.leaders?.[itemToEdit]) return null;
                 return <BarToggle label="Leader sequence enabled" value={(keyboard.leaders[itemToEdit].options & LeaderOptions.ENABLED) !== 0} onToggle={on => {

@@ -56,7 +56,7 @@ describe('importing a backup of the same board', () => {
     it.each([
         ['combo:2', (kb: KeyboardInfo) => { kb.combos![2].output = 'KC_D'; }],
         ['tapdance:2', (kb: KeyboardInfo) => { kb.tapdances![2].tapping_term = 150; }],
-        ['tapdance:3', (kb: KeyboardInfo) => { kb.tapdances![3].enabled = false; }],
+        ['tapdance:3', (kb: KeyboardInfo) => { kb.tapdances![3].doubletap = 'KC_B'; }],
         ['override:2', (kb: KeyboardInfo) => { (kb.key_overrides as any)[2].options = 0x07; }],
         ['altrepeat:2', (kb: KeyboardInfo) => { kb.alt_repeat_keys![2].alt_keycode = 'KC_C'; }],
         ['leader:2', (kb: KeyboardInfo) => { kb.leaders![2].sequence = ['KC_A', 'KC_D']; }],
