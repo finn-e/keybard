@@ -7,6 +7,7 @@ import { keyService } from "./key.service";
 import { activeKeycodeVersion } from '@/constants/keycode-numbering';
 import { SVALBOARD_VIAL_CUSTOM_KEYCODES, SVALBOARD_VIAL_UID } from '@/constants/svalboard-vial';
 import { KleService } from "./kle.service";
+import { usableTapdanceTerm } from "@/utils/tapdance-term";
 import { isOverrideEnabled, overrideOptionsFromFile } from '@/utils/key-override';
 import { importBalls, savedBalls } from "./pointing-look.service";
 
@@ -591,7 +592,7 @@ export class FileService {
         // A Vial tap dance with any action is on.
         kbinfo.tapdances = (vil.tap_dance || []).map((td: any[], idx: number) => {
             const [tap, hold, doubletap, taphold] = td.slice(0, 4).map(named);
-            return { idx, enabled: [tap, hold, doubletap, taphold].some(used), tap, hold, doubletap, taphold, tapping_term: td[4] };
+            return { idx, enabled: true, tap, hold, doubletap, taphold, tapping_term: usableTapdanceTerm(td[4]) };
         });
 
         // vil.layout is [layer][row][col]; -1 marks an unused position.
@@ -687,12 +688,13 @@ export class FileService {
         // Keep tap/hold/doubletap/taphold as strings (that's what the UI expects)
         kbinfo.tapdances = (svil.tap_dance || []).map((td: any, tdid: number) => ({
             idx: tdid,
-            enabled: td.on !== false,
+            // Tap dances are always on, and a term below the minimum breaks one.
+            enabled: true,
             tap: td.on_tap || 'KC_NO',
             hold: td.on_hold || 'KC_NO',
             doubletap: td.on_double_tap || 'KC_NO',
             taphold: td.on_tap_hold || 'KC_NO',
-            tapping_term: td.tapping_term ?? 200,
+            tapping_term: usableTapdanceTerm(td.tapping_term),
         }));
 
         // Convert alt repeat keys (Svil-specific)
