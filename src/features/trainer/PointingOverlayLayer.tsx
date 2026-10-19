@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { PointingDevice } from '@/components/pointing-viz/PointingDevice';
-import { pillColorsFromTokens } from '@/components/pointing-viz/PointingLayer';
+import { pillColorsFromTokens, velocityColorsFromTokens } from '@/components/pointing-viz/PointingLayer';
 import { BALL_GLOSS, BALL_SPARKLE, DEFAULT_BALL } from '@/components/pointing-viz/webgl/materials';
 import { ReportFeed } from '@/hooks/usePointingDevices';
 import { placeDevice, type KeyRect } from '@/utils/pointing-geometry';
@@ -72,6 +72,7 @@ export function PointingOverlayLayer({ keys, pointing, config, look, keymap, fee
     const factors = useMemo(() => pointingFactors(keymap), [keymap]);
     const labels = { sniper: sniperLabel(factors.sniperDivisor), boost: boostLabel(factors.boostFactor) };
     const pillColors = useMemo(() => pillColorsFromTokens(true), []);
+    const velocityColors = useMemo(() => velocityColorsFromTokens(true), []);
     const m = demoModes ?? modes;
 
     if (!frame || (!kinds.left && !kinds.right) || (!cfg.showPointing && !cfg.pointingPills)) return null;
@@ -101,6 +102,9 @@ export function PointingOverlayLayer({ keys, pointing, config, look, keymap, fee
                         showModes={modesAt === side}
                         labels={labels}
                         pillColors={pillColors}
+                        velocityColors={velocityColors}
+                        velocityPill={cfg.pointingPills}
+                        otherKind={kinds[side === 'left' ? 'right' : 'left'] === 'trackball' ? 'ball' : kinds[side === 'left' ? 'right' : 'left'] ? 'pad' : null}
                         ghost={ghost}
                         host
                         onMoved={s => setMoving(v => (v === s ? v : s))}

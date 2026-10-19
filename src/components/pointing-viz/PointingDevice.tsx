@@ -1,12 +1,15 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 
-import type { DevicePlacement } from "@/utils/pointing-geometry";
+import { MM_PER_U, type DevicePlacement } from "@/utils/pointing-geometry";
 import type { PointingMotionReport } from "@/utils/pointing-motion";
+import type { VelocityScrollState } from "@/utils/velocity-scroll";
 import { PAD_COUNTS_PER_HALF } from "@/features/pointing-demo";
 import { ballRollRadians } from "./ball-gearing";
 import { BALLS, type BallId } from "./webgl/materials";
 import { drawDevice, roll, rotFromEuler, type Theme } from "./webgl/renderer";
 import { drawContact, drawPadReticle, drawPills, drawReticle, type PillColors } from "./overlay-draw";
+import { drawVelocity, FALLBACK_VELOCITY_COLORS, velocityHere, type VelocityColors } from "./velocity-draw";
+import { padFromRelative, syncFingers, type Finger } from "./pad-contacts";
 
 /** A source of POINTING_MOTION reports: the board, Keybard Host, or the demo script. */
 export interface PointingFeed {
@@ -33,6 +36,12 @@ export interface PointingDeviceProps {
     showModes: boolean;
     labels: { sniper: string; boost: string };
     pillColors: PillColors;
+    /** Velocity Scroll's colors (from --kb-pointing-velocity and the pill tokens). */
+    velocityColors?: VelocityColors;
+    /** Show the Velocity Scroll pill while it is held (the Overlay's pills setting). Default on. */
+    velocityPill?: boolean;
+    /** The other hand's device, which decides where a trackball's Velocity Scroll shows. */
+    otherKind?: "ball" | "pad" | null;
     /** Device hidden: only the pills, centered where it would be (Keybard Host). */
     ghost?: boolean;
     host?: boolean;
@@ -66,7 +75,12 @@ export function PointingDevice(props: PointingDeviceProps) {
     const sim = useRef({
         M: rotFromEuler(side === "right" ? 1.3 : 0.4, side === "right" ? 0.6 : -0.3, side === "right" ? -0.9 : 0.2),
         contact: { x: 0, y: 0, press: 0, last: -1e9 },
-        sm: { sniper: 0, boost: 0 },
+        /** Every finger the board reports on this pad (POINTING_CONTACTS), by contact ID. */
+        fingers: new Map<number, Finger>(),
+        sm: { sniper: 0, boost: 0, vel: 0 },
+        /** The board's last Velocity Scroll state (kept while it fades out). */
+        vs: null as VelocityScrollState | null,
+        vsHeld: false,
         dirty: true,
         ovDirty: true,
         raf: 0,
@@ -96,17 +110,24 @@ export function PointingDevice(props: PointingDeviceProps) {
             const ts = p.showModes && p.sniper ? 1 : 0, tb = p.showModes && p.boost ? 1 : 0;
             const step = (target: number, cur: number) => s.reduce ? target
                 : cur + Math.sign(target - cur) * Math.min(Math.abs(target - cur), dt / (target > cur ? 0.18 : 0.15));
-            const ns = step(ts, s.sm.sniper), nb = step(tb, s.sm.boost);
-            if (ns !== s.sm.sniper || nb !== s.sm.boost) { s.ovDirty = true; }
-            s.sm.sniper = ns; s.sm.boost = nb;
-            if (ns !== ts || nb !== tb) busy = true;
+            const tv = s.vsHeld && velocityHere(p, s.vs) ? 1 : 0;
+            const ns = step(ts, s.sm.sniper), nb = step(tb, s.sm.boost), nv = step(tv, s.sm.vel);
+            if (ns !== s.sm.sniper || nb !== s.sm.boost || nv !== s.sm.vel) { s.ovDirty = true; }
+            s.sm.sniper = ns; s.sm.boost = nb; s.sm.vel = nv;
+            if (ns !== ts || nb !== tb || nv !== tv) busy = true;
             if (p.placement.kind === "pad") {
-                const target = now - s.contact.last < PAD_LIFT_MS ? 1 : 0;
-                const before = s.contact.press;
-                s.contact.press = s.reduce ? 0 : before + (target - before) * Math.min(1, dt / 0.06);
-                if (Math.abs(s.contact.press - target) < 0.005) s.contact.press = target;
-                if (s.contact.press !== before) s.ovDirty = true;
-                if (s.contact.press !== target || target === 1) busy = true;
+                const ease = (c: { press: number }, target: number) => {
+                    const before = c.press;
+                    c.press = s.reduce ? 0 : before + (target - before) * Math.min(1, dt / 0.06);
+                    if (Math.abs(c.press - target) < 0.005) c.press = target;
+                    if (c.press !== before) s.ovDirty = true;
+                    if (c.press !== target || target === 1) busy = true;
+                };
+                ease(s.contact, now - s.contact.last < PAD_LIFT_MS ? 1 : 0);
+                for (const [id, f] of s.fingers) {
+                    ease(f, f.down ? 1 : 0);
+                    if (!f.down && f.press === 0) { s.fingers.delete(id); s.ovDirty = true; }
+                }
             }
             if (s.dirty && !p.ghost && deviceRef.current) {
                 const dpr = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2);
@@ -133,8 +154,14 @@ export function PointingDevice(props: PointingDeviceProps) {
             ctx.clearRect(0, 0, pxSize, pxSize);
             const k = pxSize / ovCss;
             ctx.setTransform(k, 0, 0, k, pxSize / 2, pxSize / 2);
-            const c = s.contact;
-            if (p.placement.kind === "pad" && !p.ghost) drawContact(ctx, hw, hh, c.x, c.y, c.press, p.unitPx, k);
+            const first = [...s.fingers.values()].find((f) => f.down);
+            const c = first ?? s.contact;
+            // Velocity Scroll under the fingertips, so the finger stays on top of the pad's lens
+            if (!p.ghost && s.vs && s.sm.vel > 0.001) drawHeld(ctx, s.vs, k);
+            if (p.placement.kind === "pad" && !p.ghost) {
+                drawContact(ctx, hw, hh, s.contact.x, s.contact.y, s.contact.press, p.unitPx, k);
+                for (const f of s.fingers.values()) drawContact(ctx, hw, hh, f.x, f.y, f.press, p.unitPx, k);
+            }
             if (!p.ghost) {
                 if (p.placement.kind === "ball") drawReticle(ctx, ballPx, s.sm.sniper, k);
                 else drawPadReticle(ctx, hw, hh, (p.placement.corner ?? 0.2) * p.unitPx, c.x * hw, c.y * hh, s.sm.sniper, p.unitPx, k);
@@ -142,7 +169,28 @@ export function PointingDevice(props: PointingDeviceProps) {
             drawPills(ctx, [
                 { kind: "sniper", amount: s.sm.sniper, mult: p.labels.sniper },
                 { kind: "boost", amount: s.sm.boost, mult: p.labels.boost },
+                { kind: "velocity", amount: p.velocityPill === false ? 0 : s.sm.vel, mult: "" },
             ], { side: p.placement.side, r: reach, unitPx: p.unitPx, centered: !!p.ghost, host: !!p.host, colors: p.pillColors });
+        };
+        // Velocity Scroll: the anchor, the dead zone, the offset and the speed.
+        const drawHeld = (ctx: CanvasRenderingContext2D, vs: VelocityScrollState, k: number) => {
+            const p = latest.current;
+            const pxPerMm = p.unitPx / MM_PER_U;
+            const onPad = p.placement.kind === "pad" && vs.padHand === side;
+            let anchor = { x: 0, y: 0 };
+            if (onPad) {
+                // The anchor is where the finger touched down: the finger now, less the offset.
+                const f = [...s.fingers.values()].find((g) => g.down) ?? (s.contact.press > 0.02 ? s.contact : null);
+                if (!f) return;
+                anchor = { x: f.x * hw - vs.offsetMm.x * pxPerMm, y: f.y * hh - vs.offsetMm.y * pxPerMm };
+            }
+            drawVelocity(ctx, vs, {
+                kind: onPad ? "pad" : "ball", amount: s.sm.vel, anchor,
+                // a pad driven as a relative pointer draws the trackball's field over the glass
+                reach: p.placement.kind === "ball" ? ballPx : Math.min(hw, hh) * 0.9,
+                unitPx: p.unitPx, k, colors: p.velocityColors ?? FALLBACK_VELOCITY_COLORS,
+                glass: p.placement.kind === "pad" ? { hw, hh, corner: (p.placement.corner ?? 0.2) * p.unitPx } : undefined,
+            });
         };
         wake.current = () => { if (!s.raf && typeof requestAnimationFrame === "function") s.raf = requestAnimationFrame(frame); };
         wake.current();
@@ -152,17 +200,37 @@ export function PointingDevice(props: PointingDeviceProps) {
     // Anything that changes the look redraws once.
     useEffect(() => {
         sim.current.dirty = true; sim.current.ovDirty = true; wake.current();
-    }, [props.ball, props.gloss, props.sparkle, props.lightness, props.theme, sizeCss, props.sniper, props.boost, props.showModes, props.labels.sniper, props.labels.boost, ghost, props.pillColors.bg, props.pillColors.fg]);
+    }, [props.ball, props.gloss, props.sparkle, props.lightness, props.theme, sizeCss, props.sniper, props.boost, props.showModes, props.labels.sniper, props.labels.boost, ghost, props.pillColors.bg, props.pillColors.fg, props.velocityColors?.accent, props.velocityPill, props.otherKind]);
 
     // Motion from the feed rolls the ball or moves the fingertip.
     useEffect(() => {
         const feed = props.feed;
         if (!feed) return;
         const s = sim.current;
-        return feed.subscribe((report) => {
+        const off = feed.subscribe((report) => {
+            // Velocity Scroll first: it shows even while this hand reports nothing.
+            const vs = report.velocityScroll;
+            if (vs?.held || s.vsHeld) {
+                s.vsHeld = !!vs?.held;
+                if (vs?.held) s.vs = vs;
+                s.ovDirty = true;
+                wake.current();
+            }
             const half = report[side];
             if (!half?.valid) return;
             const p = latest.current;
+            if (p.placement.kind === "pad" && half.contacts) {
+                // The board says where every finger is: draw those, never the motion.
+                const changed = syncFingers(s.fingers, half.contacts);
+                // How many fingers are drawn down, for review and browser tests.
+                if (deviceRef.current) deviceRef.current.dataset.fingers = String([...s.fingers.values()].filter((f) => f.down).length);
+                if (half.contacts.length > 0) s.contact.last = -1e9;
+                if (!changed) return;
+                s.ovDirty = true;
+                if (half.contacts.length > 0) p.onMoved?.(side);
+                wake.current();
+                return;
+            }
             const moved = half.dx !== 0 || half.dy !== 0 || half.touchValid;
             if (!moved) return;
             if (!s.reduce) {
@@ -174,15 +242,17 @@ export function PointingDevice(props: PointingDeviceProps) {
                     s.dirty = true;
                 } else {
                     const c = s.contact;
-                    if (half.touchValid) { c.x = (half.touchX / 255) * 2 - 1; c.y = (half.touchY / 255) * 2 - 1; }
-                    else { c.x = Math.max(-1, Math.min(1, c.x + half.dx / PAD_COUNTS_PER_HALF)); c.y = Math.max(-1, Math.min(1, c.y + half.dy / PAD_COUNTS_PER_HALF)); }
-                    c.last = typeof performance !== "undefined" ? performance.now() : Date.now();
+                    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+                    const at = padFromRelative(c, half, now - c.last >= PAD_LIFT_MS, PAD_COUNTS_PER_HALF);
+                    c.x = at.x; c.y = at.y;
+                    c.last = now;
                     s.ovDirty = true;
                 }
             }
             p.onMoved?.(side);
             wake.current();
         });
+        return () => { off(); s.vsHeld = false; s.ovDirty = true; wake.current(); };
     }, [props.feed, side]);
 
     // Right-click or a long press opens the ball menu (trackballs only).

@@ -45,7 +45,8 @@ const board = () => ({
 
 const KINDS = [
     { kind: 'combos', slots: ['Key 1', 'Key 2', 'Key 3', 'Key 4', 'Output'], toggle: 'Combo enabled' },
-    { kind: 'tapdances', slots: ['Tap', 'Hold', 'Tap-Hold', 'Double-Tap'], toggle: 'Tap dance enabled' },
+    // Tap dances are always on: no toggle.
+    { kind: 'tapdances', slots: ['Tap', 'Hold', 'Tap-Hold', 'Double-Tap'], toggle: null },
     { kind: 'macros', slots: ['Tap', 'Add'], toggle: null },
     { kind: 'overrides', slots: ['Trigger', 'Replacement'], toggle: 'Override enabled' },
     { kind: 'altrepeat', slots: ['Trigger', 'Alternate'], toggle: 'Alt-repeat enabled' },
@@ -117,7 +118,8 @@ describe('side-panel editor bar', () => {
         const { container } = render(<BindingEditorContainer inline bar />);
         const end = container.querySelector('[data-editor-bar-end]') as HTMLElement;
         expect(within(end).getByRole('spinbutton', { name: 'Tapping term in milliseconds' })).toHaveValue(200);
-        expect(within(end).getByRole('group', { name: 'Tap dance enabled' })).toBeInTheDocument();
+        expect(within(end).queryByRole('group', { name: 'Tap dance enabled' })).toBeNull();
+        expect(within(end).queryByRole('switch')).toBeNull();
     });
 
     it('lets a 5-key leader and a long macro wrap within the same row', () => {

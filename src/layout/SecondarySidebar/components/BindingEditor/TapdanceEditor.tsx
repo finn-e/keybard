@@ -1,4 +1,4 @@
-import { FC, ReactNode, useEffect, useState } from "react";
+import { FC, ReactNode, useEffect, useState, type ChangeEvent, type KeyboardEvent as InputKeyEvent } from "react";
 
 import { Input } from "@/components/ui/input";
 import { useKeyBinding } from "@/contexts/KeyBindingContext";
@@ -10,6 +10,7 @@ import { TapdanceEntry } from "@/types/keyboard.types";
 import { DragItem } from "@/contexts/DragContext";
 import { useBindingChanges } from "@/hooks/useBindingChanges";
 import { isTapdanceKeycode } from "@/utils/keys";
+import { DEFAULT_TAPDANCE_TERM_MS, MAX_TAPDANCE_TERM_MS, MIN_TAPDANCE_TERM_MS, clampTapdanceTerm } from "@/utils/tapdance-term";
 
 import EditorKey from "./EditorKey";
 import { BAR_KEY_PX, BAR_KEY_SIZE, BAR_KEY_VARIANT, BarEnd, BarRow, BarSlot } from "./EditorBar";
@@ -41,14 +42,14 @@ const TapdanceEditor: FC<Props> = ({ bar = false, barEnd }) => {
         return selectedTarget?.type === "tapdance" && selectedTarget.tapdanceId === itemToEdit && selectedTarget.tapdanceSlot === slot;
     };
 
-    const [tapMs, setTapMs] = useState(200);
-
+    // Holds what the user types and saves it on Enter or blur, so a partial
+    // value isn't clamped to the minimum mid-edit.
+    const tapMs = currTapDance?.tapping_term ?? DEFAULT_TAPDANCE_TERM_MS;
+    const [termDraft, setTermDraft] = useState<string | null>(null);
 
     useEffect(() => {
-        if (currTapDance) {
-            setTapMs(currTapDance.tapping_term);
-        }
-    }, [itemToEdit, currTapDance?.tapping_term]);
+        setTermDraft(null);
+    }, [itemToEdit]);
 
     const keys = {
         tap: currTapDance?.tap ?? "KC_NO",
@@ -71,8 +72,7 @@ const TapdanceEditor: FC<Props> = ({ bar = false, barEnd }) => {
 
     const updateTapMs = async (ms: number) => {
         if (!Number.isFinite(ms)) return;
-        ms = Math.max(0, Math.min(32767, Math.round(ms)));
-        setTapMs(ms);
+        ms = clampTapdanceTerm(ms);
         if (ms === currTapDance?.tapping_term) return;
         if (keyboard?.tapdances && itemToEdit !== null) {
             const tapdances = [...keyboard.tapdances];
@@ -151,6 +151,24 @@ const TapdanceEditor: FC<Props> = ({ bar = false, barEnd }) => {
         } else {
             updateKeyAssignment(slot, item.keycode);
         }
+    };
+
+    const commitTerm = () => {
+        if (termDraft === null) return;
+        const parsed = parseInt(termDraft, 10);
+        setTermDraft(null);
+        if (!Number.isNaN(parsed)) void updateTapMs(parsed);
+    };
+    const termInputProps = {
+        value: termDraft ?? tapMs,
+        min: MIN_TAPDANCE_TERM_MS,
+        max: MAX_TAPDANCE_TERM_MS,
+        onChange: (e: ChangeEvent<HTMLInputElement>) => setTermDraft(e.target.value),
+        onBlur: commitTerm,
+        onKeyDown: (e: InputKeyEvent<HTMLInputElement>) => {
+            if (e.key === "Enter") commitTerm();
+            if (e.key === "Escape") setTermDraft(null);
+        },
     };
 
     const renderTapdanceKey = (label: string, keycode: string, type: "tap" | "hold" | "doubletap" | "taphold") => {
@@ -252,10 +270,8 @@ const TapdanceEditor: FC<Props> = ({ bar = false, barEnd }) => {
                     <BarSlot label="Term (ms)">
                         <Input
                             aria-label="Tapping term in milliseconds"
-                            value={tapMs}
+                            {...termInputProps}
                             type="number"
-                            onChange={(e) => void updateTapMs(e.target.valueAsNumber)}
-                            min={0}
                             step={25}
                             className="w-16 h-10 bg-kb-surface text-center text-sm px-1"
                         />
@@ -282,10 +298,8 @@ const TapdanceEditor: FC<Props> = ({ bar = false, barEnd }) => {
                 <div className="flex flex-row gap-3 items-center">
                     <span className="text-sm font-medium text-slate-600 dark:text-neutral-300">Hold Time (ms)</span>
                     <Input
-                        value={tapMs || 0}
+                        {...termInputProps}
                         type="number"
-                        onChange={(e) => void updateTapMs(e.target.valueAsNumber)}
-                        min={0}
                         step={25}
                         className="w-20 h-10 bg-kb-surface text-center text-base px-2"
                     />
@@ -305,10 +319,8 @@ const TapdanceEditor: FC<Props> = ({ bar = false, barEnd }) => {
             <div className="flex flex-row gap-3 items-center mt-4">
                 <span className="text-md font-normal text-slate-600 dark:text-neutral-300">Milliseconds</span>
                 <Input
-                    value={tapMs}
+                    {...termInputProps}
                     type="number"
-                    onChange={(e) => void updateTapMs(e.target.valueAsNumber)}
-                    min={0}
                     step={25}
                     className="w-32 bg-kb-surface"
                     placeholder="Tap MS"

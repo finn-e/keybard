@@ -10,6 +10,7 @@ import { keyboardService } from "@/services/keyboard.service";
 import { prepareOverrideForEdit } from "@/utils/key-override";
 import { KEYBOARD_EVENT_MAP } from "@/utils/keyboard-mapper";
 import { getOrderedKeyPositions, SerialMode } from "@/utils/serial-assignment";
+import { DEFAULT_TAPDANCE_TERM_MS } from "@/utils/tapdance-term";
 import { useKeyboard } from "./KeyboardContext";
 
 interface BindingTarget {
@@ -380,8 +381,8 @@ export const KeyBindingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                             hold: "KC_NO",
                             doubletap: "KC_NO",
                             taphold: "KC_NO",
-                            tapms: 200,
-                            tdid: tapdanceId,
+                            tapping_term: DEFAULT_TAPDANCE_TERM_MS,
+                            idx: tapdanceId,
                         };
                     }
 

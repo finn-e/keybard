@@ -31,10 +31,18 @@ POINTING_MOTION = 0x2D
 # without the flag it sends 0, which every firmware treats as the one shared reader.
 POINTING_MOTION_READERS_FLAG2 = 1 << 4
 HOST_MOTION_READER = 2
+# Second feature byte, bit 5: the board answers POINTING_CONTACTS (0x2F), a snapshot
+# of every touch contact on its pad (native touchpad builds). Reading clears nothing.
+POINTING_CONTACTS_FLAG2 = 1 << 5
+POINTING_CONTACTS = 0x2F
+# The most contacts a 0x2F reply carries: three fingers on each pad. The count byte says
+# how many follow, so firmware that sends at most 5 reads the same.
+MAX_CONTACTS = 6
+PAD_COUNTS_X, PAD_COUNTS_Y = 2048, 1792
 SHIFT_BITS = 0x22  # left and right Shift in the HID modifier byte
 # Protocol -> command -> exact request argument length. No setter is expressible.
 READ_COMMANDS = {
-    0xDF: {0x00: 0, 0x01: 2, 0x0D: 0, 0x0E: 3, 0x16: 0, 0x18: 0, 0x19: 0, 0x1B: 3, 0x2D: 1},
+    0xDF: {0x00: 0, 0x01: 2, 0x0D: 0, 0x0E: 3, 0x16: 0, 0x18: 0, 0x19: 0, 0x1B: 3, 0x2D: 1, 0x2F: 0},
     0xFE: {0x02: 2, 0x11: 0, 0x12: 3},
 }
 
@@ -74,8 +82,90 @@ def parse_pointing_motion(data):
             cpi = int.from_bytes(data[offset:offset + 2], "little")
             if cpi:
                 block['cpi'] = cpi
-    return dict(sniper=bool(modes & 1), boost=bool(modes & 2), elapsedMs=data[2],
-                left=left, right=right)
+    motion = dict(sniper=bool(modes & 1), boost=bool(modes & 2), elapsedMs=data[2],
+                  left=left, right=right)
+    velocity = parse_velocity_scroll(data)
+    if velocity is not None:
+        motion['velocityScroll'] = velocity
+    return motion
+
+
+# Velocity Scroll's block in a 0x2D payload: offsets 29-52, marked by 0x56 at 29.
+VELOCITY_SCROLL_OFF = 29
+VELOCITY_SCROLL_LEN = 24
+VELOCITY_SCROLL_MAGIC = 0x56
+
+
+def parse_velocity_scroll(data):
+    """Velocity Scroll's state and curves from a 0x2D payload, as Keybard's VelocityScrollState, or None.
+
+    magic(1) flags(1) offset x, y (int16, 0.01 mm) speed h, v (int16, 0.01 notch/s, +up)
+    max (uint16, 0.01 notch/s), then dead zone (0.01 mm), gain (0.01 notch/s) and exponent
+    (0.001) for the trackball and for the touchpad. Older firmware leaves the magic zero.
+    """
+    o = VELOCITY_SCROLL_OFF
+    if len(data) < o + VELOCITY_SCROLL_LEN or data[o] != VELOCITY_SCROLL_MAGIC:
+        return None
+    flags = data[o + 1]
+    s16 = lambda k: int.from_bytes(data[o + k:o + k + 2], "little", signed=True)
+    u16 = lambda k: int.from_bytes(data[o + k:o + k + 2], "little")
+    top = u16(10) / 100
+    curve = lambda k: dict(deadMm=u16(k) / 100, gain=u16(k + 2) / 100, exponent=u16(k + 4) / 1000, maxNps=top)
+    lock = (flags >> 4) & 3
+    return dict(held=bool(flags & 1),
+                padHand=('right' if flags & 4 else 'left') if flags & 2 else None,
+                axisLock=bool(flags & 8),
+                lockedAxis={1: 'vertical', 2: 'horizontal'}.get(lock, 'none'),
+                offsetMm=dict(x=s16(2) / 100, y=s16(4) / 100),
+                speedNps=dict(h=s16(6) / 100, v=s16(8) / 100),
+                ball=curve(12), pad=curve(18))
+
+
+def pad_unit(count, counts):
+    """A pad count as -1..1: 0 is one edge, counts - 1 the other (as Keybard's padUnit)."""
+    count = max(0, min(counts - 1, count))
+    return count / (counts - 1) * 2 - 1
+
+
+def parse_pointing_contacts(data):
+    """A POINTING_CONTACTS reply's payload (after the command echo) as a dict, or None.
+
+    format(1) flags(1) age_ms(1) n(1), then n x 4 bytes: [0] bits 0-3 contact ID, bit 4
+    tip, bit 5 confidence, bit 6 right pad, bit 7 a finger the touchpad left out (its ID is
+    from a space of its own; it comes back with leftOut=True); [1..3] x | y << 12 little-endian, x 0..2047
+    across that pad, y 0..1791 down it. n is at most MAX_CONTACTS; a reply must hold every
+    contact it counts. Contacts lifting (tip clear) are left out; x and y come back as -1..1
+    from the pad's left and top edges.
+    """
+    data = bytes(data or b"")
+    if len(data) < 4 or data[0] != 1:
+        return None
+    n = min(MAX_CONTACTS, data[3])
+    if len(data) < 4 + 4 * n:
+        return None
+    flags = data[1]
+    out = dict(reporting=bool(flags & 1), pads=dict(left=bool(flags & 2), right=bool(flags & 4)), left=[], right=[])
+    for i in range(n):
+        b = data[4 + 4 * i]
+        if not b & 0x10:
+            continue
+        w = int.from_bytes(data[5 + 4 * i:8 + 4 * i], "little")
+        contact = dict(id=b & 15, x=round(pad_unit(w & 0xFFF, PAD_COUNTS_X), 4),
+                       y=round(pad_unit((w >> 12) & 0xFFF, PAD_COUNTS_Y), 4), confident=bool(b & 0x20))
+        if b & 0x80:  # a finger the touchpad left out: listed after the rest, IDs of its own
+            contact['leftOut'] = True
+        out['right' if b & 0x40 else 'left'].append(contact)
+    return out
+
+
+def with_pad_contacts(motion, contacts):
+    """The motion dict with each touchpad hand's contacts (an empty list when no finger is down)."""
+    if motion is None or not contacts or not contacts['reporting']:
+        return motion
+    for side in ('left', 'right'):
+        if contacts['pads'][side]:
+            motion[side]['contacts'] = contacts[side]
+    return motion
 
 
 def pointing_kinds(definition, hardware):
@@ -218,6 +308,34 @@ def candidates(hid_module):
     return result
 
 
+def none_pointing(definition, hardware):
+    """Indices of pointing instances whose 0x18 byte says "no pointing module".
+
+    The firmware probes for a module again up to 30 s after power-on, so "none"
+    early on can still turn into a module; see POINTING_NONE_WATCH."""
+    fragments = definition.get("fragments") if isinstance(definition, dict) else None
+    instances = ((definition.get("composition") or {}).get("instances") if isinstance(definition, dict) else None)
+    if not isinstance(fragments, dict) or not isinstance(instances, list):
+        return ()
+    out = []
+    for index, instance in enumerate(instances):
+        if not isinstance(instance, dict) or index >= len(hardware) or hardware[index] == 255:
+            continue
+        options = [instance] if "fragment" in instance else instance.get("fragment_options") or []
+        for option in options:
+            fragment = fragments.get(option.get("fragment")) if isinstance(option, dict) else None
+            widget = fragment.get("widget") if isinstance(fragment, dict) else None
+            if isinstance(widget, dict) and fragment.get("id") == hardware[index] and widget.get("module") == "none":
+                out.append(index)
+                break
+    return tuple(out)
+
+
+# How long after the first profile read a hand that showed "no pointing module"
+# is still re-read: the firmware's last probe is 30 s after power-on.
+POINTING_NONE_WATCH = 35.0
+
+
 class SvalReader:
     def __init__(self, device, clock=time.monotonic, cancelled=lambda: False, report_size=None):
         self.device = device
@@ -235,6 +353,10 @@ class SvalReader:
         # The 0x18 hardware bytes of the last profile read, and its pointing instances still unknown.
         self.profile_hardware = ()
         self.pointing_unsettled = ()
+        # Pointing instances that read "no module", re-read until pointing_none_until
+        # (the clock time POINTING_NONE_WATCH after this connection's first profile read).
+        self.pointing_none = ()
+        self.pointing_none_until = None
 
     def checkpoint(self):
         if self.cancelled():
@@ -365,7 +487,16 @@ class SvalReader:
         if not self.feature_flags2 & POINTING_MOTION_FLAG2:
             return None
         reader = HOST_MOTION_READER if self.feature_flags2 & POINTING_MOTION_READERS_FLAG2 else 0
-        return parse_pointing_motion(self._read(POINTING_MOTION, bytes((reader,))))
+        motion = parse_pointing_motion(self._read(POINTING_MOTION, bytes((reader,))))
+        if motion is not None and self.feature_flags2 & POINTING_CONTACTS_FLAG2:
+            motion = with_pad_contacts(motion, self.pointing_contacts())
+        return motion
+
+    def pointing_contacts(self):
+        """Every touch contact on its pad, or None on firmware without 0x2F (never sent there)."""
+        if not self.feature_flags2 & POINTING_CONTACTS_FLAG2:
+            return None
+        return parse_pointing_contacts(self._read(POINTING_CONTACTS))
 
     def pressed_keys(self):
         # VIA GET_KEYBOARD_VALUE / SWITCH_MATRIX_STATE, row offset zero.
@@ -401,12 +532,26 @@ class SvalReader:
             raise ProtocolError("Invalid fragment state count")
         return tuple(data[1:1 + data[0]])
 
+    def pointing_none_watched(self):
+        """The "no module" instances still worth re-reading (none after POINTING_NONE_WATCH)."""
+        if not self.pointing_none or self.pointing_none_until is None or self.clock() >= self.pointing_none_until:
+            return ()
+        return self.pointing_none
+
+    def pointing_watching(self):
+        """True while a pointing instance may still change: unknown, or "no module" early on."""
+        return bool(self.pointing_unsettled or self.pointing_none_watched())
+
     def pointing_settled(self):
-        """True once every pointing module unknown at the last profile read is known (one 0x18 read)."""
-        if not self.pointing_unsettled:
+        """True once a pointing module unknown at the last profile read is known, or one that
+        read "no module" now reads something else (one 0x18 read)."""
+        none = self.pointing_none_watched()
+        if not self.pointing_unsettled and not none:
             return False
         hardware = self.fragment_state(0x18)
-        return any(i < len(hardware) and hardware[i] != 255 for i in self.pointing_unsettled)
+        if any(i < len(hardware) and hardware[i] != 255 for i in self.pointing_unsettled):
+            return True
+        return any(i < len(hardware) and hardware[i] not in (255, self.profile_hardware[i]) for i in none)
 
     def keymap(self):
         count = self._read(0x11, protocol=0xFE)[0]
@@ -521,6 +666,9 @@ class SvalReader:
             pointing = tuple(pointing_kinds(definition, hardware).items()) if has_fragments else ()
             self.profile_hardware = tuple(hardware)
             self.pointing_unsettled = unsettled_pointing(definition, hardware) if has_fragments else ()
+            self.pointing_none = none_pointing(definition, hardware) if has_fragments else ()
+            if self.pointing_none_until is None:
+                self.pointing_none_until = self.clock() + POINTING_NONE_WATCH
             return replace(profile, keys=keys, layer_names=tuple(layer_names.items()),
                            code_labels=tuple(code_labels.items()), from_board=True, pointing=pointing)
         finally:

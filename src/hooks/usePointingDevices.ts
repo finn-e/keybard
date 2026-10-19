@@ -92,7 +92,7 @@ export function usePointingLive(active: boolean): PointingLive {
         return () => { off(); release(); };
     }, [supported, live, feed]);
 
-    const scripted = active && !supported && !!demo?.motion;
+    const scripted = active && !supported && !!(demo?.motion || demo?.velocity);
     useEffect(() => {
         if (!scripted || !demo) return;
         return startDemoFeed(demo, feed);

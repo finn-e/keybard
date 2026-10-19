@@ -9,6 +9,7 @@ import { payloadCapacity } from "./hid-report";
 import LZMA from "js-lzma";
 import { assertSupportedSvilProto } from "@/utils/unsupported-firmware";
 import { parsePointingHardware, SVIL_FLAG2_POINTING_HARDWARE } from "@/utils/pointing-hardware";
+import { parsePointingContacts, SVIL_FLAG2_POINTING_CONTACTS, withPadContacts, type PointingContactsReport } from "@/utils/pointing-contacts";
 import { KEYBARD_MOTION_READER, parsePointingMotion, SVIL_FLAG2_POINTING_MOTION, SVIL_FLAG2_POINTING_MOTION_READERS, type PointingMotionReport } from "@/utils/pointing-motion";
 import type { KeyboardInfo, AltRepeatKeyEntry, LeaderEntry } from "../types/keyboard.types";
 
@@ -572,7 +573,29 @@ export class KeyboardService {
         const perReader = ((kbinfo.feature_flags2 ?? 0) & SVIL_FLAG2_POINTING_MOTION_READERS) !== 0;
         try {
             const reply = await this.usb.sendSvil(SvilUSB.CMD_SVIL_POINTING_MOTION, perReader ? [KEYBARD_MOTION_READER] : [], { uint8: true }) as Uint8Array;
-            return parsePointingMotion(reply, SvilUSB.CMD_SVIL_POINTING_MOTION);
+            const report = parsePointingMotion(reply, SvilUSB.CMD_SVIL_POINTING_MOTION);
+            if (!report || !this.hasPointingContacts(kbinfo)) return report;
+            return withPadContacts(report, await this.getPointingContacts(kbinfo));
+        } catch {
+            return null;
+        }
+    }
+
+    /** Whether the board reports every touch contact (POINTING_CONTACTS, 0x2F). */
+    hasPointingContacts(kbinfo: KeyboardInfo | null | undefined): boolean {
+        return ((kbinfo?.feature_flags2 ?? 0) & SVIL_FLAG2_POINTING_CONTACTS) !== 0;
+    }
+
+    /**
+     * Every touch contact down now, each on its pad (POINTING_CONTACTS, 0x2F; a
+     * read that clears nothing). Null without sending on firmware that doesn't
+     * advertise it, and null on a failed or empty read.
+     */
+    async getPointingContacts(kbinfo: KeyboardInfo): Promise<PointingContactsReport | null> {
+        if (!this.hasPointingContacts(kbinfo)) return null;
+        try {
+            const reply = await this.usb.sendSvil(SvilUSB.CMD_SVIL_POINTING_CONTACTS, [], { uint8: true }) as Uint8Array;
+            return parsePointingContacts(reply, SvilUSB.CMD_SVIL_POINTING_CONTACTS);
         } catch {
             return null;
         }

@@ -6,7 +6,9 @@
 import { isBallId, type BallId } from '@/components/pointing-viz/webgl/materials';
 import { PARANOID } from '@/lib/paranoid';
 import { appStorage } from '@/utils/app-storage';
+import { MAX_CONTACTS, type PadContact } from '@/utils/pointing-contacts';
 import type { PointingMotionReport } from '@/utils/pointing-motion';
+import { velocityScrollFromJson } from '@/utils/velocity-scroll';
 import { HOST_ORIGIN } from './host';
 
 /** The Host's pointing settings: devices off, the pills on. */
@@ -46,6 +48,20 @@ export function hostUid(kbid: string | undefined | null): string | null {
     return null;
 }
 
+/** A hand's contacts from the Overlay app (at most MAX_CONTACTS; each id 0..15, x and y -1..1). */
+function hostContacts(list: unknown[]): PadContact[] {
+    const out: PadContact[] = [];
+    for (const item of list.slice(0, MAX_CONTACTS)) {
+        if (!item || typeof item !== 'object') continue;
+        const c = item as Record<string, unknown>;
+        const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+        const id = num(c.id), x = num(c.x), y = num(c.y);
+        if (id === null || x === null || y === null) continue;
+        out.push({ id: Math.trunc(id) & 15, x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), confident: c.confident !== false, ...(c.leftOut === true ? { leftOut: true } : {}) });
+    }
+    return out;
+}
+
 /** The motion event the Host sends its overlay (keybard-host-pointing), validated. */
 export function hostPointingEvent(detail: unknown): PointingMotionReport | null {
     if (!detail || typeof detail !== 'object') return null;
@@ -58,11 +74,14 @@ export function hostPointingEvent(detail: unknown): PointingMotionReport | null 
             touchValid: o.touchValid === true, fingers: n('fingers'), dx: n('dx'), dy: n('dy'), h: 0, v: 0, buttons: 0,
             touchX: n('touchX'), touchY: n('touchY'),
             ...(n('cpi') > 0 ? { cpi: n('cpi') } : {}),
+            ...(Array.isArray(o.contacts) ? { contacts: hostContacts(o.contacts) } : {}),
         };
     };
+    const velocityScroll = velocityScrollFromJson(d.velocityScroll);
     return {
         sniper: d.sniper === true, boost: d.boost === true, autoMouseLayer: false, axisLockEnabled: false, naturalScroll: false, scrollKey: false,
         elapsedMs: typeof d.elapsedMs === 'number' ? d.elapsedMs : 16, axisLock: 'free', left: half(d.left), right: half(d.right),
+        ...(velocityScroll ? { velocityScroll } : {}),
     };
 }
 

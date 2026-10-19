@@ -16,6 +16,7 @@ import { PARANOID, userIsLooking } from "../lib/paranoid";
 import { LinuxHidAccessError } from "../utils/linux-hid-access";
 import { UnsupportedFirmwareError, type UnsupportedFirmwareInfo } from "../utils/unsupported-firmware";
 import { RAW_HID_USAGES } from "../services/hid-report";
+import { usePointingDetection } from "../hooks/usePointingDetection";
 
 interface KeyboardContextType {
     keyboard: KeyboardInfo | null;
@@ -123,6 +124,8 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         rememberComboNames(previous, keyboard);
     }, [keyboard]);
     const [connectionSessionId, setConnectionSessionId] = useState(0);
+    // Counts loads from the board, so late pointing detection starts over on each.
+    const [boardLoad, setBoardLoad] = useState(0);
     const sessionRef = useRef(0);
     // Keymap dimensions as the connected board reported them, for the session that read them.
     const deviceKeymapRef = useRef<{ session: number; layers: number; rows: number; cols: number } | null>(null);
@@ -349,6 +352,7 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 loadedInfo.cosmetic = recallComboNames(loadedInfo).cosmetic;
                 loadedLayoutRef.current = loadedInfo;
                 setKeyboard(loadedInfo);
+                setBoardLoad((n) => n + 1);
                 setConnectionState("connected");
                 setConnectionError(null);
                 setConnectionFirmware(null);
@@ -500,6 +504,22 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }
         };
     }, [isConnected, keyboard]);
+
+    // A pointing module the board finds after connect: board state, written into
+    // the draft and the loaded copy alike, so it never reads as an unsaved edit.
+    usePointingDetection({
+        connected: isConnected && connectionState === "connected",
+        boardLoad,
+        getKeyboard: () => keyboardRef.current,
+        apply: useCallback((patch: (kb: KeyboardInfo) => KeyboardInfo) => {
+            const current = keyboardRef.current;
+            if (!current) return;
+            const next = patch(current);
+            if (loadedLayoutRef.current === current) loadedLayoutRef.current = next;
+            setKeyboard(next);
+            setOriginalKeyboard((original) => original ? patch(original) : original);
+        }, [setKeyboard]),
+    });
 
     // Reset keyboard to original state (used by revert)
     const resetToOriginal = useCallback(() => {

@@ -44,9 +44,10 @@ class MotionDevice(FakeDevice):
 
 
 class MotionTests(unittest.TestCase):
-    def test_read_only_allowlist_gains_only_the_motion_read(self):
+    def test_read_only_allowlist_gains_only_the_motion_and_contacts_reads(self):
         self.assertEqual(READ_COMMANDS[0xDF][0x2D], 1)  # the reader id
-        self.assertEqual(set(READ_COMMANDS[0xDF]), {0x00, 0x01, 0x0D, 0x0E, 0x16, 0x18, 0x19, 0x1B, 0x2D})
+        self.assertEqual(READ_COMMANDS[0xDF][0x2F], 0)  # contacts: no arguments
+        self.assertEqual(set(READ_COMMANDS[0xDF]), {0x00, 0x01, 0x0D, 0x0E, 0x16, 0x18, 0x19, 0x1B, 0x2D, 0x2F})
         self.assertNotIn(0x1A, READ_COMMANDS[0xDF])  # the fragment write stays out
         self.assertEqual(POINTING_MOTION_FLAG2, 0x08)
 
@@ -157,16 +158,43 @@ class SettingsTests(unittest.TestCase):
             state = HostState(path)
             state.set_pointing_look({'uid': '42', 'right': 'red', 'gloss': 0.5})
             state.board = {'uid': '42'}
-            self.assertEqual(state.snapshot()['pointingLook'], {'right': 'red', 'gloss': 0.5})
+            # Keybard's fixed gloss and sparkle, whatever an older Keybard saved.
+            fixed = {'gloss': 1.0, 'sparkle': 0.75}
+            self.assertEqual(state.snapshot()['pointingLook'], dict(fixed, right='red'))
             again = HostState(path); again.board = {'uid': '42'}
-            self.assertEqual(again.snapshot()['pointingLook'], {'right': 'red', 'gloss': 0.5})
+            self.assertEqual(again.snapshot()['pointingLook'], dict(fixed, right='red'))
             again.board = {'uid': '7'}
-            self.assertEqual(again.snapshot()['pointingLook'], {})
+            self.assertEqual(again.snapshot()['pointingLook'], fixed)
 
     def test_demo_motion_shape(self):
         m = demo_motion(3.0, .016)
         self.assertTrue(m['sniper'] and m['right']['valid'] and m['left']['valid'])
         self.assertEqual(m['left']['dx'], 0)
+        self.assertNotIn('velocityScroll', m)
+
+    def test_demo_velocity_shape(self):
+        m = demo_motion(0.0, .016, velocity=True)
+        v = m['velocityScroll']
+        self.assertTrue(v['held'] and v['padHand'] is None and not m['sniper'])
+        self.assertGreater(v['offsetMm']['y'], 10)  # starts away from the anchor, toward the user
+        self.assertLess(v['speedNps']['v'], 0)       # which scrolls down
+        self.assertEqual(v['ball']['maxNps'], 60.0)
+
+    def test_velocity_scroll_block(self):
+        # The block at payload 29-52 after the per-reader extension: held, right pad finger,
+        # offset (1.5, -12.34) mm, speed (0, 8.5) notch/s, and both curves.
+        block = bytes((0x56, 0x07)) + b''.join(v.to_bytes(2, 'little', signed=True) for v in (150, -1234, 0, 850))
+        block += b''.join(v.to_bytes(2, 'little') for v in (6000, 80, 1200, 1500, 150, 1600, 1500))
+        m = parse_pointing_motion(motion_payload(left=(1, 0, 0), ext=(2, 0, 0)) + block)
+        v = m['velocityScroll']
+        self.assertEqual((v['held'], v['padHand'], v['lockedAxis']), (True, 'right', 'none'))
+        self.assertEqual(v['offsetMm'], dict(x=1.5, y=-12.34))
+        self.assertEqual(v['speedNps'], dict(h=0.0, v=8.5))
+        self.assertEqual(v['ball'], dict(deadMm=0.8, gain=12.0, exponent=1.5, maxNps=60.0))
+        self.assertEqual(v['pad'], dict(deadMm=1.5, gain=16.0, exponent=1.5, maxNps=60.0))
+        # Firmware without the block (zeros), and 32-byte reports (too short), report none.
+        self.assertNotIn('velocityScroll', parse_pointing_motion(motion_payload(ext=(2, 0, 0)).ljust(57, bytes(1))))
+        self.assertNotIn('velocityScroll', parse_pointing_motion(motion_payload()))
 
     def test_no_github_io_origin(self):
         self.assertFalse(any('github.io' in o for o in REMOTE_ORIGINS))
@@ -201,3 +229,77 @@ class LookOpTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def late_pointing_device():
+    """A board whose two pointing slots read "no pointing module" (id 4) at first."""
+    import copy
+    from test_board_layout import fragment_definition
+    device = FakeDevice()
+    device.definition = fragment_definition()
+    device.definition['fragments'].update({
+        "pointing_none": {"id": 4, "kle": [], "widget": {"kind": "pointing", "module": "none", "w": 2.5, "h": 2.5}},
+        "pmw3389": {"id": 6, "kle": [], "widget": {"kind": "pointing", "module": "trackball", "sensor": "pmw3389", "w": 2.5, "h": 2.5}},
+    })
+    pointing = {"hardware_detect": True, "fragment_options": [
+        {"fragment": "pointing_none", "matrix_map": [], "default": True},
+        {"fragment": "pmw3389", "matrix_map": []}]}
+    for side in ("left", "right"):
+        device.definition['composition']['instances'].append(dict(copy.deepcopy(pointing), id=f"{side}_pointing"))
+    device.hardware = (255,) * 10 + (4, 4)
+    device.selections = (255,) * 12
+    return device
+
+
+class LatePointingTests(unittest.TestCase):
+    """The firmware probes again until 30 s after power-on: "none" early on can become a module."""
+
+    def setUp(self):
+        self.now = 100.0
+        self.device = late_pointing_device()
+        self.reader = SvalReader(self.device, clock=lambda: self.now)
+        self.reader.info()
+
+    def reads_0x18(self):
+        return sum(1 for p in self.device.writes if bytes(p[6:8]) == bytes((0xDF, 0x18)))
+
+    def test_a_none_slot_that_turns_into_a_trackball_is_drawn(self):
+        profile = self.reader.read_profile(self.device.uid)
+        self.assertEqual(serialize_profile(profile)['pointing'], {'left': None, 'right': None})
+        self.assertTrue(self.reader.pointing_watching())
+        self.now += 2
+        self.assertFalse(self.reader.pointing_settled())
+        # The board's 30 s probe finds the right trackball.
+        self.now += 28
+        self.device.hardware = (255,) * 10 + (4, 6)
+        self.assertTrue(self.reader.pointing_settled())
+        profile = self.reader.read_profile(self.device.uid, reuse_definition=True)
+        self.assertEqual(serialize_profile(profile)['pointing'], {'left': None, 'right': 'trackball'})
+        # The left hand still reads none and the window is still open: watched until 35 s.
+        self.assertTrue(self.reader.pointing_watching())
+        self.now += 6
+        self.assertFalse(self.reader.pointing_watching())
+
+    def test_a_slot_that_stays_none_is_not_read_after_35_s(self):
+        self.reader.read_profile(self.device.uid)
+        self.now += 34.9
+        self.assertTrue(self.reader.pointing_watching())
+        self.assertFalse(self.reader.pointing_settled())
+        self.now += 0.2
+        self.assertFalse(self.reader.pointing_watching())
+        before = self.reads_0x18()
+        self.assertGreater(before, 0)
+        self.assertFalse(self.reader.pointing_settled())
+        self.assertEqual(self.reads_0x18(), before)
+        # A later profile read (a layout refresh) doesn't open the window again.
+        self.reader.read_profile(self.device.uid, reuse_definition=True)
+        self.assertFalse(self.reader.pointing_watching())
+
+    def test_a_module_present_at_the_first_read_causes_no_rereads(self):
+        self.device.hardware = (255,) * 10 + (6, 6)
+        profile = self.reader.read_profile(self.device.uid)
+        self.assertEqual(serialize_profile(profile)['pointing'], {'left': 'trackball', 'right': 'trackball'})
+        self.assertFalse(self.reader.pointing_watching())
+        before = self.reads_0x18()
+        self.assertFalse(self.reader.pointing_settled())
+        self.assertEqual(self.reads_0x18(), before)

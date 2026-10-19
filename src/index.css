@@ -89,6 +89,10 @@
     --kb-pointing-pill-fg: var(--kb-active-fg);
     --kb-pointing-host-pill-bg: rgba(255, 255, 255, 0.94);
     --kb-pointing-host-pill-fg: #111214;
+    /* Velocity Scroll's speed arrow and arc (new; the brand green, beside the brand tokens).
+       It sits on a dark bed, so one value reads on every ball, the pad and both themes. */
+    --kb-pointing-velocity: #099e7c;
+    --kb-pointing-host-velocity: #099e7c;
     /* Underslung combo editor card (new; sits beside the brand tokens). */
     --kb-combo-editor-border: #d6d7d8;
     --kb-combo-editor-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
