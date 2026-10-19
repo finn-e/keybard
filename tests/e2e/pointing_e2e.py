@@ -8,7 +8,11 @@ app, the pointing review link (?demo=pointing), no keyboard. Run with
      draws three fingers (the sixth is one the touchpad left out, with an ID
      that a reported finger also has); &contacts=5 draws three and two; with
      one touchpad, &contacts=5 draws all five on it.
-  3. All of it light and dark, with no page errors.
+  3. Velocity Scroll: with &velocity=1 its field is drawn over the moving
+     hand's device (the right trackball; with &hand=left, a lens on the left
+     touchpad) and nothing over the other; with neither held nor moving,
+     nothing is drawn over either.
+  4. All of it light and dark, with no page errors.
 
 Same server options as combo_editor_e2e.py (E2E_URL, E2E_SKIP_BUILD).
 Exits 1 when a check fails.
@@ -45,6 +49,22 @@ def fingers_ok(page: Page, side: str, want: int) -> tuple[bool, str | None]:
         return False, device(page, side).get_attribute("data-fingers")
 
 
+# Pixels drawn on a device's overlay canvas (the pills, the fingers and Velocity Scroll).
+INK_JS = """side => {
+    const c = document.querySelector(`[data-pointing-overlay="${side}"]`);
+    if (!c) return -1;
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 16) n++;
+    return n;
+}"""
+
+
+def ink(page: Page, side: str) -> int:
+    page.wait_for_timeout(1500)  # a few frames of the scripted motion
+    return page.evaluate(INK_JS, side)
+
+
 def run(browser, url, theme, failures):
     def check(ok, what):
         if not ok:
@@ -65,6 +85,19 @@ def run(browser, url, theme, failures):
         for side, n in want.items():
             ok, got = fingers_ok(page, side, n)
             check(ok, f"{query}: the {side} pad draws {got!r} fingers, not {n}")
+        failures.extend(f"{theme}, {query}: page error: {e}" for e in errors)
+        context.close()
+
+    for query, drawn, clear in [("velocity=1", "right", "left"),
+                                ("velocity=1&hand=left", "left", "right"),
+                                ("motion=0", None, "left"),
+                                ("motion=0", None, "right")]:
+        context, page, errors = open_demo(browser, url, query, theme)
+        if drawn:
+            n = ink(page, drawn)
+            check(n > 500, f"{query}: Velocity Scroll is not drawn over the {drawn} device ({n} pixels)")
+        n = ink(page, clear)
+        check(n == 0, f"{query}: {n} pixels drawn over the {clear} device")
         failures.extend(f"{theme}, {query}: page error: {e}" for e in errors)
         context.close()
 
