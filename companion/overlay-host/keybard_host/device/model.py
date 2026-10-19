@@ -89,6 +89,20 @@ class Profile:
         return self.layers[0][row][col], 0
 
 
+# QMK keycodes (the Sval v2/v3 numbering numeric_legend reads) for the names demo_profile uses.
+_DEMO_CODES = {"KC_NO": 0, "KC_TRNS": 1, "KC_ENTER": 40, "KC_ESC": 41, "KC_BSPC": 42, "KC_TAB": 43,
+               "KC_SPACE": 44, "KC_;": 51, "KC_/": 56, "KC_CAPS": 57, "KC_HOME": 74, "KC_PGUP": 75,
+               "KC_DELETE": 76, "KC_END": 77, "KC_PGDN": 78, "KC_RIGHT": 79, "KC_LEFT": 80,
+               "KC_DOWN": 81, "KC_UP": 82, "KC_LCTRL": 0xE0, "KC_LSHIFT": 0xE1, "KC_LALT": 0xE2,
+               "KC_RGUI": 0xE7, "LT(1,KC_ENTER)": 0x4000 | 1 << 8 | 40, "MO(1)": 0x5221, "MO(2)": 0x5222}
+_DEMO_CODES.update({f"KC_{c}": 4 + i for i, c in enumerate("ABCDEFGHIJKLMNOPQRSTUVWXYZ")})
+_DEMO_CODES.update({f"KC_{c}": 30 + i for i, c in enumerate("1234567890")})
+
+
+def demo_code(name):
+    return _DEMO_CODES[name]
+
+
 def demo_profile():
     """Purpose-built illustration; deliberately not a factory Svalboard keymap."""
     base = [["KC_NO"] * 6 for _ in range(10)]
@@ -104,7 +118,10 @@ def demo_profile():
     numbers = [["KC_TRNS"] * 6 for _ in range(10)]
     for row in (1, 2, 3, 4):
         numbers[row][:5] = ["KC_" + str((row + col) % 10) for col in range(5)]
-    profile = Profile.parse({"layout": [base, nav, numbers]}, "Illustration · not your keymap")
+    # Boards report numeric keycodes, and Keybard's renderer names numbers only: a name
+    # string here would be drawn raw ("0xKC_D"). Encode the illustration the same way.
+    layers = [[[demo_code(code) for code in row] for row in layer] for layer in (base, nav, numbers)]
+    profile = Profile.parse({"layout": layers}, "Illustration · not your keymap")
     return Profile(profile.name, None, profile.layers, profile.fingerprint, True)
 
 

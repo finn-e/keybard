@@ -85,6 +85,17 @@ class OverlayFlags(unittest.TestCase):
             self.assertTrue(overlay_flags(platform) & Qt.WindowStaysOnTopHint)
 
 
+class DemoBoard(unittest.TestCase):
+    def test_demo_keymap_is_numeric_like_a_real_board(self):
+        # Keybard's renderer names numeric keycodes only; strings were drawn as "0xKC_D".
+        from keybard_host.device.model import demo_profile
+        profile = demo_profile()
+        codes = [code for layer in profile.layers for row in layer for code in row]
+        self.assertTrue(all(type(code) is int for code in codes))
+        self.assertEqual([profile.label(c) for c in profile.layers[0][0]], ['Ctrl', 'Tab', 'Shift', 'Enter' + chr(10) + 'L1 hold', 'Esc', 'Caps'])
+        self.assertEqual(profile.label(profile.layers[0][5][2]), 'MO(1)')
+
+
 class UdevRule(unittest.TestCase):
     def test_matches_every_svalboard_product_id(self):
         rule = (PACKAGING / '60-svalboard.rules').read_text()
