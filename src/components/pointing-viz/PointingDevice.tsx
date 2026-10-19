@@ -179,6 +179,8 @@ export function PointingDevice(props: PointingDeviceProps) {
             if (p.placement.kind === "pad" && half.contacts) {
                 // The board says where every finger is: draw those, never the motion.
                 const changed = syncFingers(s.fingers, half.contacts);
+                // How many fingers are drawn down, for review and browser tests.
+                if (deviceRef.current) deviceRef.current.dataset.fingers = String([...s.fingers.values()].filter((f) => f.down).length);
                 if (half.contacts.length > 0) s.contact.last = -1e9;
                 if (!changed) return;
                 s.ovDirty = true;

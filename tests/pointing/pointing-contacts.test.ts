@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { padFromRelative, syncFingers, type Finger } from "@/components/pointing-viz/pad-contacts";
 import { hostPointingEvent } from "@/features/trainer/host-pointing";
+import { demoContactsReply, demoReport, pointingDemoFromSearch } from "@/features/pointing-demo";
 import { PAD_COUNTS_PER_HALF } from "@/features/pointing-demo";
 import { MAX_CONTACTS, contactKey, padUnit, parsePointingContacts, withPadContacts, SVIL_FLAG2_POINTING_CONTACTS } from "@/utils/pointing-contacts";
 import { parsePointingMotion } from "@/utils/pointing-motion";
@@ -200,5 +201,31 @@ describe("contacts from the Overlay app", () => {
             { id: 3, x: 0, y: 0, confident: true },
             { id: 3, x: 0.5, y: 0.5, confident: true, leftOut: true },
         ]);
+    });
+});
+
+describe("the contacts review param (?demo=pointing&contacts=N)", () => {
+    it("reads 1 to 6 contacts, and nothing else", () => {
+        expect(pointingDemoFromSearch("?demo=pointing&contacts=6")!.contacts).toBe(6);
+        expect(pointingDemoFromSearch("?demo=pointing&contacts=9")!.contacts).toBe(6);
+        expect(pointingDemoFromSearch("?demo=pointing&contacts=0")!.contacts).toBeUndefined();
+        expect(pointingDemoFromSearch("?demo=pointing")!.contacts).toBeUndefined();
+    });
+
+    it("puts three fingers on each pad through the 0x2F parser, the sixth one left out", () => {
+        const d = pointingDemoFromSearch("?demo=pointing&right=touchpad&contacts=6")!;
+        const c = parsePointingContacts(demoContactsReply(d, 1))!;
+        expect(c.left).toHaveLength(3);
+        expect(c.right.map((x) => [x.id, x.leftOut ?? false])).toEqual([[3, false], [4, false], [3, true]]);
+        const r = demoReport(d, 0.9, 1);
+        expect(r.left.contacts).toHaveLength(3);
+        expect(r.right.contacts).toHaveLength(3);
+    });
+
+    it("keeps every finger on the one pad when only one hand has a touchpad", () => {
+        const d = pointingDemoFromSearch("?demo=pointing&contacts=5")!; // left touchpad, right trackball
+        const r = demoReport(d, 0.9, 1);
+        expect(r.left.contacts).toHaveLength(5);
+        expect(r.right.contacts).toBeUndefined();
     });
 });
