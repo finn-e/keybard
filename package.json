@@ -12,6 +12,7 @@
         "test:watch": "vitest",
         "test:coverage": "vitest run --coverage",
         "test:ui": "vitest --ui",
+        "test:e2e:scroll-keys": "python tests/e2e/scroll_keys_e2e.py",
         "build:sval-preview": "tsc && vite build --mode sval-preview",
         "build:svalboard": "tsc && vite build --mode svalboard",
         "build:next": "tsc && vite build --mode next",
