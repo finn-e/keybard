@@ -79,6 +79,12 @@ const MouseKeysSection = ({ compact, variant: variantOverride }: Props) => {
         { keycode: "SV_BOOST_5_TG", label: "Boost 5xTG" },
     ];
 
+    // Row 4: hold to scroll with the pointer (firmware SV_SCROLL_HOLD). The
+    // label matches the layout's (CUSTOM_KEYCODE_LABELS).
+    const scrollKeys = [
+        { keycode: "SV_SCROLL_HOLD", label: "Drag Scroll" },
+    ];
+
     // Every key row in this section MUST go through renderKey so it picks up the
     // same effectiveVariant / keySizeClass. Do not render <Key> directly in the
     // panels that embed this section (see CLAUDE.md: key sizing consistency).
@@ -227,6 +233,16 @@ const MouseKeysSection = ({ compact, variant: variantOverride }: Props) => {
                 {/* Row 3: Boost keys */}
                 <div className="flex flex-wrap gap-1">
                     {boostKeys.map((k) => renderKey(k, false))}
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+                <span className={compact ? "text-[9px] font-bold text-slate-500 dark:text-neutral-400 uppercase" : "font-semibold text-lg text-kb-ink"}>
+                    Scroll
+                </span>
+                {/* Row 4: Drag Scroll */}
+                <div className="flex flex-wrap gap-1">
+                    {scrollKeys.map((k) => renderKey(k, false))}
                 </div>
             </div>
 
