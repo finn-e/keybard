@@ -69,7 +69,7 @@ describe('MouseKeysSection: mouse buttons, sniper, boost and scroll rows size id
         const keys = screen.getAllByTestId('key').map((el) => el.getAttribute('data-keycode'));
         expect(keys.indexOf('SV_VELOCITY_SCROLL')).toBe(keys.indexOf('SV_SCROLL_HOLD') + 1);
         const key = screen.getAllByTestId('key').find((el) => el.getAttribute('data-keycode') === 'SV_VELOCITY_SCROLL')!;
-        expect(key.getAttribute('data-label')).toBe('Velocity Scroll');
+        expect(key.getAttribute('data-label')).toBe('Vel Scroll');
         fireEvent.click(key);
         expect(assignKeycode).toHaveBeenCalledWith('SV_VELOCITY_SCROLL');
     });

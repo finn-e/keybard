@@ -88,7 +88,7 @@ const MouseKeysSection = ({ compact, variant: variantOverride }: Props) => {
     const hasVelocityScroll = !firmwareKeycodes || firmwareKeycodes.some((ck) => ck.name === "SV_VELOCITY_SCROLL");
     const scrollKeys = [
         { keycode: "SV_SCROLL_HOLD", label: "Drag Scroll" },
-        ...(hasVelocityScroll ? [{ keycode: "SV_VELOCITY_SCROLL", label: "Velocity Scroll" }] : []),
+        ...(hasVelocityScroll ? [{ keycode: "SV_VELOCITY_SCROLL", label: "Vel Scroll" }] : []),
     ];
 
     // Every key row in this section MUST go through renderKey so it picks up the

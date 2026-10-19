@@ -13,7 +13,9 @@ export const CUSTOM_KEYCODE_LABELS: Readonly<Record<string, string>> = {
     SV_SCROLL_HOLD: "Drag Scroll",
     // Firmware: "Velocity\nScroll". Hold: how far the pointer moves from where
     // it was sets a scroll speed, and it keeps scrolling while the pointer is still.
-    SV_VELOCITY_SCROLL: "Velocity Scroll",
+    // The key reads "Vel Scroll" so it fits a key face; menus and descriptions
+    // keep the full name, Velocity Scroll.
+    SV_VELOCITY_SCROLL: "Vel Scroll",
 };
 
 /** The label Keybard shows for a custom keycode, with real line breaks. */

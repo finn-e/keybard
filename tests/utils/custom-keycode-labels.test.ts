@@ -9,8 +9,8 @@ describe('custom keycode labels', () => {
         expect(customKeycodeShortName({ name: 'SV_SCROLL_HOLD', shortName: 'Scroll\\nToggle\\nHold' })).toBe('Drag Scroll');
     });
 
-    it('shows SV_VELOCITY_SCROLL as "Velocity Scroll" on one line', () => {
-        expect(customKeycodeShortName({ name: 'SV_VELOCITY_SCROLL', shortName: 'Velocity\\nScroll' })).toBe('Velocity Scroll');
+    it('shows SV_VELOCITY_SCROLL as "Vel Scroll" on one line, so it fits a key face', () => {
+        expect(customKeycodeShortName({ name: 'SV_VELOCITY_SCROLL', shortName: 'Velocity\\nScroll' })).toBe('Vel Scroll');
     });
 
     it("keeps the firmware's shortName for other keys, with real line breaks", () => {
@@ -28,5 +28,16 @@ describe('custom keycode labels', () => {
         keyService.generateAllKeycodes(kbinfo);
         expect(KEYMAP['SV_SCROLL_HOLD'].str).toBe('Drag Scroll');
         expect(KEYMAP['SV_SNIPER_2'].str).toBe('Sniper\n2x');
+    });
+
+    it('labels an assigned SV_VELOCITY_SCROLL "Vel Scroll" on the layout', () => {
+        const kbinfo = {
+            custom_keycodes: [
+                { name: 'SV_SCROLL_HOLD', title: 'Hold to toggle the scrolling mode of both pointers.', shortName: 'Scroll\nToggle\nHold' },
+                { name: 'SV_VELOCITY_SCROLL', title: 'Hold to scroll at a speed set by how far the pointer moves.', shortName: 'Velocity\nScroll' },
+            ],
+        } as unknown as KeyboardInfo;
+        keyService.generateAllKeycodes(kbinfo);
+        expect(KEYMAP['SV_VELOCITY_SCROLL'].str).toBe('Vel Scroll');
     });
 });
