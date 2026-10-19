@@ -217,6 +217,17 @@ ROWS_JS = """() => {
 }"""
 
 
+# Key size lives in Settings > Appearance (stored as "key-size"); the editor
+# has no size buttons. Store it as Settings does and reload the same link.
+SET_SIZE_JS = """size => {
+    const k = 'keyboard-settings';
+    let s = {};
+    try { s = JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch {}
+    s['key-size'] = size;
+    localStorage.setItem(k, JSON.stringify(s));
+}"""
+
+
 def flow_one_line(browser, url):
     failures = []
     for theme in ["light", "dark"]:
@@ -224,7 +235,9 @@ def flow_one_line(browser, url):
             for index in [0, 1, 2]:
                 context, page, errors = open_app(browser, url, f"edit=combo:{index}", theme)
                 expect(title(page)).to_be_visible()
-                page.locator(f'button[title="Set key size to {size}"]').first.dispatch_event("click")
+                page.evaluate(SET_SIZE_JS, size)
+                page.reload()
+                expect(title(page)).to_be_visible(timeout=20000)
                 page.wait_for_timeout(300)
                 m = page.evaluate(ROWS_JS)
                 tag = f"{theme}/{size}/combo {index}"
