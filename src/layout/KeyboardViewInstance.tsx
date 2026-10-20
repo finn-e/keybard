@@ -480,7 +480,7 @@ const KeyboardViewInstance: FC<KeyboardViewInstanceProps> = ({
                             isHudMode && !isActive && !isLayerActive && "text-gray-300 dark:text-neutral-400"
                         )}
                     >
-                        <span className={cn("select-none inline-flex items-center gap-1", isLayerActive && "underline underline-offset-2")}>
+                        <span className={cn("select-none inline-flex items-center gap-1", isActive && "underline underline-offset-2")}>
                             {isDefault && <House aria-hidden className="h-3.5 w-3.5 shrink-0" />}
                             {layerShortName}
                         </span>
