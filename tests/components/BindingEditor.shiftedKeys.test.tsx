@@ -14,6 +14,12 @@ describe('Shifted symbol resolution in binding editors and panels', () => {
                 output: 'LSFT(KC_COMMA)',
                 options: 0,
             },
+            {
+                cmbid: 1,
+                keys: ['KC_PLUS', 'LSFT(KC_EQUAL)', 'LSFT(KC_EQL)', 'KC_NO'],
+                output: 'KC_PLUS',
+                options: 0,
+            },
         ],
     } as any as KeyboardInfo;
 
@@ -33,6 +39,16 @@ describe('Shifted symbol resolution in binding editors and panels', () => {
         const exlmContents = getKeyContents(mockKeyboard, 'LSFT(KC_1)');
         expect(getKeyDisplayLabel('LSFT(KC_1)', exlmContents, 'us')).toBe('!');
 
+        // + symbol resolutions (KC_PLUS, LSFT(KC_EQUAL), LSFT(KC_EQL))
+        const plusContents = getKeyContents(mockKeyboard, 'KC_PLUS');
+        expect(getKeyDisplayLabel('KC_PLUS', plusContents, 'us')).toBe('+');
+
+        const lsftEqualContents = getKeyContents(mockKeyboard, 'LSFT(KC_EQUAL)');
+        expect(getKeyDisplayLabel('LSFT(KC_EQUAL)', lsftEqualContents, 'us')).toBe('+');
+
+        const lsftEqlContents = getKeyContents(mockKeyboard, 'LSFT(KC_EQL)');
+        expect(getKeyDisplayLabel('LSFT(KC_EQL)', lsftEqlContents, 'us')).toBe('+');
+
         // Letters keep their uppercase form
         const aContents = getKeyContents(mockKeyboard, 'LSFT(KC_A)');
         expect(getKeyDisplayLabel('LSFT(KC_A)', aContents, 'us')).toBe('A');
@@ -43,6 +59,15 @@ describe('Shifted symbol resolution in binding editors and panels', () => {
         const commaText = getKeyDisplayText('LSFT(KC_COMMA)', '', commaContents, false, 'us');
         expect(commaText.displayLabel).toBe('<');
         expect(commaText.bottomStr).toBe(''); // Badge hidden because '<' already denotes Shift+,
+
+        const plusContents = getKeyContents(mockKeyboard, 'LSFT(KC_EQUAL)');
+        const plusText = getKeyDisplayText('LSFT(KC_EQUAL)', '', plusContents, false, 'us');
+        expect(plusText.displayLabel).toBe('+');
+        expect(plusText.bottomStr).toBe('');
+
+        const plusAliasText = getKeyDisplayText('LSFT(KC_EQL)', '', getKeyContents(mockKeyboard, 'LSFT(KC_EQL)'), false, 'us');
+        expect(plusAliasText.displayLabel).toBe('+');
+        expect(plusAliasText.bottomStr).toBe('');
 
         const aContents = getKeyContents(mockKeyboard, 'LSFT(KC_A)');
         const aText = getKeyDisplayText('LSFT(KC_A)', '', aContents, false, 'us');
@@ -59,8 +84,16 @@ describe('Shifted symbol resolution in binding editors and panels', () => {
         const code1 = getSelectedKeymapKeycode(mockKeyboard, { type: 'combo', comboId: 0, comboSlot: 1 });
         expect(code1).toBe(0x0236);
 
-        // Output holds LSFT(KC_COMMA)
-        const codeOutput = getSelectedKeymapKeycode(mockKeyboard, { type: 'combo', comboId: 0, comboSlot: 4 });
-        expect(codeOutput).toBe(0x0236);
+        // Combo 1 Slot 0 holds KC_PLUS
+        const codePlus = getSelectedKeymapKeycode(mockKeyboard, { type: 'combo', comboId: 1, comboSlot: 0 });
+        expect(codePlus).toBe(0x022e);
+
+        // Combo 1 Slot 1 holds LSFT(KC_EQUAL)
+        const codeLsftEqual = getSelectedKeymapKeycode(mockKeyboard, { type: 'combo', comboId: 1, comboSlot: 1 });
+        expect(codeLsftEqual).toBe(0x022e);
+
+        // Combo 1 Slot 2 holds LSFT(KC_EQL)
+        const codeLsftEql = getSelectedKeymapKeycode(mockKeyboard, { type: 'combo', comboId: 1, comboSlot: 2 });
+        expect(codeLsftEql).toBe(0x022e);
     });
 });

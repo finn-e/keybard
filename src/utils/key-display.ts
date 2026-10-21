@@ -1,4 +1,5 @@
 import type { KeyContent } from "@/types/keyboard.types";
+import { KEYALIASES } from "@/constants/keygen";
 import { getLabelForKeycode, US_SHIFT_ALIASES } from "@/components/Keyboards/layouts";
 
 /**
@@ -62,6 +63,9 @@ export function getKeyDisplayText(
         } else {
             const baseKeycodeMatch = keycode.match(/\((.*)\)$/);
             let baseKeycode = baseKeycodeMatch ? baseKeycodeMatch[1] : null;
+            if (baseKeycode && baseKeycode in KEYALIASES) {
+                baseKeycode = String(KEYALIASES[baseKeycode]);
+            }
             if (baseKeycode && baseKeycode in US_SHIFT_ALIASES) {
                 baseKeycode = US_SHIFT_ALIASES[baseKeycode];
             }
@@ -111,6 +115,9 @@ export function getKeyDisplayText(
 
         const baseKeycodeMatch = keycode.match(/\((.*)\)$/);
         let baseKeycode = baseKeycodeMatch ? baseKeycodeMatch[1] : null;
+        if (baseKeycode && baseKeycode in KEYALIASES) {
+            baseKeycode = String(KEYALIASES[baseKeycode]);
+        }
         if (baseKeycode && baseKeycode in US_SHIFT_ALIASES) {
             baseKeycode = US_SHIFT_ALIASES[baseKeycode];
         }
