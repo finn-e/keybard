@@ -15,7 +15,10 @@ export function getKeyDisplayLabel(
     if (layoutLabel) return layoutLabel;
     if (keyContents?.str) {
         const parts = keyContents.str.split("\n");
-        return parts[parts.length - 1] || parts[0] || "";
+        if (parts.length === 2 && parts[0].length === 1 && parts[1].length === 1) {
+            return parts[1];
+        }
+        return parts.join(" ");
     }
     return keycode;
 }
