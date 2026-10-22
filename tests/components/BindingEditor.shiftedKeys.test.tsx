@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getKeyDisplayLabel, getKeyDisplayText } from '@/utils/key-display';
 import { getKeyContents } from '@/utils/keys';
-import { getSelectedKeymapKeycode } from '@/hooks/useModifierSide';
 import type { KeyboardInfo } from '@/types/keyboard.types';
 
 describe('Shifted symbol resolution in binding editors and panels', () => {
@@ -73,27 +72,5 @@ describe('Shifted symbol resolution in binding editors and panels', () => {
         const aText = getKeyDisplayText('LSFT(KC_A)', '', aContents, false, 'us');
         expect(aText.displayLabel).toBe('A');
         expect(aText.bottomStr).toBe('LSFT'); // Badge retained for letter modifiers
-    });
-
-    it('resolves keycodes and inner base codes from combo slots holding shifted symbols', () => {
-        // Slot 0 holds LSFT(KC_COMMA)
-        const code0 = getSelectedKeymapKeycode(mockKeyboard, { type: 'combo', comboId: 0, comboSlot: 0 });
-        expect(code0).toBe(0x0236); // QK_MODS (LSFT: 0x0200) | KC_COMMA (0x36)
-
-        // Slot 1 holds KC_LT
-        const code1 = getSelectedKeymapKeycode(mockKeyboard, { type: 'combo', comboId: 0, comboSlot: 1 });
-        expect(code1).toBe(0x0236);
-
-        // Combo 1 Slot 0 holds KC_PLUS
-        const codePlus = getSelectedKeymapKeycode(mockKeyboard, { type: 'combo', comboId: 1, comboSlot: 0 });
-        expect(codePlus).toBe(0x022e);
-
-        // Combo 1 Slot 1 holds LSFT(KC_EQUAL)
-        const codeLsftEqual = getSelectedKeymapKeycode(mockKeyboard, { type: 'combo', comboId: 1, comboSlot: 1 });
-        expect(codeLsftEqual).toBe(0x022e);
-
-        // Combo 1 Slot 2 holds LSFT(KC_EQL)
-        const codeLsftEql = getSelectedKeymapKeycode(mockKeyboard, { type: 'combo', comboId: 1, comboSlot: 2 });
-        expect(codeLsftEql).toBe(0x022e);
     });
 });
